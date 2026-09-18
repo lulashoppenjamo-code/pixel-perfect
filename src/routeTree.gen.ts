@@ -10,33 +10,118 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ShellRouteImport } from './routes/_shell'
+import { Route as AuthRouteImport } from './routes/auth'
+import { Route as ShellClientesRouteImport } from './routes/_shell.clientes'
+import { Route as ShellComprasRouteImport } from './routes/_shell.compras'
+import { Route as ShellInventarioRouteImport } from './routes/_shell.inventario'
+import { Route as ShellProductosRouteImport } from './routes/_shell.productos'
+import { Route as ShellVentasRouteImport } from './routes/_shell.ventas'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ShellRoute = ShellRouteImport.update({
+  id: '/_shell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ShellClientesRoute = ShellClientesRouteImport.update({
+  id: '/clientes',
+  path: '/clientes',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellComprasRoute = ShellComprasRouteImport.update({
+  id: '/compras',
+  path: '/compras',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellInventarioRoute = ShellInventarioRouteImport.update({
+  id: '/inventario',
+  path: '/inventario',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellProductosRoute = ShellProductosRouteImport.update({
+  id: '/productos',
+  path: '/productos',
+  getParentRoute: () => ShellRoute,
+} as any)
+const ShellVentasRoute = ShellVentasRouteImport.update({
+  id: '/ventas',
+  path: '/ventas',
+  getParentRoute: () => ShellRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/clientes': typeof ShellClientesRoute
+  '/compras': typeof ShellComprasRoute
+  '/inventario': typeof ShellInventarioRoute
+  '/productos': typeof ShellProductosRoute
+  '/ventas': typeof ShellVentasRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/auth': typeof AuthRoute
+  '/clientes': typeof ShellClientesRoute
+  '/compras': typeof ShellComprasRoute
+  '/inventario': typeof ShellInventarioRoute
+  '/productos': typeof ShellProductosRoute
+  '/ventas': typeof ShellVentasRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_shell': typeof ShellRouteWithChildren
+  '/auth': typeof AuthRoute
+  '/_shell/clientes': typeof ShellClientesRoute
+  '/_shell/compras': typeof ShellComprasRoute
+  '/_shell/inventario': typeof ShellInventarioRoute
+  '/_shell/productos': typeof ShellProductosRoute
+  '/_shell/ventas': typeof ShellVentasRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/clientes'
+    | '/compras'
+    | '/inventario'
+    | '/productos'
+    | '/ventas'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/auth'
+    | '/clientes'
+    | '/compras'
+    | '/inventario'
+    | '/productos'
+    | '/ventas'
+  id:
+    | '__root__'
+    | '/'
+    | '/_shell'
+    | '/auth'
+    | '/_shell/clientes'
+    | '/_shell/compras'
+    | '/_shell/inventario'
+    | '/_shell/productos'
+    | '/_shell/ventas'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ShellRoute: typeof ShellRouteWithChildren
+  AuthRoute: typeof AuthRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +133,80 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_shell': {
+      id: '/_shell'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof ShellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_shell/clientes': {
+      id: '/_shell/clientes'
+      path: '/clientes'
+      fullPath: '/clientes'
+      preLoaderRoute: typeof ShellClientesRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/compras': {
+      id: '/_shell/compras'
+      path: '/compras'
+      fullPath: '/compras'
+      preLoaderRoute: typeof ShellComprasRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/inventario': {
+      id: '/_shell/inventario'
+      path: '/inventario'
+      fullPath: '/inventario'
+      preLoaderRoute: typeof ShellInventarioRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/productos': {
+      id: '/_shell/productos'
+      path: '/productos'
+      fullPath: '/productos'
+      preLoaderRoute: typeof ShellProductosRouteImport
+      parentRoute: typeof ShellRoute
+    }
+    '/_shell/ventas': {
+      id: '/_shell/ventas'
+      path: '/ventas'
+      fullPath: '/ventas'
+      preLoaderRoute: typeof ShellVentasRouteImport
+      parentRoute: typeof ShellRoute
+    }
   }
 }
 
+interface ShellRouteChildren {
+  ShellClientesRoute: typeof ShellClientesRoute
+  ShellComprasRoute: typeof ShellComprasRoute
+  ShellInventarioRoute: typeof ShellInventarioRoute
+  ShellProductosRoute: typeof ShellProductosRoute
+  ShellVentasRoute: typeof ShellVentasRoute
+}
+
+const ShellRouteChildren: ShellRouteChildren = {
+  ShellClientesRoute: ShellClientesRoute,
+  ShellComprasRoute: ShellComprasRoute,
+  ShellInventarioRoute: ShellInventarioRoute,
+  ShellProductosRoute: ShellProductosRoute,
+  ShellVentasRoute: ShellVentasRoute,
+}
+
+const ShellRouteWithChildren = ShellRoute._addFileChildren(ShellRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ShellRoute: ShellRouteWithChildren,
+  AuthRoute: AuthRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
