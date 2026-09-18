@@ -791,6 +791,75 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      adjust_stock: {
+        Args: {
+          _branch_id: string
+          _notes?: string
+          _product_id: string
+          _quantity: number
+          _variant_id: string
+        }
+        Returns: undefined
+      }
+      close_cash_session: {
+        Args: { _closing_amount: number; _session_id: string }
+        Returns: {
+          branch_id: string
+          closed_at: string | null
+          closed_by: string | null
+          closing_amount: number | null
+          created_at: string
+          difference: number | null
+          expected_amount: number | null
+          id: string
+          opened_at: string
+          opened_by: string
+          opening_amount: number
+          status: Database["public"]["Enums"]["cash_session_status"]
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "cash_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_sale: {
+        Args: {
+          _branch_id: string
+          _cash_received?: number
+          _cash_session_id?: string
+          _customer_id?: string
+          _discount?: number
+          _items: Json
+          _payment_method?: Database["public"]["Enums"]["payment_method"]
+        }
+        Returns: {
+          branch_id: string
+          cash_received: number | null
+          cash_session_id: string | null
+          cashier_id: string
+          change_given: number | null
+          created_at: string
+          customer_id: string | null
+          discount: number
+          folio: number
+          id: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          status: Database["public"]["Enums"]["sale_status"]
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "sales"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       ensure_profile: { Args: { _full_name?: string }; Returns: undefined }
       has_role: {
         Args: {
@@ -801,6 +870,7 @@ export type Database = {
       }
       is_admin: { Args: never; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
+      receive_purchase: { Args: { _purchase_id: string }; Returns: undefined }
     }
     Enums: {
       app_role: "owner" | "admin" | "manager" | "cashier" | "staff"
