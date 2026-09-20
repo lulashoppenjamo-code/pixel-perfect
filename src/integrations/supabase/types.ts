@@ -464,6 +464,7 @@ export type Database = {
           product_id: string
           purchase_id: string
           quantity: number
+          received_quantity: number
           unit_cost: number
           variant_id: string | null
         }
@@ -473,6 +474,7 @@ export type Database = {
           product_id: string
           purchase_id: string
           quantity?: number
+          received_quantity?: number
           unit_cost?: number
           variant_id?: string | null
         }
@@ -482,6 +484,7 @@ export type Database = {
           product_id?: string
           purchase_id?: string
           quantity?: number
+          received_quantity?: number
           unit_cost?: number
           variant_id?: string | null
         }
@@ -797,7 +800,7 @@ export type Database = {
           _notes?: string
           _product_id: string
           _quantity: number
-          _variant_id: string
+          _variant_id?: string
         }
         Returns: undefined
       }
@@ -871,6 +874,63 @@ export type Database = {
       is_admin: { Args: never; Returns: boolean }
       is_manager: { Args: never; Returns: boolean }
       receive_purchase: { Args: { _purchase_id: string }; Returns: undefined }
+      receive_purchase_partial: {
+        Args: { _items: Json; _purchase_id: string }
+        Returns: {
+          branch_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          received_at: string | null
+          status: Database["public"]["Enums"]["purchase_status"]
+          supplier_id: string | null
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "purchases"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      set_inventory_limits: {
+        Args: {
+          _branch_id: string
+          _max_stock?: number
+          _min_stock?: number
+          _product_id: string
+          _variant_id?: string
+        }
+        Returns: {
+          branch_id: string
+          created_at: string
+          id: string
+          max_stock: number | null
+          min_stock: number
+          product_id: string
+          stock: number
+          updated_at: string
+          variant_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "inventory"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      transfer_stock: {
+        Args: {
+          _from_branch_id: string
+          _notes?: string
+          _product_id: string
+          _quantity: number
+          _to_branch_id: string
+          _variant_id?: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role: "owner" | "admin" | "manager" | "cashier" | "staff"

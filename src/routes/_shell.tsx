@@ -1,9 +1,4 @@
-/**
- * Shell layout con guards por rol — FASE 1
- * Ruta: src/routes/_shell.tsx
- * Reemplaza el archivo existente.
- */
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import {
   ShoppingCart,
@@ -15,11 +10,9 @@ import {
   BarChart3,
   Settings,
   LogOut,
-  RotateCcw,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BranchProvider, useBranch } from "@/lib/branch";
-import { canAccess, type NavKey } from "@/lib/permissions";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -33,46 +26,34 @@ export const Route = createFileRoute("/_shell")({
   component: ShellLayout,
 });
 
-const ALL_NAV: { key: NavKey; to: string; label: string; icon: typeof ShoppingCart }[] = [
-  { key: "ventas", to: "/ventas", label: "Ventas", icon: ShoppingCart },
-  { key: "productos", to: "/productos", label: "Productos", icon: Package },
-  { key: "inventario", to: "/inventario", label: "Inventario", icon: Boxes },
-  { key: "clientes", to: "/clientes", label: "Clientes", icon: Users },
-  { key: "compras", to: "/compras", label: "Compras", icon: Truck },
-  { key: "caja", to: "/caja", label: "Caja", icon: Wallet },
-  { key: "devoluciones", to: "/devoluciones", label: "Devoluciones", icon: RotateCcw },
-  { key: "reportes", to: "/reportes", label: "Reportes", icon: BarChart3 },
-  { key: "ajustes", to: "/ajustes", label: "Ajustes", icon: Settings },
-];
+const nav = [
+  { to: "/ventas", label: "Ventas", icon: ShoppingCart },
+  { to: "/productos", label: "Productos", icon: Package },
+  { to: "/inventario", label: "Inventario", icon: Boxes },
+  { to: "/clientes", label: "Clientes", icon: Users },
+  { to: "/compras", label: "Compras", icon: Truck },
+  { to: "/caja", label: "Caja", icon: Wallet },
+  { to: "/reportes", label: "Reportes", icon: BarChart3 },
+  { to: "/ajustes", label: "Ajustes", icon: Settings },
+] as const;
 
 function ShellLayout() {
-  const { user, loading, roles } = useAuth();
+  const { user, loading } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
     if (!loading && !user) void navigate({ to: "/auth" });
   }, [user, loading, navigate]);
 
-  const nav = useMemo(
-    () => ALL_NAV.filter((item) => canAccess(roles, item.key)),
-    [roles],
-  );
-
   if (loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
-        Cargando…
-      </div>
-    );
+    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Cargando…</div>;
   }
 
   return (
     <BranchProvider>
       <div className="flex min-h-screen flex-col bg-muted/30 md:flex-row">
         <aside className="flex shrink-0 flex-col gap-1 border-b bg-card p-3 md:w-56 md:border-b-0 md:border-r">
-          <div className="mb-2 hidden px-2 text-lg font-semibold tracking-tight md:block">
-            Lula Shop OS
-          </div>
+          <div className="mb-2 hidden px-2 text-lg font-semibold tracking-tight md:block">Lula Shop OS</div>
           <nav className="flex gap-1 overflow-x-auto md:flex-col">
             {nav.map(({ to, label, icon: Icon }) => (
               <Link
@@ -103,20 +84,29 @@ function TopBar() {
   const { branches, branchId, setBranchId } = useBranch();
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-2">
+    <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-3">
       <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground md:hidden">Lula Shop OS</span>
-        {branches.length > 0 && (
-          <Select value={branchId ?? undefined} onValueChange={setBranchId}>
-            <SelectTrigger className="h-8 w-[180px] text-xs">
-              <SelectValue placeholder="Sucursal" />
-            </SelectTrigger>
-            <SelectContent>
-              {branches.map((b) => (
-                <SelectItem key={b.id} value={b.id}>
-                  {b.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          <
-... 
+        <Select value={branchId ?? undefined} onValueChange={setBranchId}>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Sin sucursales" />
+          </SelectTrigger>
+          <SelectContent>
+            {branches.map((b) => (
+              <SelectItem key={b.id} value={b.id}>
+                {b.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex items-center gap-3 text-sm">
+        <span className="text-muted-foreground">
+          {profile?.full_name ?? "Usuario"} · {roles.join(", ") || "sin rol"}
+        </span>
+        <Button variant="outline" size="sm" onClick={() => void signOut()}>
+          <LogOut className="size-4" /> Salir
+        </Button>
+      </div>
+    </header>
+  );
+}
