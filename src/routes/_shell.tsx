@@ -86,7 +86,7 @@ function TopBar() {
   return (
     <header className="flex flex-wrap items-center justify-between gap-2 border-b bg-card px-4 py-3">
       <div className="flex items-center gap-2">
-        <Select value={branchId ?? undefined} onValueChange={setBranchId}>
+        <Select value={branchId ?? ""} onValueChange={setBranchId}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Sin sucursales" />
           </SelectTrigger>

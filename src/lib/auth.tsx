@@ -32,7 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadProfile = async (uid: string) => {
-    await supabase.rpc("ensure_profile", { _full_name: null });
+    await supabase.rpc("ensure_profile", {});
     const [{ data: p }, { data: r }] = await Promise.all([
       supabase.from("profiles").select("id, full_name, branch_id, is_active").eq("id", uid).maybeSingle(),
       supabase.from("user_roles").select("role").eq("user_id", uid),

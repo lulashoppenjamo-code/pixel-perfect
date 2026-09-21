@@ -226,7 +226,7 @@ function AjustesPage() {
                     </TableCell>
                     <TableCell>
                       <Select
-                        value={p.branch_id ?? undefined}
+                        value={p.branch_id ?? ""}
                         onValueChange={(v) => setUserBranch.mutate({ userId: p.id, bid: v })}
                         disabled={!isAdmin}
                       >
