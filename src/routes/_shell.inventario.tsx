@@ -77,9 +77,8 @@ function InventarioPage() {
       const { error } = await supabase.rpc("adjust_stock", {
         _branch_id: branchId,
         _product_id: productId,
-        _variant_id: null,
         _quantity: Number(qty),
-        _notes: notes || null,
+        ...(notes ? { _notes: notes } : {}),
       });
       if (error) throw error;
     },

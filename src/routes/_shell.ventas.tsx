@@ -112,10 +112,10 @@ function VentasPage() {
           discount: 0,
         })),
         _payment_method: method,
-        _customer_id: customerId === "none" ? null : customerId,
-        _cash_session_id: session?.id ?? null,
+        ...(customerId === "none" ? {} : { _customer_id: customerId }),
+        ...(session?.id ? { _cash_session_id: session.id } : {}),
         _discount: 0,
-        _cash_received: method === "cash" && cashReceived ? Number(cashReceived) : null,
+        ...(method === "cash" && cashReceived ? { _cash_received: Number(cashReceived) } : {}),
       });
       if (error) throw error;
       return data as unknown as { folio: number; change_given: number | null };
