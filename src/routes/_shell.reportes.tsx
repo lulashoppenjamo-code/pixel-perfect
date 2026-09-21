@@ -1,186 +1,399 @@
+/**
+ * Reportes — LULA OS
+ * Ruta: src/routes/_shell.reportes.tsx
+ * Reemplaza el archivo existente completo.
+ *
+ * - Ventas por día
+ * - Ticket promedio
+ * - Productos más vendidos
+ * - Margen / utilidad estimada
+ * - Comparación periodo anterior
+ */
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { subDays, format, parseISO, startOfDay } from "date-fns";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/lib/branch";
-import { money, shortDate } from "@/lib/format";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { money } from "@/lib/format";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TrendingDown, TrendingUp, DollarSign, Receipt, Package } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/reportes")({
   head: () => ({
-    meta: [
-      { title: "Reportes de venta — Lula Shop OS" },
-      { name: "description", content: "Ventas por periodo, ticket promedio y los productos más vendidos de cada sucursal." },
-      { property: "og:title", content: "Reportes de venta — Lula Shop OS" },
-      { property: "og:description", content: "Ventas por periodo, ticket promedio y los productos más vendidos de cada sucursal." },
-    ],
+    meta: [{ title: "Reportes — Lula OS" }],
   }),
   component: ReportesPage,
 });
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
+const RANGES = [
+  { value: "7", label: "Últimos 7 días" },
+  { value: "30", label: "Últimos 30 días" },
+  { value: "90", label: "Últimos 90 días" },
+];
 
 function ReportesPage() {
   const { branchId } = useBranch();
-  const [from, setFrom] = useState(iso(new Date(Date.now() - 29 * 86400000)));
-  const [to, setTo] = useState(iso(new Date()));
+  const [rangeDays, setRangeDays] = useState("30");
+  const days = Number(rangeDays);
 
-  const { data: sales = [] } = useQuery({
-    queryKey: ["report-sales", branchId, from, to],
+  const since = useMemo(
+    () => startOfDay(subDays(new Date(), days)).toISOString(),
+    [days],
+  );
+  const prevSince = useMemo(
+    () => startOfDay(subDays(new Date(), days * 2)).toISOString(),
+    [days],
+  );
+  const prevUntil = since;
+
+  const { data: sales = [], isLoading: loadingSales } = useQuery({
+    queryKey: ["report-sales", branchId, rangeDays],
     enabled: !!branchId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sales")
-        .select("id, folio, total, payment_method, status, created_at")
+        .select("id, total, subtotal, tax, discount, created_at, status")
         .eq("branch_id", branchId!)
-        .gte("created_at", `${from}T00:00:00`)
-        .lte("created_at", `${to}T23:59:59`)
-        .order("created_at", { ascending: false });
+        .eq("status", "completed")
+        .gte("created_at", since)
+        .order("created_at", { ascending: true });
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const { data: items = [] } = useQuery({
-    queryKey: ["report-items", branchId, from, to],
-    enabled: !!branchId && sales.length > 0,
+  const { data: prevSales = [] } = useQuery({
+    queryKey: ["report-sales-prev", branchId, rangeDays],
+    enabled: !!branchId,
     queryFn: async () => {
-      const ids = sales.map((s) => s.id);
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id, total")
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte("created_at", prevSince)
+        .lt("created_at", prevUntil);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  const saleIds = sales.map((s) => s.id);
+
+  const { data: saleItems = [] } = useQuery({
+    queryKey: ["report-sale-items", saleIds.join(",")],
+    enabled: saleIds.length > 0,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("sale_items")
-        .select("name_snapshot, quantity, total, sale_id")
-        .in("sale_id", ids);
+        .select("sale_id, name_snapshot, quantity, unit_price, discount, total, product_id")
+        .in("sale_id", saleIds);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const completed = sales.filter((s) => s.status === "completed");
-  const revenue = completed.reduce((s, x) => s + Number(x.total), 0);
-  const avg = completed.length ? revenue / completed.length : 0;
+  const { data: productCosts = [] } = useQuery({
+    queryKey: ["report-product-costs"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("products").select("id, cost");
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-  const top = useMemo(() => {
-    const map = new Map<string, { name: string; qty: number; total: number }>();
-    for (const i of items) {
-      const cur = map.get(i.name_snapshot) ?? { name: i.name_snapshot, qty: 0, total: 0 };
-      cur.qty += Number(i.quantity);
-      cur.total += Number(i.total);
-      map.set(i.name_snapshot, cur);
+  const costMap = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const p of productCosts) m.set(p.id, Number(p.cost) || 0);
+    return m;
+  }, [productCosts]);
+
+  // KPIs
+  const totalSales = sales.reduce((a, s) => a + Number(s.total), 0);
+  const totalPrev = prevSales.reduce((a, s) => a + Number(s.total), 0);
+  const ticketCount = sales.length;
+  const avgTicket = ticketCount ? totalSales / ticketCount : 0;
+  const salesChange =
+    totalPrev > 0 ? ((totalSales - totalPrev) / totalPrev) * 100 : totalSales > 0 ? 100 : 0;
+
+  // Utilidad estimada (precio - costo) * qty - descuentos de línea
+  let estimatedCost = 0;
+  let estimatedRevenue = 0;
+  for (const it of saleItems) {
+    const qty = Number(it.quantity);
+    const cost = it.product_id ? costMap.get(it.product_id) ?? 0 : 0;
+    estimatedCost += cost * qty;
+    estimatedRevenue += Number(it.total);
+  }
+  const estimatedMargin = estimatedRevenue - estimatedCost;
+  const marginPct = estimatedRevenue > 0 ? (estimatedMargin / estimatedRevenue) * 100 : 0;
+
+  // Ventas por día
+  const byDay = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sales) {
+      const day = format(parseISO(s.created_at), "yyyy-MM-dd");
+      map.set(day, (map.get(day) ?? 0) + Number(s.total));
     }
-    return [...map.values()].sort((a, b) => b.qty - a.qty).slice(0, 10);
-  }, [items]);
+    return Array.from(map.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, total]) => ({
+        day,
+        label: format(parseISO(day), "dd/MM"),
+        total: Math.round(total * 100) / 100,
+      }));
+  }, [sales]);
+
+  // Top productos
+  const topProducts = useMemo(() => {
+    const map = new Map<
+      string,
+      { name: string; quantity: number; total: number; cost: number }
+    >();
+    for (const it of saleItems) {
+      const key = it.name_snapshot;
+      const cur = map.get(key) ?? {
+        name: key,
+        quantity: 0,
+        total: 0,
+        cost: 0,
+      };
+      const qty = Number(it.quantity);
+      const unitCost = it.product_id ? costMap.get(it.product_id) ?? 0 : 0;
+      cur.quantity += qty;
+      cur.total += Number(it.total);
+      cur.cost += unitCost * qty;
+      map.set(key, cur);
+    }
+    return Array.from(map.values())
+      .map((p) => ({
+        ...p,
+        margin: p.total - p.cost,
+        marginPct: p.total > 0 ? ((p.total - p.cost) / p.total) * 100 : 0,
+      }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 15);
+  }, [saleItems, costMap]);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6 p-4 md:p-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
+          <p className="text-sm text-muted-foreground">
+            Ventas, ticket promedio, margen y productos top.
+          </p>
+        </div>
+        <Select value={rangeDays} onValueChange={setRangeDays}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {RANGES.map((r) => (
+              <SelectItem key={r.value} value={r.value}>
+                {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* KPI cards */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
+          title="Ventas"
+          value={money(totalSales)}
+          icon={DollarSign}
+          delta={salesChange}
+          loading={loadingSales}
+        />
+        <KpiCard
+          title="Ticket promedio"
+          value={money(avgTicket)}
+          icon={Receipt}
+          subtitle={`${ticketCount} ventas`}
+          loading={loadingSales}
+        />
+        <KpiCard
+          title="Utilidad estimada"
+          value={money(estimatedMargin)}
+          icon={TrendingUp}
+          subtitle={`Margen ${marginPct.toFixed(1)}%`}
+          loading={loadingSales}
+        />
+        <KpiCard
+          title="Periodo anterior"
+          value={money(totalPrev)}
+          icon={Package}
+          subtitle={`vs ${days} días previos`}
+          loading={loadingSales}
+        />
+      </div>
+
+      {/* Chart */}
       <Card>
-        <CardHeader>
-          <CardTitle>Periodo</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Ventas por día</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-4">
-          <div className="space-y-2">
-            <Label>Desde</Label>
-            <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Hasta</Label>
-            <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </div>
+        <CardContent>
+          {byDay.length === 0 ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              Sin ventas en el periodo.
+            </p>
+          ) : (
+            <div className="h-64 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={byDay}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                  <XAxis dataKey="label" tick={{ fontSize: 11 }} />
+                  <YAxis tick={{ fontSize: 11 }} width={60} />
+                  <Tooltip
+                    formatter={(v: number) => [money(v), "Ventas"]}
+                    contentStyle={{ borderRadius: 8 }}
+                  />
+                  <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Ventas</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{completed.length}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Ingresos</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{money(revenue)}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">Ticket promedio</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{money(avg)}</CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Más vendidos</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Producto</TableHead>
-                  <TableHead>Piezas</TableHead>
-                  <TableHead>Importe</TableHead>
+      {/* Top products */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Productos más vendidos</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>#</TableHead>
+                <TableHead>Producto</TableHead>
+                <TableHead className="text-right">Cantidad</TableHead>
+                <TableHead className="text-right">Ingresos</TableHead>
+                <TableHead className="text-right">Costo est.</TableHead>
+                <TableHead className="text-right">Utilidad</TableHead>
+                <TableHead className="text-right">Margen %</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {topProducts.map((p, i) => (
+                <TableRow key={p.name}>
+                  <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="font-medium">{p.name}</TableCell>
+                  <TableCell className="text-right">{p.quantity}</TableCell>
+                  <TableCell className="text-right">{money(p.total)}</TableCell>
+                  <TableCell className="text-right text-muted-foreground">
+                    {money(p.cost)}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-right font-medium",
+                      p.margin >= 0 ? "text-emerald-600" : "text-destructive",
+                    )}
+                  >
+                    {money(p.margin)}
+                  </TableCell>
+                  <TableCell className="text-right text-sm">
+                    {p.marginPct.toFixed(1)}%
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {top.map((t) => (
-                  <TableRow key={t.name}>
-                    <TableCell>{t.name}</TableCell>
-                    <TableCell>{t.qty}</TableCell>
-                    <TableCell>{money(t.total)}</TableCell>
-                  </TableRow>
-                ))}
-                {!top.length && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="py-8 text-center text-muted-foreground">
-                      Sin ventas en este periodo.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Ventas del periodo</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
+              ))}
+              {!topProducts.length && (
                 <TableRow>
-                  <TableHead>Folio</TableHead>
-                  <TableHead>Fecha</TableHead>
-                  <TableHead>Pago</TableHead>
-                  <TableHead>Total</TableHead>
+                  <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                    Sin datos de productos en el periodo.
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sales.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>#{s.folio}</TableCell>
-                    <TableCell>{shortDate(s.created_at)}</TableCell>
-                    <TableCell>{s.payment_method}</TableCell>
-                    <TableCell>{money(s.total)}</TableCell>
-                  </TableRow>
-                ))}
-                {!sales.length && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                      Sin ventas en este periodo.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
+  );
+}
+
+function KpiCard({
+  title,
+  value,
+  icon: Icon,
+  delta,
+  subtitle,
+  loading,
+}: {
+  title: string;
+  value: string;
+  icon: typeof DollarSign;
+  delta?: number;
+  subtitle?: string;
+  loading?: boolean;
+}) {
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">{title}</p>
+            <p className="mt-1 text-2xl font-bold tracking-tight">
+              {loading ? "…" : value}
+            </p>
+            {delta !== undefined && !loading && (
+              <p
+                className={cn(
+                  "mt-1 flex items-center gap-1 text-xs font-medium",
+                  delta >= 0 ? "text-emerald-600" : "text-destructive",
+                )}
+              >
+                {delta >= 0 ? (
+                  <TrendingUp className="h-3 w-3" />
+                ) : (
+                  <TrendingDown className="h-3 w-3" />
+                )}
+                {delta >= 0 ? "+" : ""}
+                {delta.toFixed(1)}% vs periodo anterior
+              </p>
+            )}
+            {subtitle && !delta && (
+              <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+            )}
+            {subtitle && delta !== undefined && (
+              <p className="text-xs text-muted-foreground">{subtitle}</p>
+            )}
+          </div>
+          <div className="rounded-lg bg-primary/10 p-2">
+            <Icon className="h-5 w-5 text-primary" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
