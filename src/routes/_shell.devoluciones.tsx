@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Search, RotateCcw } from "lucide-react";
@@ -33,7 +34,11 @@ export const Route = createFileRoute("/_shell/devoluciones")({
   head: () => ({
     meta: [{ title: "Devoluciones — Lula OS" }],
   }),
-  component: DevolucionesPage,
+  component: () => (
+    <RequireNavAccess navKey="devoluciones">
+      <DevolucionesPage />
+    </RequireNavAccess>
+  ),
 });
 
 type SaleItem = {
