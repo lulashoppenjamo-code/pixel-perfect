@@ -8,6 +8,7 @@
  */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { ShoppingBag, Wallet } from "lucide-react";
 import { POSPanel } from "@/components/pos/POSPanel";
 import { CashDrawerPanel } from "@/components/cash/CashDrawerPanel";
@@ -28,7 +29,11 @@ export const Route = createFileRoute("/_shell/caja")({
       },
     ],
   }),
-  component: CajaPage,
+  component: () => (
+    <RequireNavAccess navKey="caja">
+      <CajaPage />
+    </RequireNavAccess>
+  ),
 });
 
 type Tab = "pos" | "arqueo";
