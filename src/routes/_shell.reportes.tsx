@@ -79,7 +79,9 @@ function ReportesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sales")
-        .select("id, total, subtotal, tax, discount, created_at, status")
+        .select(
+          "id, total, subtotal, tax, discount, created_at, status, payment_method, cashier_id",
+        )
         .eq("branch_id", branchId!)
         .eq("status", "completed")
         .gte("created_at", since)
@@ -102,6 +104,53 @@ function ReportesPage() {
         .lt("created_at", prevUntil);
       if (error) throw error;
       return data ?? [];
+    },
+  });
+
+  const { data: lowStock = [] } = useQuery({
+    queryKey: ["report-low-stock", branchId],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("stock, min_stock, products(name, sku)")
+        .eq("branch_id", branchId!);
+      if (error) throw error;
+      return (data ?? [])
+        .filter((i) => Number(i.stock) <= Number(i.min_stock))
+        .map((i) => ({
+          stock: Number(i.stock),
+          min_stock: Number(i.min_stock),
+          name:
+            (i.products as unknown as { name: string; sku: string | null } | null)?.name ??
+            "—",
+          sku:
+            (i.products as unknown as { name: string; sku: string | null } | null)?.sku ??
+            null,
+        }))
+        .sort((a, b) => a.stock - b.stock)
+        .slice(0, 20);
+    },
+  });
+
+  const { data: expensesTotal = 0 } = useQuery({
+    queryKey: ["report-expenses", branchId, rangeDays],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const sinceDate = since.slice(0, 10);
+      const { data, error } = await supabase
+        .from("expenses" as "products")
+        .select("amount")
+        .eq("branch_id", branchId!)
+        .gte("expense_date", sinceDate);
+      if (error) {
+        if (error.message?.includes("does not exist") || error.code === "42P01") return 0;
+        throw error;
+      }
+      return ((data ?? []) as { amount: number }[]).reduce(
+        (a, e) => a + Number(e.amount),
+        0,
+      );
     },
   });
 
@@ -154,6 +203,40 @@ function ReportesPage() {
   }
   const estimatedMargin = estimatedRevenue - estimatedCost;
   const marginPct = estimatedRevenue > 0 ? (estimatedMargin / estimatedRevenue) * 100 : 0;
+  const netUtility = estimatedMargin - expensesTotal;
+
+  const byPayment = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const s of sales) {
+      const m = (s as { payment_method?: string }).payment_method ?? "cash";
+      map.set(m, (map.get(m) ?? 0) + Number(s.total));
+    }
+    return Array.from(map.entries())
+      .map(([method, total]) => ({ method, total }))
+      .sort((a, b) => b.total - a.total);
+  }, [sales]);
+
+  const byCashier = useMemo(() => {
+    const map = new Map<string, { count: number; total: number }>();
+    for (const s of sales) {
+      const id = (s as { cashier_id?: string }).cashier_id ?? "—";
+      const cur = map.get(id) ?? { count: 0, total: 0 };
+      cur.count += 1;
+      cur.total += Number(s.total);
+      map.set(id, cur);
+    }
+    return Array.from(map.entries())
+      .map(([id, v]) => ({ id, ...v }))
+      .sort((a, b) => b.total - a.total);
+  }, [sales]);
+
+  const PAY_LABEL: Record<string, string> = {
+    cash: "Efectivo",
+    card: "Tarjeta",
+    transfer: "Transferencia",
+    credit: "Crédito",
+    mixed: "Mixto",
+  };
 
   // Ventas por día
   const byDay = useMemo(() => {
@@ -208,7 +291,8 @@ function ReportesPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
           <p className="text-sm text-muted-foreground">
-            Ventas, ticket promedio, margen y productos top.
+            Ventas, utilidad (ventas − costo − gastos), métodos de pago, stock bajo y top
+            productos.
           </p>
         </div>
         <Select value={rangeDays} onValueChange={setRangeDays}>
