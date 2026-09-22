@@ -94,7 +94,7 @@ function ClientesPage() {
     queryKey: ["credit-payments"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("credit_payments" as "products")
+        .from("credit_payments")
         .select("customer_id, amount");
       if (error) {
         if (error.message?.includes("does not exist") || error.code === "42P01") {
@@ -102,7 +102,7 @@ function ClientesPage() {
         }
         throw error;
       }
-      return (data ?? []) as { customer_id: string; amount: number }[];
+      return data ?? [];
     },
   });
 

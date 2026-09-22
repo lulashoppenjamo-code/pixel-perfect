@@ -129,7 +129,7 @@ function ReportesPage() {
     queryFn: async () => {
       const sinceDate = since.slice(0, 10);
       const { data, error } = await supabase
-        .from("expenses" as "products")
+        .from("expenses")
         .select("amount")
         .eq("branch_id", branchId!)
         .gte("expense_date", sinceDate);
@@ -137,7 +137,7 @@ function ReportesPage() {
         if (error.message?.includes("does not exist") || error.code === "42P01") return 0;
         throw error;
       }
-      return ((data ?? []) as { amount: number }[]).reduce(
+      return (data ?? []).reduce(
         (a, e) => a + Number(e.amount),
         0,
       );
