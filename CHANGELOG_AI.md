@@ -223,6 +223,27 @@ Validación pendiente: igual que el checkpoint anterior, sin red en esta sesión
 
 ---
 
+2026-09-22 — F3 (Claude, continuación — 3ra vuelta)
+
+POS — ESCANEO DE CÓDIGO DE BARRAS POR CÁMARA
+
+Modificado:
+"src/components/pos/POSPanel.tsx"
+
+Implementado:
+- Botón de cámara junto al buscador; abre diálogo con video en vivo.
+- Usa BarcodeDetector (API nativa del navegador), sin librerías externas nuevas.
+- Fallback con aviso claro si el navegador no soporta la API o se niega el permiso de cámara.
+- Refactor: "handleSearchKey" y el scanner comparten la misma función de resolución de código ("resolveAndAddByCode").
+
+Advertencia importante para el usuario: BarcodeDetector no funciona en iPhone/Safari ni en Firefox de escritorio. Si tus cajeros usan iPhone, van a necesitar seguir usando lector USB o tecleo manual — avisar antes de dar esto por terminado.
+
+No se tocó: create_sale RPC, esquema de base de datos, ningún otro módulo.
+
+Validación pendiente: sin red en esta sesión, no se corrió tsc/build.
+
+---
+
 REGLA DE TODAS LAS SESIONES FUTURAS
 
 Cada sesión debe:
