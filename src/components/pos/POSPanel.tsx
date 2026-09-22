@@ -229,20 +229,26 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
     },
   });
 
-  const [variantPickerProduct, setVariantPickerProduct] = useState<ProductRow | null>(null);
-  const { data: productVariants = [], isFetching: loadingVariants } = useQuery({
-    queryKey: ["pos-product-variants", variantPickerProduct?.id],
-    enabled: !!variantPickerProduct,
+  // Se cargan todas las variantes una sola vez (no por producto) para poder
+  // buscarlas por SKU/nombre en el buscador principal del POS.
+  type VariantRow = { id: string; product_id: string; name: string; sku: string | null; price_override: number | null };
+  const { data: allVariants = [] } = useQuery({
+    queryKey: ["pos-all-variants"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("product_variants")
-        .select("id, name, sku, price_override")
-        .eq("product_id", variantPickerProduct!.id)
+        .select("id, product_id, name, sku, price_override")
         .order("name");
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as VariantRow[];
     },
   });
+
+  const [variantPickerProduct, setVariantPickerProduct] = useState<ProductRow | null>(null);
+  const productVariants = useMemo(
+    () => allVariants.filter((v) => v.product_id === variantPickerProduct?.id),
+    [allVariants, variantPickerProduct],
+  );
 
   const { data: categories = [] } = useQuery({
     queryKey: ["pos-categories"],
@@ -284,13 +290,26 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
     }
     const q = search.trim().toLowerCase();
     if (!q) return list;
+    // Set de product_id cuyos variantes matchean por SKU o nombre, para que
+    // el producto padre aparezca en la grilla aunque el texto no coincida
+    // con el nombre/SKU/barcode del producto en sí.
+    const productIdsWithMatchingVariant = new Set(
+      allVariants
+        .filter(
+          (v) =>
+            (v.sku ?? "").toLowerCase().includes(q) ||
+            v.name.toLowerCase().includes(q),
+        )
+        .map((v) => v.product_id),
+    );
     return list.filter(
       (p) =>
         p.name.toLowerCase().includes(q) ||
         (p.sku ?? "").toLowerCase().includes(q) ||
-        (p.barcode ?? "").toLowerCase().includes(q),
+        (p.barcode ?? "").toLowerCase().includes(q) ||
+        productIdsWithMatchingVariant.has(p.id),
     );
-  }, [products, search, categoryFilter]);
+  }, [products, search, categoryFilter, allVariants]);
 
   const linesSubtotal = cart.reduce(
     (acc, l) => acc + l.unit_price * l.quantity - l.discount,
@@ -402,6 +421,16 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
     e.preventDefault();
     const q = search.trim();
     if (!q) return;
+    // SKU exacto de variante: agrega esa variante directo, sin abrir el picker
+    // (mismo comportamiento que un scanner leyendo el código de la variante).
+    const byVariantSku = allVariants.find((v) => v.sku === q);
+    if (byVariantSku) {
+      const parent = products.find((p) => p.id === byVariantSku.product_id);
+      if (parent) {
+        addVariant(parent, byVariantSku);
+        return;
+      }
+    }
     const byBarcode = products.find((p) => p.barcode === q);
     const bySku = products.find((p) => p.sku === q);
     const target = byBarcode ?? bySku ?? filtered[0];
@@ -1053,9 +1082,7 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
             <DialogTitle>{variantPickerProduct?.name ?? "Variantes"}</DialogTitle>
           </DialogHeader>
           <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
-            {loadingVariants ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
-            ) : productVariants.length === 0 ? (
+            {productVariants.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Este producto no tiene variantes configuradas.
               </p>
