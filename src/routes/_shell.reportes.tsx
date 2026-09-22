@@ -1,19 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.reportes.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.reportes.tsx
-// ============================================================================
-
-/**
- * Reportes — LULA OS
- * Ruta: src/routes/_shell.reportes.tsx
- * Reemplaza el archivo existente completo.
- *
- * - Ventas por día
- * - Ticket promedio
- * - Productos más vendidos
- * - Margen / utilidad estimada
- * - Comparación periodo anterior
- */
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
