@@ -11,6 +11,7 @@ export type NavKey =
   | "clientes"
   | "compras"
   | "caja"
+  | "gastos"
   | "devoluciones"
   | "reportes"
   | "pedidos"
@@ -25,6 +26,7 @@ const ROLE_NAV: Record<AppRole, NavKey[]> = {
     "clientes",
     "compras",
     "caja",
+    "gastos",
     "devoluciones",
     "reportes",
     "pedidos",
@@ -38,6 +40,7 @@ const ROLE_NAV: Record<AppRole, NavKey[]> = {
     "clientes",
     "compras",
     "caja",
+    "gastos",
     "devoluciones",
     "reportes",
     "pedidos",
@@ -51,6 +54,7 @@ const ROLE_NAV: Record<AppRole, NavKey[]> = {
     "clientes",
     "compras",
     "caja",
+    "gastos",
     "reportes",
     "devoluciones",
     "pedidos",
