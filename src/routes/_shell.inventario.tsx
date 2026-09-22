@@ -14,7 +14,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeftRight, ClipboardList, Package } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ClipboardList, Package, FileSpreadsheet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
 
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
@@ -310,6 +311,10 @@ function InventarioPage() {
             Conteo físico
           </TabsTrigger>
           <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
+          <TabsTrigger value="importar">
+            <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
+            Importar / Exportar
+          </TabsTrigger>
         </TabsList>
 
         {/* EXISTENCIAS */}
@@ -701,6 +706,10 @@ function InventarioPage() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="importar" className="mt-4">
+          <ImportExportPanel />
         </TabsContent>
       </Tabs>
     </div>
