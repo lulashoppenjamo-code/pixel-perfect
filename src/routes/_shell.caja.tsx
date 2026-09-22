@@ -1,264 +1,154 @@
-import { useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
-import { Wallet } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/lib/auth";
-import { useBranch } from "@/lib/branch";
-import { money, shortDate } from "@/lib/format";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PageHeader, PageShell } from "@/components/PageHeader";
+import { useState } from 'react';
+import { createFileRoute } from '@tanstack/react-router';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent } from '@/components/ui/card';
+import { Search, ShoppingCart, Trash2, CreditCard, Banknote, QrCode } from 'lucide-react';
 
-export const Route = createFileRoute("/_shell/caja")({
-  head: () => ({
-    meta: [
-      { title: "Caja — Lula Shop OS" },
-      { name: "description", content: "Abre y cierra caja, registra retiros e ingresos de efectivo y revisa las diferencias del turno." },
-      { property: "og:title", content: "Caja — Lula Shop OS" },
-      { property: "og:description", content: "Abre y cierra caja, registra retiros e ingresos de efectivo y revisa las diferencias del turno." },
-    ],
-  }),
+export const Route = createFileRoute('/_shell/caja')({
   component: CajaPage,
 });
 
+interface CartItem {
+  id: string;
+  name: string;
+  price: number;
+  qty: number;
+}
+
 function CajaPage() {
-  const { user } = useAuth();
-  const { branchId } = useBranch();
-  const qc = useQueryClient();
-  const [opening, setOpening] = useState("0");
-  const [closing, setClosing] = useState("");
-  const [movType, setMovType] = useState<"deposit" | "withdrawal">("withdrawal");
-  const [amount, setAmount] = useState("");
-  const [reason, setReason] = useState("");
+  const [search, setSearch] = useState('');
+  const [cart, setCart] = useState<CartItem[]>([]);
 
-  const { data: open } = useQuery({
-    queryKey: ["open-session", branchId],
-    enabled: !!branchId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("cash_sessions")
-        .select("*")
-        .eq("branch_id", branchId!)
-        .eq("status", "open")
-        .order("opened_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) throw error;
-      return data;
-    },
-  });
+  const products = [
+    { id: '1', name: 'Pestañas Mink 3D', price: 120, code: '7501001' },
+    { id: '2', name: 'Esmalte Gel UV Fuchsia', price: 85, code: '7501002' },
+    { id: '3', name: 'Polvo Acrílico Cristal 2oz', price: 210, code: '7501003' },
+    { id: '4', name: 'Lámpara LED UV 48W', price: 450, code: '7501004' },
+  ];
 
-  const { data: movements = [] } = useQuery({
-    queryKey: ["cash-movements", open?.id],
-    enabled: !!open?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("cash_movements")
-        .select("*")
-        .eq("cash_session_id", open!.id)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const addToCart = (product: typeof products[0]) => {
+    setCart((prev) => {
+      const existing = prev.find((item) => item.id === product.id);
+      if (existing) {
+        return prev.map((item) =>
+          item.id === product.id ? { ...item, qty: item.qty + 1 } : item
+        );
+      }
+      return [...prev, { id: product.id, name: product.name, price: product.price, qty: 1 }];
+    });
+  };
 
-  const { data: history = [] } = useQuery({
-    queryKey: ["cash-history", branchId],
-    enabled: !!branchId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("cash_sessions")
-        .select("*")
-        .eq("branch_id", branchId!)
-        .eq("status", "closed")
-        .order("closed_at", { ascending: false })
-        .limit(20);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  const removeFromCart = (id: string) => {
+    setCart((prev) => prev.filter((item) => item.id !== id));
+  };
 
-  const openSession = useMutation({
-    mutationFn: async () => {
-      if (!branchId) throw new Error("Selecciona una sucursal");
-      const { error } = await supabase.from("cash_sessions").insert({
-        branch_id: branchId,
-        opened_by: user!.id,
-        opening_amount: Number(opening),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Caja abierta");
-      void qc.invalidateQueries();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo abrir"),
-  });
-
-  const closeSession = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.rpc("close_cash_session", {
-        _session_id: open!.id,
-        _closing_amount: Number(closing),
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Caja cerrada");
-      setClosing("");
-      void qc.invalidateQueries();
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo cerrar"),
-  });
-
-  const addMovement = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase.from("cash_movements").insert({
-        cash_session_id: open!.id,
-        type: movType,
-        amount: Number(amount),
-        reason: reason || null,
-        created_by: user!.id,
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      toast.success("Movimiento registrado");
-      setAmount("");
-      setReason("");
-      void qc.invalidateQueries({ queryKey: ["cash-movements"] });
-    },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "No se pudo registrar"),
-  });
+  const total = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
 
   return (
-    <PageShell>
-      <PageHeader
-        icon={Wallet}
-        title="Hoy / Caja"
-        description="Abre y cierra caja, registra retiros e ingresos de efectivo."
-      />
-      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle>{open ? "Caja abierta" : "Caja cerrada"}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {open ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  Abierta el {shortDate(open.opened_at)} con {money(open.opening_amount)}
-                </p>
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <div className="space-y-2">
-                    <Label>Efectivo contado al cierre</Label>
-                    <Input type="number" value={closing} onChange={(e) => setClosing(e.target.value)} />
-                  </div>
-                  <Button disabled={!closing} onClick={() => closeSession.mutate()}>
-                    Cerrar caja
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                <div className="space-y-2">
-                  <Label>Fondo inicial</Label>
-                  <Input type="number" value={opening} onChange={(e) => setOpening(e.target.value)} />
-                </div>
-                <Button onClick={() => openSession.mutate()}>Abrir caja</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+    <div className="grid grid-cols-12 gap-6 h-[calc(100vh-5rem)]">
+      <div className="col-span-7 flex flex-col gap-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre o código..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9 h-11 bg-background"
+          />
+        </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Cierres anteriores</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Cierre</TableHead>
-                  <TableHead>Esperado</TableHead>
-                  <TableHead>Contado</TableHead>
-                  <TableHead>Diferencia</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {history.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>{shortDate(s.closed_at)}</TableCell>
-                    <TableCell>{money(s.expected_amount)}</TableCell>
-                    <TableCell>{money(s.closing_amount)}</TableCell>
-                    <TableCell className={Number(s.difference) < 0 ? "text-destructive" : ""}>
-                      {money(s.difference)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {!history.length && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
-                      Sin cierres registrados.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
+        <div className="grid grid-cols-2 gap-3 overflow-y-auto pr-1">
+          {products.map((p) => (
+            <Card 
+              key={p.id} 
+              onClick={() => addToCart(p)}
+              className="cursor-pointer hover:border-primary transition-all shadow-none border active:scale-[0.98]"
+            >
+              <CardContent className="p-4 flex flex-col justify-between h-28">
+                <div>
+                  <h3 className="font-semibold text-sm line-clamp-1">{p.name}</h3>
+                  <p className="text-xs text-muted-foreground">Código: {p.code}</p>
+                </div>
+                <p className="text-lg font-bold text-primary">${p.price.toFixed(2)}</p>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
 
-      <Card className="h-fit">
-        <CardHeader>
-          <CardTitle>Entradas y salidas</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {!open && <p className="text-sm text-muted-foreground">Abre la caja para registrar movimientos.</p>}
-          <div className="space-y-2">
-            <Label>Tipo</Label>
-            <Select value={movType} onValueChange={(v) => setMovType(v as "deposit" | "withdrawal")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="deposit">Ingreso</SelectItem>
-                <SelectItem value="withdrawal">Retiro</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>Monto</Label>
-            <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Motivo</Label>
-            <Input value={reason} onChange={(e) => setReason(e.target.value)} />
-          </div>
-          <Button className="w-full" disabled={!open || !amount} onClick={() => addMovement.mutate()}>
-            Registrar
+      <div className="col-span-5 bg-card border rounded-xl flex flex-col p-4 shadow-sm">
+        <div className="flex items-center justify-between pb-3 border-b">
+          <h2 className="font-bold flex items-center gap-2">
+            <ShoppingCart className="w-5 h-5 text-primary" /> Ticket Actual
+          </h2>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => setCart([])} 
+            className="text-xs text-muted-foreground hover:text-destructive"
+          >
+            Vaciar
           </Button>
+        </div>
 
-          <ul className="space-y-1 border-t pt-3 text-sm">
-            {movements.map((m) => (
-              <li key={m.id} className="flex justify-between">
-                <span className="text-muted-foreground">
-                  {m.type === "deposit" ? "Ingreso" : "Retiro"} · {m.reason ?? "sin motivo"}
-                </span>
-                <span>{money(m.amount)}</span>
-              </li>
-            ))}
-          </ul>
-        </CardContent>
-      </Card>
+        <div className="flex-1 overflow-y-auto py-3 space-y-3">
+          {cart.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm">
+              <ShoppingCart className="w-10 h-10 mb-2 opacity-20" />
+              Selecciona productos para vender
+            </div>
+          ) : (
+            cart.map((item) => (
+              <div key={item.id} className="flex items-center justify-between text-sm pb-2 border-b">
+                <div className="flex-1">
+                  <p className="font-medium line-clamp-1">{item.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {item.qty} x ${item.price.toFixed(2)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="font-bold">${(item.price * item.qty).toFixed(2)}</span>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={() => removeFromCart(item.id)}
+                    className="h-7 w-7 text-destructive"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="border-t pt-4 space-y-3">
+          <div className="flex justify-between items-center text-xl font-bold">
+            <span>Total:</span>
+            <span className="text-primary">${total.toFixed(2)}</span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <Button variant="outline" className="flex flex-col h-14 text-xs gap-1">
+              <Banknote className="w-4 h-4 text-emerald-600" />
+              Efectivo
+            </Button>
+            <Button variant="outline" className="flex flex-col h-14 text-xs gap-1">
+              <CreditCard className="w-4 h-4 text-blue-600" />
+              Tarjeta
+            </Button>
+            <Button variant="outline" className="flex flex-col h-14 text-xs gap-1">
+              <QrCode className="w-4 h-4 text-purple-600" />
+              Transferencia
+            </Button>
+          </div>
+
+          <Button disabled={cart.length === 0} className="w-full h-12 text-base font-bold">
+            Cobrar ${total.toFixed(2)}
+          </Button>
+        </div>
+      </div>
     </div>
-    </PageShell>
   );
 }
