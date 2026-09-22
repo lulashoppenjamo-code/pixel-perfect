@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Store, Check, X } from "lucide-react";
@@ -40,7 +41,11 @@ export const Route = createFileRoute("/_shell/pedidos")({
   head: () => ({
     meta: [{ title: "Pedidos online — Lula OS" }],
   }),
-  component: PedidosPage,
+  component: () => (
+    <RequireNavAccess navKey="pedidos">
+      <PedidosPage />
+    </RequireNavAccess>
+  ),
 });
 
 type OrderRow = {
