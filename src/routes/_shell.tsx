@@ -51,7 +51,7 @@ function ShellLayout() {
 
   const navItems = [
     { label: 'Caja (POS)', path: '/caja', icon: ShoppingBag },
-    { label: 'Historial Ventas', path: '/ventas', icon: Receipt },
+    { label: 'Historial de ventas', path: '/ventas', icon: Receipt },
     { label: 'Productos', path: '/productos', icon: Package },
     { label: 'Inventario', path: '/inventario', icon: Boxes },
     { label: 'Clientes', path: '/clientes', icon: Users },
