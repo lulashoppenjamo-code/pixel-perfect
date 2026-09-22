@@ -1,7 +1,4 @@
-// ============================================================================
-// RUTA: src/routes/_shell.productos.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.productos.tsx
-// ============================================================================
+
 
 /**
  * Productos y categorías — LULA OS
