@@ -170,8 +170,67 @@ export type Database = {
           },
         ]
       }
+      credit_payments: {
+        Row: {
+          amount: number
+          branch_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          payment_method: string
+          sale_id: string | null
+        }
+        Insert: {
+          amount: number
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          sale_id?: string | null
+        }
+        Update: {
+          amount?: number
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          sale_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_payments_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_payments_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
+          address: string | null
           created_at: string
           email: string | null
           id: string
@@ -181,6 +240,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          address?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -190,6 +250,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          address?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -199,6 +260,66 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          branch_id: string | null
+          cash_session_id: string | null
+          category: string | null
+          concept: string
+          created_at: string
+          created_by: string | null
+          expense_date: string
+          id: string
+          notes: string | null
+          payment_method: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          branch_id?: string | null
+          cash_session_id?: string | null
+          category?: string | null
+          concept: string
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          branch_id?: string | null
+          cash_session_id?: string | null
+          category?: string | null
+          concept?: string
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory: {
         Row: {
@@ -505,10 +626,12 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          is_weighable: boolean
           name: string
           price: number
           sku: string | null
           tax_rate: number
+          unit: string
           updated_at: string
         }
         Insert: {
@@ -522,10 +645,12 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_weighable?: boolean
           name: string
           price?: number
           sku?: string | null
           tax_rate?: number
+          unit?: string
           updated_at?: string
         }
         Update: {
@@ -539,10 +664,12 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_weighable?: boolean
           name?: string
           price?: number
           sku?: string | null
           tax_rate?: number
+          unit?: string
           updated_at?: string
         }
         Relationships: [
@@ -769,6 +896,7 @@ export type Database = {
           discount: number
           folio: number
           id: string
+          notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           status: Database["public"]["Enums"]["sale_status"]
           subtotal: number
@@ -787,6 +915,7 @@ export type Database = {
           discount?: number
           folio?: number
           id?: string
+          notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           status?: Database["public"]["Enums"]["sale_status"]
           subtotal?: number
@@ -805,6 +934,7 @@ export type Database = {
           discount?: number
           folio?: number
           id?: string
+          notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           status?: Database["public"]["Enums"]["sale_status"]
           subtotal?: number
@@ -1065,6 +1195,7 @@ export type Database = {
           discount: number
           folio: number
           id: string
+          notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           status: Database["public"]["Enums"]["sale_status"]
           subtotal: number
@@ -1133,6 +1264,7 @@ export type Database = {
           discount: number
           folio: number
           id: string
+          notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           status: Database["public"]["Enums"]["sale_status"]
           subtotal: number
@@ -1150,7 +1282,7 @@ export type Database = {
       set_inventory_limits: {
         Args: {
           _branch_id: string
-          _max_stock: number
+          _max_stock?: number
           _min_stock: number
           _product_id: string
           _variant_id?: string
