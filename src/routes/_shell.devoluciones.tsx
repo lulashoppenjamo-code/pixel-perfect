@@ -1,13 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.devoluciones.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.devoluciones.tsx
-// ============================================================================
-
-/**
- * Devoluciones / Cancelaciones — LULA OS
- * Ruta: src/routes/_shell.devoluciones.tsx
- * Reemplaza el archivo existente completo.
- */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
