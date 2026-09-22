@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.gastos.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.gastos.tsx
+// ============================================================================
+
 /**
  * Gastos — LULA OS (FASE 5)
  * Requiere migración: tabla public.expenses
@@ -15,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import {
   Table,
   TableBody,
@@ -142,16 +148,12 @@ function GastosPage() {
   const totalPeriod = expenses.reduce((a, e) => a + Number(e.amount), 0);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex items-center gap-3">
-        <Receipt className="h-6 w-6 text-primary" />
-        <div>
-          <h1 className="text-xl font-bold">Gastos</h1>
-          <p className="text-sm text-muted-foreground">
-            Registro de egresos por sucursal. Impacta reportes de utilidad.
-          </p>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        icon={Receipt}
+        title="Gastos"
+        description="Registro de egresos por sucursal. Impacta reportes de utilidad."
+      />
 
       {tableMissing && (
         <Card className="border-amber-500/50 bg-amber-500/5">
@@ -300,6 +302,6 @@ function GastosPage() {
           </CardContent>
         </Card>
       </div>
-    </div>
+    </PageShell>
   );
 }
