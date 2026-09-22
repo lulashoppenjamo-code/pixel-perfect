@@ -69,25 +69,17 @@ CREATE TABLE IF NOT EXISTS public.credit_payments (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS credit_payments_customer_idx
-  ON public.credit_payments(customer_id);
-
-CREATE INDEX IF NOT EXISTS credit_payments_created_idx
-  ON public.credit_payments(created_at DESC);
+CREATE INDEX IF NOT EXISTS credit_payments_customer_idx ON public.credit_payments(customer_id);
+CREATE INDEX IF NOT EXISTS credit_payments_created_idx ON public.credit_payments(created_at DESC);
 
 ALTER TABLE public.credit_payments ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE tablename = 'credit_payments'
-    AND policyname = 'credit_payments_all_authenticated'
+    SELECT 1 FROM pg_policies WHERE tablename = 'credit_payments' AND policyname = 'credit_payments_all_authenticated'
   ) THEN
-    CREATE POLICY credit_payments_all_authenticated
-    ON public.credit_payments
-      FOR ALL TO authenticated
-      USING (true)
-      WITH CHECK (true);
+    CREATE POLICY credit_payments_all_authenticated ON public.credit_payments
+      FOR ALL TO authenticated USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
@@ -107,25 +99,17 @@ CREATE TABLE IF NOT EXISTS public.expenses (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS expenses_branch_idx
-  ON public.expenses(branch_id);
-
-CREATE INDEX IF NOT EXISTS expenses_date_idx
-  ON public.expenses(expense_date DESC);
+CREATE INDEX IF NOT EXISTS expenses_branch_idx ON public.expenses(branch_id);
+CREATE INDEX IF NOT EXISTS expenses_date_idx ON public.expenses(expense_date DESC);
 
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
 DO $$ BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies
-    WHERE tablename = 'expenses'
-    AND policyname = 'expenses_all_authenticated'
+    SELECT 1 FROM pg_policies WHERE tablename = 'expenses' AND policyname = 'expenses_all_authenticated'
   ) THEN
-    CREATE POLICY expenses_all_authenticated
-    ON public.expenses
-      FOR ALL TO authenticated
-      USING (true)
-      WITH CHECK (true);
+    CREATE POLICY expenses_all_authenticated ON public.expenses
+      FOR ALL TO authenticated USING (true) WITH CHECK (true);
   END IF;
 END $$;
 
