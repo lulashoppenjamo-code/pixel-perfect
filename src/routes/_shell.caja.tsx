@@ -1,7 +1,13 @@
+// ============================================================================
+// RUTA: src/routes/_shell.caja.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.caja.tsx
+// ============================================================================
+
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -12,6 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 
 export const Route = createFileRoute("/_shell/caja")({
   head: () => ({
@@ -136,7 +143,13 @@ function CajaPage() {
   });
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
+    <PageShell>
+      <PageHeader
+        icon={Wallet}
+        title="Hoy / Caja"
+        description="Abre y cierra caja, registra retiros e ingresos de efectivo."
+      />
+      <div className="grid gap-4 lg:grid-cols-[1fr_340px]">
       <div className="space-y-4">
         <Card>
           <CardHeader>
@@ -251,5 +264,6 @@ function CajaPage() {
         </CardContent>
       </Card>
     </div>
+    </PageShell>
   );
 }
