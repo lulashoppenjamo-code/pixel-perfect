@@ -205,6 +205,24 @@ Bloqueo detectado: cancelación/anulación de venta en el mismo turno requiere c
 
 ---
 
+2026-09-22 — F3 (Claude, continuación misma sesión)
+
+POS — BÚSQUEDA DE VARIANTES POR SKU/NOMBRE
+
+Modificado:
+"src/components/pos/POSPanel.tsx"
+
+Implementado:
+- La grilla de productos ahora matchea también SKU/nombre de variantes (antes solo product.name/sku/barcode).
+- Enter con SKU exacto de variante agrega esa variante directo al carrito, igual que ya pasaba con SKU/barcode de producto simple.
+- Se unificó la carga de variantes en una sola query "pos-all-variants" en vez de una consulta por producto cada vez que se abría el selector.
+
+No se tocó: create_sale RPC, esquema de base de datos, POS de producto simple, caja, ni otros módulos.
+
+Validación pendiente: igual que el checkpoint anterior, sin red en esta sesión no se corrió tsc/build.
+
+---
+
 REGLA DE TODAS LAS SESIONES FUTURAS
 
 Cada sesión debe:
