@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
+import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useBranch } from '@/lib/branch';
 import { Button } from '@/components/ui/button';
@@ -12,7 +13,9 @@ import {
   Settings, 
   LogOut,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/_shell')({
@@ -48,6 +51,18 @@ function ShellLayout() {
   const { branchId, setBranchId, branches } = useBranch();
   const navigate = useNavigate();
   const location = useLocation();
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.localStorage.getItem('sidebar-collapsed') === '1';
+  });
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      window.localStorage.setItem('sidebar-collapsed', next ? '1' : '0');
+      return next;
+    });
+  };
 
   const navItems = [
     { label: 'Caja (POS)', path: '/caja', icon: ShoppingBag },
@@ -61,36 +76,52 @@ function ShellLayout() {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <aside className="w-64 bg-card border-r flex flex-col justify-between p-4 select-none">
+      <aside
+        className={`relative flex flex-col justify-between border-r bg-card p-4 select-none transition-all duration-200 ${
+          collapsed ? 'w-[68px] px-2' : 'w-64'
+        }`}
+      >
+        <button
+          onClick={toggleCollapsed}
+          title={collapsed ? 'Mostrar menú' : 'Ocultar menú'}
+          className="absolute -right-3 top-6 z-10 flex h-6 w-6 items-center justify-center rounded-full border bg-card shadow-sm hover:bg-accent"
+        >
+          {collapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+        </button>
+
         <div className="space-y-6">
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-sm">
+          <div className={`flex items-center gap-3 ${collapsed ? 'justify-center px-0' : 'px-2'}`}>
+            <div className="w-10 h-10 shrink-0 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-sm">
               L
             </div>
-            <div>
-              <h1 className="font-bold text-lg leading-tight">Lula OS</h1>
-              <p className="text-xs text-muted-foreground">Punto de Venta</p>
-            </div>
+            {!collapsed && (
+              <div>
+                <h1 className="font-bold text-lg leading-tight">Lula OS</h1>
+                <p className="text-xs text-muted-foreground">Punto de Venta</p>
+              </div>
+            )}
           </div>
 
-          <div className="px-2">
-            <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">
-              Sucursal Activa
-            </label>
-            <select 
-              value={branchId ?? ''} 
-              onChange={(e) => setBranchId(e.target.value)}
-              className="w-full p-2.5 rounded-lg border bg-background text-sm font-medium focus:ring-2 focus:ring-primary outline-none cursor-pointer"
-            >
-              {branches && branches.length > 0 ? (
-                branches.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))
-              ) : (
-                <option value="">Cargando sucursales...</option>
-              )}
-            </select>
-          </div>
+          {!collapsed && (
+            <div className="px-2">
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Sucursal Activa
+              </label>
+              <select 
+                value={branchId ?? ''} 
+                onChange={(e) => setBranchId(e.target.value)}
+                className="w-full p-2.5 rounded-lg border bg-background text-sm font-medium focus:ring-2 focus:ring-primary outline-none cursor-pointer"
+              >
+                {branches && branches.length > 0 ? (
+                  branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))
+                ) : (
+                  <option value="">Cargando sucursales...</option>
+                )}
+              </select>
+            </div>
+          )}
 
           <nav className="space-y-1">
             {navItems.map((item) => {
@@ -100,14 +131,17 @@ function ShellLayout() {
                 <button
                   key={item.path}
                   onClick={() => navigate({ to: item.path })}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                  title={collapsed ? item.label : undefined}
+                  className={`flex w-full items-center gap-3 rounded-lg text-sm font-medium transition-colors ${
+                    collapsed ? 'justify-center px-0 py-2.5' : 'px-3 py-2.5'
+                  } ${
                     isActive 
                       ? 'bg-primary text-primary-foreground shadow-sm' 
                       : 'hover:bg-accent text-foreground'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                  {item.label}
+                  <Icon className="w-4 h-4 shrink-0" />
+                  {!collapsed && item.label}
                 </button>
               );
             })}
@@ -115,17 +149,22 @@ function ShellLayout() {
         </div>
 
         <div className="border-t pt-4 space-y-2">
-          <div className="px-2 py-1">
-            <p className="text-sm font-semibold truncate">{user?.email || 'Operador'}</p>
-            <p className="text-xs text-muted-foreground capitalize">{user?.role || 'Cajero'}</p>
-          </div>
+          {!collapsed && (
+            <div className="px-2 py-1">
+              <p className="text-sm font-semibold truncate">{user?.email || 'Operador'}</p>
+              <p className="text-xs text-muted-foreground capitalize">{user?.role || 'Cajero'}</p>
+            </div>
+          )}
           <Button 
             onClick={() => signOut()} 
             variant="ghost" 
-            className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+            title={collapsed ? 'Cerrar sesión' : undefined}
+            className={`text-destructive hover:text-destructive hover:bg-destructive/10 ${
+              collapsed ? 'w-full justify-center px-0' : 'w-full justify-start'
+            }`}
           >
-            <LogOut className="w-4 h-4 mr-2" />
-            Cerrar Sesión
+            <LogOut className={`w-4 h-4 ${collapsed ? '' : 'mr-2'}`} />
+            {!collapsed && 'Cerrar Sesión'}
           </Button>
         </div>
       </aside>
