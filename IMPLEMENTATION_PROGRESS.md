@@ -247,3 +247,56 @@ Bloqueos
 
 SIGUIENTE TAREA EXACTA
 Con red disponible: validar tsc/build de POSPanel.tsx y TicketModal.tsx juntos. Si pasa, continuar con escaneo de código de barras por cámara (BarcodeDetector API con fallback, ya que no todos los navegadores la soportan). Antes de tocar cancelación de venta, se necesita respuesta del usuario sobre el bloqueo documentado arriba.
+
+---
+
+Fecha
+2026-09-22
+
+Sesión / IA
+Claude (Claude.ai, continuación — 3ra vuelta)
+
+Fase
+F3 — POS
+
+Estado
+EN PROCESO
+
+Trabajo realizado
+- Escaneo de código de barras por cámara en el POS, usando la API nativa del navegador "BarcodeDetector" (Chrome/Edge/Android) vía getUserMedia — no se agregó ninguna librería externa nueva al proyecto.
+- Botón de cámara junto al buscador que abre un diálogo con el video en vivo; al detectar un código, se resuelve igual que un SKU/barcode/SKU-de-variante escrito manualmente (se reutilizó la lógica extraída a "resolveAndAddByCode").
+- Si el navegador no soporta BarcodeDetector, o se niega el permiso de cámara, se muestra un aviso claro y se sugiere usar lector USB o escritura manual — no rompe el flujo existente.
+- Se refactorizó "handleSearchKey" para reusar "resolveAndAddByCode" (antes tenía la lógica duplicada); comportamiento idéntico al de antes para Enter manual.
+
+Archivos creados
+NINGUNO
+
+Archivos modificados
+- src/components/pos/POSPanel.tsx
+
+Archivos eliminados
+NINGUNO
+
+Base de datos
+Sin cambios de base de datos.
+
+Validación
+- Revisión manual del diff.
+- Balance de llaves/paréntesis/corchetes verificado con script.
+- Sigue sin poder ejecutarse tsc/build real en esta sesión (sin red). Nota: BarcodeDetector no está tipado por defecto en lib.dom.d.ts de TypeScript en todas las configuraciones — se usó un cast explícito a través de "unknown" para evitar depender de tipos no garantizados; validar que compile en el entorno real.
+
+Problemas encontrados
+- BarcodeDetector no está soportado en Safari/iOS ni en Firefox de escritorio a la fecha de este conocimiento — en esos navegadores se mostrará el aviso de fallback. Si la mayoría de tus cajeros usan iPhone, este feature no les servirá y seguirán necesitando lector USB o tecleo manual; avisar al usuario.
+- Mismo bloqueo de cancelación de venta que checkpoints anteriores (RPC refund_sale sin cuerpo conocido) — sigue sin resolverse, el usuario no respondió aún.
+
+Pendientes
+- Validar tsc/build real de los 3 archivos tocados en esta fase (POSPanel.tsx, TicketModal.tsx) en un entorno con red.
+- Migration RLS pendiente de ejecutar en Supabase (de checkpoints anteriores).
+- Decidir bloqueo de cancelación de venta.
+- Si la mayoría de cajeros usa iPhone/Safari, evaluar alternativa (librería JS de decodificación por canvas) — implicaría agregar una dependencia nueva al package.json, lo cual requiere autorización explícita del usuario antes de hacerlo.
+
+Bloqueos
+- Mismo bloqueo: cuerpo real de "refund_sale" o definición de una RPC nueva "cancel_sale".
+
+SIGUIENTE TAREA EXACTA
+Validar tsc/build en un entorno con red. Confirmar con el usuario si la mayoría de cajeros usa Android/Chrome (BarcodeDetector funciona) o iPhone (necesitaría otra solución). Seguir esperando respuesta sobre refund_sale para desbloquear cancelación de venta.
