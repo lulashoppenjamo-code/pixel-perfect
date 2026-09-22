@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.inventario.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.inventario.tsx
+// ============================================================================
+
 /**
  * Inventario — LULA OS
  * Ruta: src/routes/_shell.inventario.tsx
@@ -14,7 +19,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeftRight, ClipboardList, Package, FileSpreadsheet } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ClipboardList, Package, FileSpreadsheet, Boxes } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -23,6 +28,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
@@ -284,21 +290,20 @@ function InventarioPage() {
   ));
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Inventario</h1>
-          <p className="text-sm text-muted-foreground">
-            Existencias, ajustes, traspasos, conteo físico e historial.
-          </p>
-        </div>
-        {lowStock.length > 0 && (
-          <Badge variant="destructive" className="w-fit gap-1">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            {lowStock.length} bajo mínimo
-          </Badge>
-        )}
-      </div>
+    <PageShell>
+      <PageHeader
+        icon={Boxes}
+        title="Inventario"
+        description="Existencias, ajustes, traspasos, conteo físico e historial."
+        action={
+          lowStock.length > 0 ? (
+            <Badge variant="destructive" className="w-fit gap-1">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {lowStock.length} bajo mínimo
+            </Badge>
+          ) : undefined
+        }
+      />
 
       <Tabs defaultValue="existencias">
         <TabsList className="flex h-auto flex-wrap gap-1">
@@ -712,6 +717,6 @@ function InventarioPage() {
           <ImportExportPanel />
         </TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   );
 }
