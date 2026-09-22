@@ -1,8 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.compras.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.compras.tsx
-// ============================================================================
-
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
