@@ -4,6 +4,8 @@
  * Reemplaza el archivo existente completo.
  */
 import { useRef } from "react";
+import { Share2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -78,6 +80,42 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
 <script>window.onload=function(){window.print();setTimeout(function(){window.close()},400)}</script>
 </body></html>`);
     w.document.close();
+  };
+
+  const buildShareText = (t: TicketData) => {
+    const lines = [
+      `${t.companyName ?? "Lula Shop"}${t.branchName ? " — " + t.branchName : ""}`,
+      `Folio: ${t.folio}`,
+      t.date,
+      "",
+      ...t.lines.map(
+        (l) => `${l.quantity} x ${l.name} — ${money(l.total)}`,
+      ),
+      "",
+      `Subtotal: ${money(t.subtotal)}`,
+      `Impuestos: ${money(t.tax)}`,
+      ...(t.discount > 0 ? [`Descuento: -${money(t.discount)}`] : []),
+      `TOTAL: ${money(t.total)}`,
+      ...(t.footer ? ["", t.footer] : []),
+    ];
+    return lines.join("\n");
+  };
+
+  const handleShare = async () => {
+    if (!ticket) return;
+    const text = buildShareText(ticket);
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: `Ticket ${ticket.folio}`, text });
+      } catch {
+        // el usuario canceló el share nativo, no es un error
+      }
+      return;
+    }
+    // Fallback: WhatsApp Web / app
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank");
+    toast.info("Abriendo WhatsApp para compartir el ticket");
   };
 
   if (!ticket) return null;
@@ -183,6 +221,10 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cerrar
+          </Button>
+          <Button variant="outline" onClick={handleShare}>
+            <Share2 className="mr-1.5 h-4 w-4" />
+            Compartir
           </Button>
           <Button onClick={handlePrint}>Imprimir</Button>
         </DialogFooter>
