@@ -1,3 +1,5 @@
+
+
 /**
  * Cabecera de página unificada — estilo Zobaze POS
  * Título grande, subtítulo suave, acción opcional a la derecha.
