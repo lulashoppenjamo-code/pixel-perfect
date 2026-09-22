@@ -1,8 +1,13 @@
+// ============================================================================
+// RUTA: src/routes/_shell.compras.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.compras.tsx
+// ============================================================================
+
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -14,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 
 export const Route = createFileRoute("/_shell/compras")({
   head: () => ({
@@ -138,6 +144,12 @@ function ComprasPage() {
   });
 
   return (
+    <PageShell>
+      <PageHeader
+        icon={Truck}
+        title="Compras"
+        description="Órdenes de compra y proveedores. Al recibir, el inventario se actualiza."
+      />
     <Tabs defaultValue="ordenes" className="space-y-4">
       <TabsList>
         <TabsTrigger value="ordenes">Órdenes</TabsTrigger>
@@ -334,5 +346,6 @@ function ComprasPage() {
         </Card>
       </TabsContent>
     </Tabs>
+    </PageShell>
   );
 }
