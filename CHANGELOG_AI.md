@@ -182,6 +182,29 @@ Después implementar únicamente lo que realmente falte.
 
 ---
 
+2026-09-22 — F3 (Claude, sesión de auditoría + POS)
+
+POS — CORRECCIÓN DE CAMPOS SIN UI Y SELECTOR DE VARIANTES
+
+Modificado:
+"src/components/pos/POSPanel.tsx"
+"src/components/pos/TicketModal.tsx"
+
+Implementado:
+- Input de descuento a nivel ticket (existía el estado, no el campo).
+- Input de nota de venta (existía el estado, no el campo).
+- Selector de variantes para productos con has_variants=true, usando la tabla real "product_variants" e "inventory.variant_id".
+- Stock agregado por producto (suma de variantes) en la tarjeta de la grilla.
+- Botón "Compartir" en el ticket (Web Share API / WhatsApp).
+
+No se tocó: create_sale RPC, esquema de base de datos, protección de rutas, navegación, caja, ni ningún otro módulo.
+
+Validación pendiente: sin acceso a red en esta sesión para instalar dependencias, no se ejecutó tsc/build. Revisar antes de desplegar.
+
+Bloqueo detectado: cancelación/anulación de venta en el mismo turno requiere conocer el cuerpo real de "refund_sale" o definir una RPC nueva — no implementado, documentado en IMPLEMENTATION_PROGRESS.md.
+
+---
+
 REGLA DE TODAS LAS SESIONES FUTURAS
 
 Cada sesión debe:
