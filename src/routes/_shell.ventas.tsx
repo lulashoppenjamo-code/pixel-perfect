@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.ventas.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.ventas.tsx
+// ============================================================================
+
 /**
  * Punto de Venta — LULA OS (estilo Zobaze)
  * Ruta: src/routes/_shell.ventas.tsx
@@ -562,8 +567,8 @@ function VentasPage() {
   const canSell = !settings?.requireOpenCash || !!openSession;
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] flex-col gap-0 lg:flex-row">
-      {/* IZQUIERDA: Catálogo */}
+    <div className="flex h-[calc(100dvh-5rem)] flex-col gap-0 md:h-screen lg:flex-row">
+      {/* IZQUIERDA: Catálogo — Counter estilo Zobaze */}
       <div className="flex flex-1 flex-col overflow-hidden border-r bg-background">
         <div className="flex flex-col gap-3 border-b bg-card p-3 sm:p-4">
           <div className="flex items-center gap-2">
@@ -574,15 +579,15 @@ function VentasPage() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleSearchKey}
-                placeholder="Buscar o escanear código de barras / SKU..."
-                className="h-11 pl-10 text-base"
+                placeholder="¿Qué quieres vender? Busca o escanea…"
+                className="h-11 rounded-xl border-muted bg-muted/30 pl-10 text-base shadow-none focus-visible:bg-background"
                 autoComplete="off"
               />
             </div>
             <Button
               variant="outline"
               size="icon"
-              className="h-11 w-11 shrink-0"
+              className="h-11 w-11 shrink-0 rounded-xl"
               title="Historial de ventas"
               onClick={() => {
                 setHistoryOpen(true);
@@ -599,25 +604,34 @@ function VentasPage() {
             )}
           </div>
 
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            <Button
-              size="sm"
-              variant={categoryFilter === "all" ? "default" : "outline"}
+          {/* Chips de categoría estilo Zobaze */}
+          <div className="flex gap-2 overflow-x-auto pb-0.5">
+            <button
+              type="button"
               onClick={() => setCategoryFilter("all")}
-              className="shrink-0"
+              className={cn(
+                "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors",
+                categoryFilter === "all"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80",
+              )}
             >
               Todos
-            </Button>
+            </button>
             {categories.map((c) => (
-              <Button
+              <button
                 key={c.id}
-                size="sm"
-                variant={categoryFilter === c.id ? "default" : "outline"}
+                type="button"
                 onClick={() => setCategoryFilter(c.id)}
-                className="shrink-0"
+                className={cn(
+                  "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors",
+                  categoryFilter === c.id
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80",
+                )}
               >
                 {c.name}
-              </Button>
+              </button>
             ))}
           </div>
         </div>
@@ -649,18 +663,18 @@ function VentasPage() {
                       outOfStock && "opacity-60",
                     )}
                   >
-                    <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-xl">
+                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-2xl">
                       {p.emoji || "📦"}
                     </div>
                     <p className="line-clamp-2 text-sm font-medium leading-tight">{p.name}</p>
                     <p className="mt-1 text-base font-bold text-primary">{money(p.price)}</p>
                     <p
                       className={cn(
-                        "mt-0.5 text-xs",
-                        outOfStock ? "text-destructive" : "text-muted-foreground",
+                        "mt-0.5 text-[11px]",
+                        outOfStock ? "text-destructive font-medium" : "text-muted-foreground",
                       )}
                     >
-                      {outOfStock ? "Agotado" : `Stock: ${p.stock}`}
+                      {outOfStock ? "Agotado" : `Disp. ${p.stock}`}
                     </p>
                   </button>
                 );
