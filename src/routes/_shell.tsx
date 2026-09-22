@@ -1,8 +1,10 @@
 /**
- * Shell layout — LULA OS
- * Ruta: src/routes/_shell.tsx
+ * Shell layout — LULA OS (navegación estilo Zobaze POS)
+ * Menús acomodados igual que Zobaze:
+ *  - Móvil: barra inferior 5 pestañas (Reportes · Hoy · Counter · Items · Más)
+ *  - Escritorio: sidebar con grupos Counter / Inventario / Operaciones / Más
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   ShoppingCart,
@@ -18,6 +20,9 @@ import {
   Store,
   Bot,
   Receipt,
+  MoreHorizontal,
+  LayoutDashboard,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BranchProvider, useBranch } from "@/lib/branch";
@@ -30,26 +35,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell")({
   component: ShellLayout,
 });
 
-const ALL_NAV: { key: NavKey; to: string; label: string; icon: typeof ShoppingCart }[] = [
-  { key: "ventas", to: "/ventas", label: "Ventas", icon: ShoppingCart },
-  { key: "productos", to: "/productos", label: "Productos", icon: Package },
+type NavItem = {
+  key: NavKey;
+  to: string;
+  label: string;
+  shortLabel?: string;
+  icon: typeof ShoppingCart;
+};
+
+/** Orden principal estilo Zobaze bottom-nav */
+const PRIMARY_NAV: NavItem[] = [
+  { key: "reportes", to: "/reportes", label: "Reportes", shortLabel: "Reportes", icon: BarChart3 },
+  { key: "caja", to: "/caja", label: "Hoy / Caja", shortLabel: "Hoy", icon: LayoutDashboard },
+  { key: "ventas", to: "/ventas", label: "Counter", shortLabel: "Counter", icon: ShoppingCart },
+  { key: "productos", to: "/productos", label: "Items", shortLabel: "Items", icon: Package },
+];
+
+/** Resto de menús (van en "Más") — mismo orden lógico que Zobaze */
+const MORE_NAV: NavItem[] = [
   { key: "inventario", to: "/inventario", label: "Inventario", icon: Boxes },
   { key: "clientes", to: "/clientes", label: "Clientes", icon: Users },
   { key: "compras", to: "/compras", label: "Compras", icon: Truck },
-  { key: "caja", to: "/caja", label: "Caja", icon: Wallet },
   { key: "gastos", to: "/gastos", label: "Gastos", icon: Receipt },
   { key: "devoluciones", to: "/devoluciones", label: "Devoluciones", icon: RotateCcw },
   { key: "pedidos", to: "/pedidos", label: "Pedidos online", icon: Store },
-  { key: "reportes", to: "/reportes", label: "Reportes", icon: BarChart3 },
   { key: "ceo", to: "/ceo", label: "CEO IA", icon: Bot },
   { key: "ajustes", to: "/ajustes", label: "Ajustes", icon: Settings },
 ];
+
+const ALL_NAV = [...PRIMARY_NAV, ...MORE_NAV];
 
 function ShellLayout() {
   const { user, loading, roles, signOut, profile } = useAuth();
@@ -59,7 +85,15 @@ function ShellLayout() {
     if (!loading && !user) void navigate({ to: "/auth" });
   }, [user, loading, navigate]);
 
-  const nav = useMemo(
+  const primaryNav = useMemo(
+    () => PRIMARY_NAV.filter((item) => canAccess(roles, item.key)),
+    [roles],
+  );
+  const moreNav = useMemo(
+    () => MORE_NAV.filter((item) => canAccess(roles, item.key)),
+    [roles],
+  );
+  const fullNav = useMemo(
     () => ALL_NAV.filter((item) => canAccess(roles, item.key)),
     [roles],
   );
@@ -75,7 +109,9 @@ function ShellLayout() {
   return (
     <BranchProvider>
       <ShellInner
-        nav={nav}
+        primaryNav={primaryNav}
+        moreNav={moreNav}
+        fullNav={fullNav}
         profileName={profile?.full_name ?? user.email ?? "Usuario"}
         onSignOut={async () => {
           await signOut();
@@ -87,27 +123,37 @@ function ShellLayout() {
 }
 
 function ShellInner({
-  nav,
+  primaryNav,
+  moreNav,
+  fullNav,
   profileName,
   onSignOut,
 }: {
-  nav: typeof ALL_NAV;
+  primaryNav: NavItem[];
+  moreNav: NavItem[];
+  fullNav: NavItem[];
   profileName: string;
   onSignOut: () => void;
 }) {
   const { branches, branchId, setBranchId } = useBranch();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  const isMoreActive = moreNav.some(
+    (n) => pathname === n.to || pathname.startsWith(n.to + "/"),
+  );
 
   return (
-    <div className="flex min-h-screen flex-col bg-muted/30 md:flex-row">
-      <aside className="flex shrink-0 flex-col gap-1 border-b bg-card p-3 md:w-56 md:border-b-0 md:border-r">
-        <div className="mb-1 hidden px-2 md:block">
+    <div className="flex min-h-screen flex-col bg-muted/40 md:flex-row">
+      {/* ── Desktop sidebar (agrupado estilo Zobaze) ── */}
+      <aside className="hidden shrink-0 flex-col border-r bg-card md:flex md:w-56">
+        <div className="border-b px-4 py-4">
           <div className="text-lg font-bold tracking-tight text-primary">LULA OS</div>
-          <div className="text-[11px] text-muted-foreground">Sistema empresarial</div>
+          <div className="text-[11px] text-muted-foreground">Punto de venta</div>
         </div>
 
         {branches.length > 1 && (
-          <div className="mb-2 px-1">
+          <div className="border-b px-3 py-2">
             <Select value={branchId ?? undefined} onValueChange={setBranchId}>
               <SelectTrigger className="h-8 text-xs">
                 <SelectValue placeholder="Sucursal" />
@@ -123,29 +169,52 @@ function ShellInner({
           </div>
         )}
 
-        <nav className="flex gap-1 overflow-x-auto md:flex-col">
-          {nav.map(({ to, label, icon: Icon }) => {
-            const active = pathname === to || pathname.startsWith(to + "/");
-            return (
-              <Link
-                key={to}
-                to={to}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                  active
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                )}
-              >
-                <Icon className="h-4 w-4 shrink-0" />
-                <span className="whitespace-nowrap">{label}</span>
-              </Link>
-            );
-          })}
+        <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
+          {/* Grupo Counter */}
+          <p className="mb-1 mt-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Counter
+          </p>
+          {fullNav
+            .filter((n) => ["ventas", "caja"].includes(n.key))
+            .map((item) => (
+              <NavLink key={item.to} item={item} pathname={pathname} />
+            ))}
+
+          {/* Grupo Items / Stock */}
+          <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Items & Stock
+          </p>
+          {fullNav
+            .filter((n) => ["productos", "inventario", "compras"].includes(n.key))
+            .map((item) => (
+              <NavLink key={item.to} item={item} pathname={pathname} />
+            ))}
+
+          {/* Grupo Operaciones */}
+          <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Operaciones
+          </p>
+          {fullNav
+            .filter((n) =>
+              ["clientes", "gastos", "devoluciones", "pedidos", "reportes"].includes(n.key),
+            )
+            .map((item) => (
+              <NavLink key={item.to} item={item} pathname={pathname} />
+            ))}
+
+          {/* Grupo Más */}
+          <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Más
+          </p>
+          {fullNav
+            .filter((n) => ["ceo", "ajustes"].includes(n.key))
+            .map((item) => (
+              <NavLink key={item.to} item={item} pathname={pathname} />
+            ))}
         </nav>
 
-        <div className="mt-auto hidden border-t pt-3 md:block">
-          <p className="truncate px-2 text-xs text-muted-foreground">{profileName}</p>
+        <div className="border-t p-3">
+          <p className="truncate px-1 text-xs text-muted-foreground">{profileName}</p>
           <Button
             variant="ghost"
             size="sm"
@@ -158,9 +227,120 @@ function ShellInner({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-auto">
+      {/* ── Contenido principal ── */}
+      <main className="min-w-0 flex-1 overflow-auto pb-20 md:pb-0">
         <Outlet />
       </main>
+
+      {/* ── Bottom nav móvil (exacto estilo Zobaze: 5 pestañas) ── */}
+      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:hidden">
+        {primaryNav.map((item) => {
+          const active = pathname === item.to || pathname.startsWith(item.to + "/");
+          const isCenter = item.key === "ventas";
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className={cn(
+                "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+                active ? "text-primary" : "text-muted-foreground",
+              )}
+            >
+              {isCenter ? (
+                <span
+                  className={cn(
+                    "mb-0.5 flex h-11 w-11 -translate-y-3 items-center justify-center rounded-full shadow-lg transition-transform",
+                    active
+                      ? "bg-primary text-primary-foreground scale-105"
+                      : "bg-primary/90 text-primary-foreground",
+                  )}
+                >
+                  <item.icon className="h-5 w-5" />
+                </span>
+              ) : (
+                <item.icon className={cn("h-5 w-5", active && "stroke-[2.5]")} />
+              )}
+              <span className={cn(isCenter && "-mt-2")}>{item.shortLabel ?? item.label}</span>
+            </Link>
+          );
+        })}
+
+        {/* Pestaña Más */}
+        <button
+          type="button"
+          onClick={() => setMoreOpen(true)}
+          className={cn(
+            "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
+            isMoreActive || moreOpen ? "text-primary" : "text-muted-foreground",
+          )}
+        >
+          <MoreHorizontal className="h-5 w-5" />
+          <span>Más</span>
+        </button>
+      </nav>
+
+      {/* Sheet "Más" — menús secundarios */}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl px-0 pb-8">
+          <SheetHeader className="border-b px-4 pb-3 text-left">
+            <SheetTitle className="text-base">Más opciones</SheetTitle>
+          </SheetHeader>
+          <div className="grid grid-cols-3 gap-2 p-4">
+            {moreNav.map((item) => {
+              const active = pathname === item.to || pathname.startsWith(item.to + "/");
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setMoreOpen(false)}
+                  className={cn(
+                    "flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-colors",
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "bg-muted/40 hover:bg-muted",
+                  )}
+                >
+                  <item.icon className="h-6 w-6" />
+                  <span className="text-xs font-medium leading-tight">{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+          <div className="border-t px-4 pt-3">
+            <p className="mb-2 text-xs text-muted-foreground">{profileName}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full gap-2"
+              onClick={() => {
+                setMoreOpen(false);
+                onSignOut();
+              }}
+            >
+              <LogOut className="h-4 w-4" />
+              Cerrar sesión
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
+  );
+}
+
+function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = pathname === item.to || pathname.startsWith(item.to + "/");
+  return (
+    <Link
+      to={item.to}
+      className={cn(
+        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+        active
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      <item.icon className="h-4 w-4 shrink-0" />
+      <span className="whitespace-nowrap">{item.label}</span>
+    </Link>
   );
 }
