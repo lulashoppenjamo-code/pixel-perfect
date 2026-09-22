@@ -30,6 +30,63 @@ import {
   type ImportAction,
 } from "@/lib/excel";
 
+// How many rows go into a single INSERT/UPSERT request. Big enough to
+// cut round-trips drastically, small enough to keep each request quick.
+const CHUNK_SIZE = 200;
+
+function chunkArray<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+function wantsProductPatch(action: ImportAction) {
+  return action === "update_all" || action === "update_data" || action === "update_price_cost";
+}
+
+/**
+ * Writes a batch of rows to `table` in as few requests as possible.
+ * If a whole chunk fails (e.g. one bad row breaks the batch statement),
+ * it falls back to writing that chunk's rows one by one so a single bad
+ * row can't hide/rollback the rest of the chunk — this is what keeps the
+ * import from silently truncating.
+ */
+async function bulkWrite(
+  table: "products" | "inventory" | "categories",
+  items: { payload: Record<string, unknown>; ref: ProductImportRow }[],
+  mode: "insert" | "upsert",
+  onConflict: string | undefined,
+  failedRows: Map<number, string>,
+  onChunkDone: () => void,
+) {
+  for (const group of chunkArray(items, CHUNK_SIZE)) {
+    const batch = group.map((g) => g.payload);
+    const { error } =
+      mode === "upsert"
+        ? await supabase.from(table).upsert(batch as never, onConflict ? { onConflict } : undefined)
+        : await supabase.from(table).insert(batch as never);
+
+    if (!error) {
+      onChunkDone();
+      continue;
+    }
+
+    // Isolate the bad row(s) in this chunk instead of losing the whole batch.
+    for (const g of group) {
+      const { error: singleErr } =
+        mode === "upsert"
+          ? await supabase
+              .from(table)
+              .upsert(g.payload as never, onConflict ? { onConflict } : undefined)
+          : await supabase.from(table).insert(g.payload as never);
+      if (singleErr && !failedRows.has(g.ref.row)) {
+        failedRows.set(g.ref.row, singleErr.message);
+      }
+    }
+    onChunkDone();
+  }
+}
+
 export function ImportExportPanel() {
   const { branchId } = useBranch();
   const { isManager } = useAuth();
@@ -40,6 +97,7 @@ export function ImportExportPanel() {
   const [action, setAction] = useState<ImportAction>("update_all");
   const [parsing, setParsing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [phase, setPhase] = useState("");
   const [lastFailures, setLastFailures] = useState<
     { row: number; nombre: string; message: string }[]
   >([]);
@@ -94,136 +152,194 @@ export function ImportExportPanel() {
       if (!branchId) throw new Error("Sin sucursal");
       if (!isManager) throw new Error("Sin permiso para importar");
 
-      const catByName = new Map(
-        categories.map((c) => [c.name.toLowerCase(), c.id]),
-      );
-
-      let created = 0;
-      let updated = 0;
-      let skipped = 0;
       const rejected = rows.filter((r) => r.status === "error").length;
-      const failures: { row: number; nombre: string; message: string }[] = [];
+      const toSkip = rows.filter((r) => r.status === "existing" && action === "skip_existing");
+      const workable = rows.filter(
+        (r) => r.status !== "error" && !(r.status === "existing" && action === "skip_existing"),
+      );
+      const skipped = toSkip.length;
+      const failedRows = new Map<number, string>();
 
-      const workable = rows.filter((r) => r.status !== "error");
-      setProgress({ current: 0, total: workable.length });
+      const existingRows = workable.filter((r) => r.status === "existing" && r.existingId);
+      const newRows = workable.filter((r) => !(r.status === "existing" && r.existingId));
 
-      // Each row is processed independently: if one row fails (e.g. a
-      // database constraint), we record it and keep going instead of
-      // aborting the whole batch — otherwise rows after the failing one
-      // never get imported ("se trunca").
-      for (let idx = 0; idx < workable.length; idx++) {
-        const r = workable[idx]!;
-        setProgress({ current: idx + 1, total: workable.length });
+      const existingChunks = chunkArray(existingRows, CHUNK_SIZE).length;
+      const newChunks = chunkArray(newRows, CHUNK_SIZE).length;
+      let totalOps = 0;
+      if (existingRows.length && wantsProductPatch(action)) totalOps += existingChunks;
+      if (newRows.length) totalOps += newChunks * 2; // products insert + inventory insert
+      if (existingRows.length && (action === "update_all" || action === "update_stock")) {
+        totalOps += existingChunks;
+      }
+      setProgress({ current: 0, total: Math.max(totalOps, 1) });
+      const bump = () => setProgress((p) => ({ ...p, current: p.current + 1 }));
 
-        try {
-          if (r.status === "existing" && action === "skip_existing") {
-            skipped += 1;
-            continue;
-          }
-
-          let categoryId: string | null = null;
-          if (r.categoria) {
-            categoryId = catByName.get(r.categoria.toLowerCase()) ?? null;
-            if (!categoryId) {
-              const { data: createdCat, error: catErr } = await supabase
-                .from("categories")
-                .insert({ name: r.categoria })
-                .select("id")
-                .single();
-              if (!catErr && createdCat) {
-                categoryId = createdCat.id;
-                catByName.set(r.categoria.toLowerCase(), createdCat.id);
-              }
-            }
-          }
-
-          if (r.status === "existing" && r.existingId) {
-            const patch: Record<string, unknown> = {};
-            if (action === "update_all" || action === "update_data") {
-              patch.name = r.nombre;
-              patch.sku = r.sku || null;
-              patch.barcode = r.codigo_barras || null;
-              patch.description = r.descripcion || null;
-              if (categoryId) patch.category_id = categoryId;
-            }
-            if (action === "update_all" || action === "update_price_cost") {
-              patch.price = r.precio_venta;
-              patch.cost = r.costo;
-            }
-            if (Object.keys(patch).length) {
-              const { error } = await supabase
-                .from("products")
-                .update(patch)
-                .eq("id", r.existingId);
-              if (error) throw error;
-            }
-            if (action === "update_all" || action === "update_stock") {
-              const { data: inv } = await supabase
-                .from("inventory")
-                .select("id")
-                .eq("branch_id", branchId)
-                .eq("product_id", r.existingId)
-                .maybeSingle();
-              if (inv) {
-                await supabase
-                  .from("inventory")
-                  .update({
-                    stock: r.stock,
-                    min_stock: r.minimo,
-                    max_stock: r.maximo,
-                  })
-                  .eq("id", inv.id);
-              } else {
-                await supabase.from("inventory").insert({
-                  branch_id: branchId,
-                  product_id: r.existingId,
-                  stock: r.stock,
-                  min_stock: r.minimo,
-                  max_stock: r.maximo,
-                });
-              }
-            }
-            updated += 1;
+      // --- 1. Resolve / create the categories this batch needs, once ---
+      setPhase("Preparando categorías…");
+      const catByName = new Map(categories.map((c) => [c.name.toLowerCase(), c.id]));
+      const missing = new Map<string, string>();
+      for (const r of workable) {
+        if (r.categoria && !catByName.has(r.categoria.toLowerCase())) {
+          missing.set(r.categoria.toLowerCase(), r.categoria);
+        }
+      }
+      if (missing.size) {
+        const toCreate = Array.from(missing.values()).map((name) => ({ name }));
+        for (const group of chunkArray(toCreate, CHUNK_SIZE)) {
+          const { data, error } = await supabase.from("categories").insert(group).select("id, name");
+          if (!error && data) {
+            for (const c of data) catByName.set(c.name.toLowerCase(), c.id);
           } else {
-            const { data: prod, error } = await supabase
-              .from("products")
-              .insert({
-                name: r.nombre,
-                sku: r.sku || null,
-                barcode: r.codigo_barras || null,
-                price: r.precio_venta,
-                cost: r.costo,
-                description: r.descripcion || null,
-                category_id: categoryId,
-                is_active: true,
-                has_variants: false,
-                tax_rate: 0,
-              } as never)
-              .select("id")
-              .single();
-            if (error) throw error;
-            await supabase.from("inventory").insert({
+            for (const single of group) {
+              const { data: d } = await supabase
+                .from("categories")
+                .insert(single)
+                .select("id, name")
+                .single();
+              if (d) catByName.set(d.name.toLowerCase(), d.id);
+            }
+          }
+        }
+      }
+      const categoryIdFor = (r: ProductImportRow) =>
+        r.categoria ? catByName.get(r.categoria.toLowerCase()) ?? null : null;
+
+      // --- 2. Current name + inventory rows for the products we'll touch (one query each, not one per row) ---
+      const existingIds = existingRows.map((r) => r.existingId!);
+      const currentById = new Map<string, { name: string }>();
+      if (existingIds.length) {
+        const { data: currentProducts } = await supabase
+          .from("products")
+          .select("id, name")
+          .in("id", existingIds);
+        for (const p of currentProducts ?? []) currentById.set(p.id, { name: p.name });
+      }
+      const invIdByProduct = new Map<string, string>();
+      if (existingIds.length) {
+        const { data: invRows } = await supabase
+          .from("inventory")
+          .select("id, product_id")
+          .eq("branch_id", branchId)
+          .in("product_id", existingIds);
+        for (const i of invRows ?? []) invIdByProduct.set(i.product_id, i.id);
+      }
+
+      // --- 3. Update existing products (bulk upsert by id) ---
+      if (existingRows.length && wantsProductPatch(action)) {
+        setPhase("Actualizando productos…");
+        const items = existingRows.map((r) => {
+          const patch: Record<string, unknown> = {
+            id: r.existingId,
+            // "name" has no default in the DB, so it must always be sent —
+            // default to the current value unless this action updates it.
+            name: currentById.get(r.existingId!)?.name ?? r.nombre,
+          };
+          if (action === "update_all" || action === "update_data") {
+            patch.name = r.nombre;
+            patch.sku = r.sku || null;
+            patch.barcode = r.codigo_barras || null;
+            patch.description = r.descripcion || null;
+            const cid = categoryIdFor(r);
+            if (cid) patch.category_id = cid;
+          }
+          if (action === "update_all" || action === "update_price_cost") {
+            patch.price = r.precio_venta;
+            patch.cost = r.costo;
+          }
+          return { payload: patch, ref: r };
+        });
+        await bulkWrite("products", items, "upsert", "id", failedRows, bump);
+      }
+
+      // --- 4. Create new products (client-generated ids so inventory can link right away) ---
+      const newIdByRow = new Map<number, string>();
+      if (newRows.length) {
+        setPhase("Creando productos nuevos…");
+        const items = newRows.map((r) => {
+          const id = crypto.randomUUID();
+          newIdByRow.set(r.row, id);
+          return {
+            payload: {
+              id,
+              name: r.nombre,
+              sku: r.sku || null,
+              barcode: r.codigo_barras || null,
+              price: r.precio_venta,
+              cost: r.costo,
+              description: r.descripcion || null,
+              category_id: categoryIdFor(r),
+              is_active: true,
+              has_variants: false,
+              tax_rate: 0,
+            },
+            ref: r,
+          };
+        });
+        await bulkWrite("products", items, "insert", undefined, failedRows, bump);
+      }
+
+      // --- 5. New products always get an inventory row, regardless of the chosen action ---
+      if (newRows.length) {
+        setPhase("Creando inventario…");
+        const items = newRows
+          .filter((r) => !failedRows.has(r.row) && newIdByRow.has(r.row))
+          .map((r) => ({
+            payload: {
               branch_id: branchId,
-              product_id: prod.id,
+              product_id: newIdByRow.get(r.row),
               stock: r.stock,
               min_stock: r.minimo,
               max_stock: r.maximo,
-            });
-            created += 1;
-          }
-        } catch (rowError) {
-          failures.push({
-            row: r.row,
-            nombre: r.nombre || "(sin nombre)",
-            message: rowError instanceof Error ? rowError.message : "Error desconocido",
-          });
+            },
+            ref: r,
+          }));
+        if (items.length) {
+          await bulkWrite("inventory", items, "insert", undefined, failedRows, bump);
         }
       }
+
+      // --- 6. Existing products: only touch stock if the chosen action includes it ---
+      if (existingRows.length && (action === "update_all" || action === "update_stock")) {
+        setPhase("Actualizando stock…");
+        const toUpdate: { payload: Record<string, unknown>; ref: ProductImportRow }[] = [];
+        const toInsert: { payload: Record<string, unknown>; ref: ProductImportRow }[] = [];
+        for (const r of existingRows) {
+          if (failedRows.has(r.row) || !r.existingId) continue;
+          const invId = invIdByProduct.get(r.existingId);
+          const stockPayload = { stock: r.stock, min_stock: r.minimo, max_stock: r.maximo };
+          if (invId) {
+            // branch_id/product_id must ride along even on the update path —
+            // they're NOT NULL columns with no default.
+            toUpdate.push({
+              payload: { id: invId, branch_id: branchId, product_id: r.existingId, ...stockPayload },
+              ref: r,
+            });
+          } else {
+            toInsert.push({
+              payload: { branch_id: branchId, product_id: r.existingId, ...stockPayload },
+              ref: r,
+            });
+          }
+        }
+        if (toUpdate.length) await bulkWrite("inventory", toUpdate, "upsert", "id", failedRows, bump);
+        if (toInsert.length) await bulkWrite("inventory", toInsert, "insert", undefined, failedRows, bump);
+      }
+
+      setPhase("");
+      setProgress((p) => ({ ...p, current: p.total }));
+
+      const created = newRows.filter((r) => !failedRows.has(r.row)).length;
+      const updated = existingRows.filter((r) => !failedRows.has(r.row)).length;
+      const failures = Array.from(failedRows.entries()).map(([row, message]) => {
+        const ref = workable.find((r) => r.row === row);
+        return { row, nombre: ref?.nombre || "(sin nombre)", message };
+      });
 
       return { created, updated, skipped, rejected, failures };
     },
     onSuccess: (r) => {
       setProgress({ current: 0, total: 0 });
+      setPhase("");
       setLastFailures(r.failures);
       if (r.failures.length === 0) {
         toast.success(
@@ -241,6 +357,7 @@ export function ImportExportPanel() {
     },
     onError: (e: Error) => {
       setProgress({ current: 0, total: 0 });
+      setPhase("");
       toast.error(e.message);
     },
   });
@@ -324,7 +441,7 @@ export function ImportExportPanel() {
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Importando fila {progress.current} de {progress.total}…
+                  {phase || "Importando…"} ({progress.current}/{progress.total})
                 </p>
               </div>
             )}
