@@ -311,16 +311,16 @@ function InventarioPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Stock por sucursal</CardTitle>
             </CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardContent className="px-0 sm:px-6">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Producto</TableHead>
-                    <TableHead>SKU</TableHead>
+                    <TableHead className="hidden sm:table-cell">SKU</TableHead>
                     <TableHead className="text-right">Stock</TableHead>
-                    <TableHead className="text-right">Mín</TableHead>
-                    <TableHead className="text-right">Máx</TableHead>
-                    <TableHead>Estado</TableHead>
+                    <TableHead className="hidden text-right sm:table-cell">Mín</TableHead>
+                    <TableHead className="hidden text-right sm:table-cell">Máx</TableHead>
+                    <TableHead className="text-right sm:text-left">Estado</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -343,21 +343,23 @@ function InventarioPage() {
                     const low = Number(r.stock) <= Number(r.min_stock);
                     return (
                       <TableRow key={r.id} className={cn(low && "bg-destructive/5")}>
-                        <TableCell className="font-medium">
+                        <TableCell className="max-w-[9rem] truncate font-medium sm:max-w-none">
                           <span className="mr-1.5">{r.products?.emoji ?? "📦"}</span>
                           {r.products?.name ?? "—"}
                         </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
+                        <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
                           {r.products?.sku ?? "—"}
                         </TableCell>
                         <TableCell className="text-right font-semibold">
                           {Number(r.stock)}
                         </TableCell>
-                        <TableCell className="text-right">{Number(r.min_stock)}</TableCell>
-                        <TableCell className="text-right">
+                        <TableCell className="hidden text-right sm:table-cell">
+                          {Number(r.min_stock)}
+                        </TableCell>
+                        <TableCell className="hidden text-right sm:table-cell">
                           {r.max_stock != null ? Number(r.max_stock) : "—"}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="text-right sm:text-left">
                           {low ? (
                             <Badge variant="destructive">Bajo</Badge>
                           ) : (
