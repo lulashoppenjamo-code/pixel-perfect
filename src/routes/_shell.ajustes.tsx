@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Settings } from "lucide-react";
@@ -24,7 +25,11 @@ export const Route = createFileRoute("/_shell/ajustes")({
       { property: "og:description", content: "Administra sucursales, usuarios y roles, y la configuración general del negocio." },
     ],
   }),
-  component: AjustesPage,
+  component: () => (
+    <RequireNavAccess navKey="ajustes">
+      <AjustesPage />
+    </RequireNavAccess>
+  ),
 });
 
 const ROLES: AppRole[] = ["owner", "admin", "manager", "cashier", "staff"];
