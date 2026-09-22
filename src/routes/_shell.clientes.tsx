@@ -1,15 +1,15 @@
 /**
- * Clientes — LULA OS
- * Ruta: src/routes/_shell.clientes.tsx
- * Reemplaza el archivo existente completo.
+ * Clientes — LULA OS (FASE 4)
+ * CRUD + historial + saldo crédito + abonos
  */
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Trash2, Search } from "lucide-react";
+import { Pencil, Trash2, Search, Wallet } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +23,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_shell/clientes")({
   head: () => ({
@@ -31,14 +46,26 @@ export const Route = createFileRoute("/_shell/clientes")({
   component: ClientesPage,
 });
 
-type Form = { id?: string; name: string; phone: string; email: string; notes: string };
-const empty: Form = { name: "", phone: "", email: "", notes: "" };
+type Form = {
+  id?: string;
+  name: string;
+  phone: string;
+  email: string;
+  notes: string;
+  address: string;
+};
+const empty: Form = { name: "", phone: "", email: "", notes: "", address: "" };
 
 function ClientesPage() {
-  const { isManager } = useAuth();
+  const { isManager, user } = useAuth();
+  const { branchId } = useBranch();
   const qc = useQueryClient();
   const [form, setForm] = useState<Form>(empty);
   const [search, setSearch] = useState("");
+  const [payCustomerId, setPayCustomerId] = useState<string | null>(null);
+  const [payAmount, setPayAmount] = useState("");
+  const [payMethod, setPayMethod] = useState("cash");
+  const [payNotes, setPayNotes] = useState("");
 
   const { data: customers = [], isLoading } = useQuery({
     queryKey: ["customers"],
@@ -54,25 +81,63 @@ function ClientesPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sales")
-        .select("customer_id, total, status")
+        .select("customer_id, total, status, payment_method, created_at")
         .not("customer_id", "is", null)
-        .eq("status", "completed");
+        .in("status", ["completed", "partially_refunded"]);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  const stats = (() => {
-    const map = new Map<string, { count: number; total: number }>();
+  const { data: creditPayments = [] } = useQuery({
+    queryKey: ["credit-payments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("credit_payments" as "products")
+        .select("customer_id, amount");
+      if (error) {
+        if (error.message?.includes("does not exist") || error.code === "42P01") {
+          return [];
+        }
+        throw error;
+      }
+      return (data ?? []) as { customer_id: string; amount: number }[];
+    },
+  });
+
+  const stats = useMemo(() => {
+    const map = new Map<
+      string,
+      { count: number; total: number; credit: number; last: string | null }
+    >();
     for (const s of salesByCustomer) {
       if (!s.customer_id) continue;
-      const cur = map.get(s.customer_id) ?? { count: 0, total: 0 };
+      const cur = map.get(s.customer_id) ?? {
+        count: 0,
+        total: 0,
+        credit: 0,
+        last: null,
+      };
       cur.count += 1;
       cur.total += Number(s.total);
+      if (s.payment_method === "credit") {
+        cur.credit += Number(s.total);
+      }
+      if (!cur.last || s.created_at > cur.last) cur.last = s.created_at;
       map.set(s.customer_id, cur);
     }
+    const paid = new Map<string, number>();
+    for (const p of creditPayments) {
+      paid.set(p.customer_id, (paid.get(p.customer_id) ?? 0) + Number(p.amount));
+    }
+    for (const [, st] of map) {
+      /* balance applied below per customer */
+    }
+    for (const [id, st] of map) {
+      st.credit = Math.max(0, st.credit - (paid.get(id) ?? 0));
+    }
     return map;
-  })();
+  }, [salesByCustomer, creditPayments]);
 
   const filtered = customers.filter((c) => {
     if (!search.trim()) return true;
@@ -87,12 +152,14 @@ function ClientesPage() {
   const save = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error("Nombre requerido");
-      const payload = {
+      const payload: Record<string, unknown> = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         notes: form.notes.trim() || null,
       };
+      if (form.address.trim()) payload.address = form.address.trim();
+
       if (form.id) {
         const { error } = await supabase.from("customers").update(payload).eq("id", form.id);
         if (error) throw error;
@@ -122,12 +189,45 @@ function ClientesPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const registerPayment = useMutation({
+    mutationFn: async () => {
+      if (!payCustomerId) throw new Error("Sin cliente");
+      const amount = Number(payAmount);
+      if (!Number.isFinite(amount) || amount <= 0) throw new Error("Monto inválido");
+      const { error } = await supabase.from("credit_payments" as "products").insert({
+        customer_id: payCustomerId,
+        amount,
+        payment_method: payMethod,
+        notes: payNotes.trim() || null,
+        branch_id: branchId,
+        created_by: user?.id ?? null,
+      } as never);
+      if (error) {
+        if (error.message?.includes("does not exist") || error.code === "42P01") {
+          throw new Error(
+            "Tabla credit_payments no existe. Ejecuta la migración SQL en supabase/migrations/",
+          );
+        }
+        throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Abono registrado");
+      setPayCustomerId(null);
+      setPayAmount("");
+      setPayNotes("");
+      void qc.invalidateQueries({ queryKey: ["credit-payments"] });
+      void qc.invalidateQueries({ queryKey: ["customer-sales-agg"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="space-y-4 p-4 md:p-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
         <p className="text-sm text-muted-foreground">
-          Contactos, historial de compras y vínculo con el POS.
+          Contactos, historial de compras, saldo a crédito y abonos.
         </p>
       </div>
 
@@ -139,29 +239,37 @@ function ClientesPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Nombre *</Label>
+            <div>
+              <Label>Nombre</Label>
               <Input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
             </div>
-            <div className="space-y-1.5">
+            <div>
               <Label>Teléfono</Label>
               <Input
                 value={form.phone}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Email</Label>
+            <div>
+              <Label>Correo</Label>
               <Input
                 type="email"
                 value={form.email}
                 onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
               />
             </div>
-            <div className="space-y-1.5">
+            <div>
+              <Label>Dirección</Label>
+              <Input
+                value={form.address}
+                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                placeholder="Opcional (requiere migración)"
+              />
+            </div>
+            <div>
               <Label>Notas</Label>
               <Input
                 value={form.notes}
@@ -169,6 +277,11 @@ function ClientesPage() {
               />
             </div>
             <div className="flex gap-2">
+              {form.id && (
+                <Button variant="outline" className="flex-1" onClick={() => setForm(empty)}>
+                  Cancelar
+                </Button>
+              )}
               <Button
                 className="flex-1"
                 disabled={save.isPending}
@@ -176,63 +289,70 @@ function ClientesPage() {
               >
                 {save.isPending ? "Guardando…" : form.id ? "Actualizar" : "Crear"}
               </Button>
-              {form.id && (
-                <Button variant="outline" onClick={() => setForm(empty)}>
-                  Cancelar
-                </Button>
-              )}
             </div>
           </CardContent>
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-base">Listado</CardTitle>
-              <div className="relative w-full sm:w-56">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  className="pl-9"
-                  placeholder="Buscar…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-              </div>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-base">Listado</CardTitle>
+            <div className="relative w-48">
+              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-8 pl-7"
+                placeholder="Buscar…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
           </CardHeader>
-          <CardContent className="overflow-x-auto">
+          <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Nombre</TableHead>
                   <TableHead>Teléfono</TableHead>
-                  <TableHead>Email</TableHead>
                   <TableHead className="text-right">Compras</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Saldo crédito</TableHead>
                   <TableHead className="text-right">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                      Cargando...
-                    </TableCell>
-                  </TableRow>
-                )}
                 {filtered.map((c) => {
                   const st = stats.get(c.id);
+                  const balance = st?.credit ?? 0;
                   return (
                     <TableRow key={c.id}>
                       <TableCell className="font-medium">{c.name}</TableCell>
                       <TableCell className="text-sm">{c.phone ?? "—"}</TableCell>
-                      <TableCell className="text-sm">{c.email ?? "—"}</TableCell>
                       <TableCell className="text-right">{st?.count ?? 0}</TableCell>
                       <TableCell className="text-right font-medium">
                         {money(st?.total ?? 0)}
                       </TableCell>
                       <TableCell className="text-right">
+                        {balance > 0 ? (
+                          <Badge variant="destructive">{money(balance)}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">$0</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          {balance > 0 && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              title="Registrar abono"
+                              onClick={() => {
+                                setPayCustomerId(c.id);
+                                setPayAmount(String(balance));
+                              }}
+                            >
+                              <Wallet className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -244,6 +364,9 @@ function ClientesPage() {
                                 phone: c.phone ?? "",
                                 email: c.email ?? "",
                                 notes: c.notes ?? "",
+                                address:
+                                  ((c as { address?: string | null }).address as string) ??
+                                  "",
                               })
                             }
                           >
@@ -276,6 +399,54 @@ function ClientesPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog open={!!payCustomerId} onOpenChange={(o) => !o && setPayCustomerId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Registrar abono</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Monto</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={payAmount}
+                onChange={(e) => setPayAmount(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Método</Label>
+              <Select value={payMethod} onValueChange={setPayMethod}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Efectivo</SelectItem>
+                  <SelectItem value="card">Tarjeta</SelectItem>
+                  <SelectItem value="transfer">Transferencia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notas</Label>
+              <Input value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayCustomerId(null)}>
+              Cancelar
+            </Button>
+            <Button
+              disabled={registerPayment.isPending}
+              onClick={() => registerPayment.mutate()}
+            >
+              {registerPayment.isPending ? "Guardando…" : "Abonar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
