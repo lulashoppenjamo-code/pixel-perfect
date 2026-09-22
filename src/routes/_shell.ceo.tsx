@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.ceo.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.ceo.tsx
+// ============================================================================
+
 /**
  * CEO IA — LULA OS
  * Ruta: src/routes/_shell.ceo.tsx
@@ -18,6 +23,7 @@ import { money } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader } from "@/components/PageHeader";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 
@@ -314,16 +320,13 @@ function CeoPage() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-1rem)] flex-col p-4 md:p-6">
-      <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
-          <Bot className="h-7 w-7 text-primary" />
-          CEO IA
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Analiza datos reales de {branchName}. Listo para conectar un LLM externo más adelante.
-        </p>
-      </div>
+    <div className="flex h-[calc(100dvh-5rem)] flex-col p-4 md:h-[calc(100vh-1rem)] md:p-6">
+      <PageHeader
+        icon={Bot}
+        title="CEO IA"
+        description={`Analiza datos reales de ${branchName}. Listo para conectar un LLM externo.`}
+        className="mb-4"
+      />
 
       <div className="mb-3 flex flex-wrap gap-2">
         {SUGGESTIONS.map((s) => (
