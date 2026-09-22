@@ -1054,24 +1054,7 @@ export type Database = {
       }
     }
     Views: {
-      v_ceo_daily_sales: {
-        Row: {
-          avg_ticket: number | null
-          branch_id: string | null
-          day: string | null
-          revenue: number | null
-          tickets: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "sales_branch_id_fkey"
-            columns: ["branch_id"]
-            isOneToOne: false
-            referencedRelation: "branches"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
+      [_ in never]: never
     }
     Functions: {
       adjust_stock: {

@@ -33,9 +33,9 @@ export type ProductImportRow = {
   unidad: string;
   descripcion: string;
   proveedor: string;
-  error?: string;
+  error?: string | undefined;
   status: "valid" | "existing" | "error";
-  existingId?: string;
+  existingId?: string | undefined;
 };
 
 export type ImportAction =
