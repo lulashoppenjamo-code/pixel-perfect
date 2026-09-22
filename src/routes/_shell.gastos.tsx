@@ -1,8 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.gastos.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.gastos.tsx
-// ============================================================================
-
 /**
  * Gastos — LULA OS (FASE 5)
  * Requiere migración: tabla public.expenses
