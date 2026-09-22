@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.clientes.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.clientes.tsx
+// ============================================================================
+
 /**
  * Clientes — LULA OS (FASE 4)
  * CRUD + historial + saldo crédito + abonos
@@ -6,7 +11,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Trash2, Search, Wallet } from "lucide-react";
+import { Pencil, Trash2, Search, Wallet, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -15,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import {
   Table,
   TableBody,
@@ -223,13 +229,12 @@ function ClientesPage() {
   });
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Clientes</h1>
-        <p className="text-sm text-muted-foreground">
-          Contactos, historial de compras, saldo a crédito y abonos.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        icon={Users}
+        title="Clientes"
+        description="Contactos, historial de compras, saldo a crédito y abonos."
+      />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
@@ -447,6 +452,6 @@ function ClientesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }
