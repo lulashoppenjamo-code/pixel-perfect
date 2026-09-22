@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useQuery } from "@tanstack/react-query";
 import {
   Bar,
@@ -39,7 +40,11 @@ export const Route = createFileRoute("/_shell/reportes")({
   head: () => ({
     meta: [{ title: "Reportes — Lula OS" }],
   }),
-  component: ReportesPage,
+  component: () => (
+    <RequireNavAccess navKey="reportes">
+      <ReportesPage />
+    </RequireNavAccess>
+  ),
 });
 
 const RANGES = [
