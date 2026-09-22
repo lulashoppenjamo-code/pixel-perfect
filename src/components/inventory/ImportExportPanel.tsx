@@ -25,6 +25,7 @@ import {
   downloadWorkbook,
   downloadCsv,
   downloadImportErrors,
+  downloadImportFailures,
   type ProductImportRow,
   type ImportAction,
 } from "@/lib/excel";
@@ -38,6 +39,10 @@ export function ImportExportPanel() {
   const [rows, setRows] = useState<ProductImportRow[]>([]);
   const [action, setAction] = useState<ImportAction>("update_all");
   const [parsing, setParsing] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [lastFailures, setLastFailures] = useState<
+    { row: number; nombre: string; message: string }[]
+  >([]);
 
   const { data: existingProducts = [] } = useQuery({
     queryKey: ["import-existing-products"],
@@ -97,119 +102,147 @@ export function ImportExportPanel() {
       let updated = 0;
       let skipped = 0;
       const rejected = rows.filter((r) => r.status === "error").length;
+      const failures: { row: number; nombre: string; message: string }[] = [];
 
       const workable = rows.filter((r) => r.status !== "error");
+      setProgress({ current: 0, total: workable.length });
 
-      for (const r of workable) {
-        if (r.status === "existing" && action === "skip_existing") {
-          skipped += 1;
-          continue;
-        }
+      // Each row is processed independently: if one row fails (e.g. a
+      // database constraint), we record it and keep going instead of
+      // aborting the whole batch — otherwise rows after the failing one
+      // never get imported ("se trunca").
+      for (let idx = 0; idx < workable.length; idx++) {
+        const r = workable[idx]!;
+        setProgress({ current: idx + 1, total: workable.length });
 
-        let categoryId: string | null = null;
-        if (r.categoria) {
-          categoryId = catByName.get(r.categoria.toLowerCase()) ?? null;
-          if (!categoryId) {
-            const { data: createdCat, error: catErr } = await supabase
-              .from("categories")
-              .insert({ name: r.categoria })
-              .select("id")
-              .single();
-            if (!catErr && createdCat) {
-              categoryId = createdCat.id;
-              catByName.set(r.categoria.toLowerCase(), createdCat.id);
+        try {
+          if (r.status === "existing" && action === "skip_existing") {
+            skipped += 1;
+            continue;
+          }
+
+          let categoryId: string | null = null;
+          if (r.categoria) {
+            categoryId = catByName.get(r.categoria.toLowerCase()) ?? null;
+            if (!categoryId) {
+              const { data: createdCat, error: catErr } = await supabase
+                .from("categories")
+                .insert({ name: r.categoria })
+                .select("id")
+                .single();
+              if (!catErr && createdCat) {
+                categoryId = createdCat.id;
+                catByName.set(r.categoria.toLowerCase(), createdCat.id);
+              }
             }
           }
-        }
 
-        if (r.status === "existing" && r.existingId) {
-          const patch: Record<string, unknown> = {};
-          if (action === "update_all" || action === "update_data") {
-            patch.name = r.nombre;
-            patch.sku = r.sku || null;
-            patch.barcode = r.codigo_barras || null;
-            patch.description = r.descripcion || null;
-            if (categoryId) patch.category_id = categoryId;
-          }
-          if (action === "update_all" || action === "update_price_cost") {
-            patch.price = r.precio_venta;
-            patch.cost = r.costo;
-          }
-          if (Object.keys(patch).length) {
-            const { error } = await supabase
-              .from("products")
-              .update(patch)
-              .eq("id", r.existingId);
-            if (error) throw error;
-          }
-          if (action === "update_all" || action === "update_stock") {
-            const { data: inv } = await supabase
-              .from("inventory")
-              .select("id")
-              .eq("branch_id", branchId)
-              .eq("product_id", r.existingId)
-              .maybeSingle();
-            if (inv) {
-              await supabase
+          if (r.status === "existing" && r.existingId) {
+            const patch: Record<string, unknown> = {};
+            if (action === "update_all" || action === "update_data") {
+              patch.name = r.nombre;
+              patch.sku = r.sku || null;
+              patch.barcode = r.codigo_barras || null;
+              patch.description = r.descripcion || null;
+              if (categoryId) patch.category_id = categoryId;
+            }
+            if (action === "update_all" || action === "update_price_cost") {
+              patch.price = r.precio_venta;
+              patch.cost = r.costo;
+            }
+            if (Object.keys(patch).length) {
+              const { error } = await supabase
+                .from("products")
+                .update(patch)
+                .eq("id", r.existingId);
+              if (error) throw error;
+            }
+            if (action === "update_all" || action === "update_stock") {
+              const { data: inv } = await supabase
                 .from("inventory")
-                .update({
+                .select("id")
+                .eq("branch_id", branchId)
+                .eq("product_id", r.existingId)
+                .maybeSingle();
+              if (inv) {
+                await supabase
+                  .from("inventory")
+                  .update({
+                    stock: r.stock,
+                    min_stock: r.minimo,
+                    max_stock: r.maximo,
+                  })
+                  .eq("id", inv.id);
+              } else {
+                await supabase.from("inventory").insert({
+                  branch_id: branchId,
+                  product_id: r.existingId,
                   stock: r.stock,
                   min_stock: r.minimo,
                   max_stock: r.maximo,
-                })
-                .eq("id", inv.id);
-            } else {
-              await supabase.from("inventory").insert({
-                branch_id: branchId,
-                product_id: r.existingId,
-                stock: r.stock,
-                min_stock: r.minimo,
-                max_stock: r.maximo,
-              });
+                });
+              }
             }
+            updated += 1;
+          } else {
+            const { data: prod, error } = await supabase
+              .from("products")
+              .insert({
+                name: r.nombre,
+                sku: r.sku || null,
+                barcode: r.codigo_barras || null,
+                price: r.precio_venta,
+                cost: r.costo,
+                description: r.descripcion || null,
+                category_id: categoryId,
+                is_active: true,
+                has_variants: false,
+                tax_rate: 0,
+              } as never)
+              .select("id")
+              .single();
+            if (error) throw error;
+            await supabase.from("inventory").insert({
+              branch_id: branchId,
+              product_id: prod.id,
+              stock: r.stock,
+              min_stock: r.minimo,
+              max_stock: r.maximo,
+            });
+            created += 1;
           }
-          updated += 1;
-        } else {
-          const { data: prod, error } = await supabase
-            .from("products")
-            .insert({
-              name: r.nombre,
-              sku: r.sku || null,
-              barcode: r.codigo_barras || null,
-              price: r.precio_venta,
-              cost: r.costo,
-              description: r.descripcion || null,
-              category_id: categoryId,
-              is_active: true,
-              has_variants: false,
-              tax_rate: 0,
-            } as never)
-            .select("id")
-            .single();
-          if (error) throw error;
-          await supabase.from("inventory").insert({
-            branch_id: branchId,
-            product_id: prod.id,
-            stock: r.stock,
-            min_stock: r.minimo,
-            max_stock: r.maximo,
+        } catch (rowError) {
+          failures.push({
+            row: r.row,
+            nombre: r.nombre || "(sin nombre)",
+            message: rowError instanceof Error ? rowError.message : "Error desconocido",
           });
-          created += 1;
         }
       }
 
-      return { created, updated, skipped, rejected };
+      return { created, updated, skipped, rejected, failures };
     },
     onSuccess: (r) => {
-      toast.success(
-        `Importación: ${r.created} creados, ${r.updated} actualizados, ${r.skipped} omitidos, ${r.rejected} rechazados`,
-      );
+      setProgress({ current: 0, total: 0 });
+      setLastFailures(r.failures);
+      if (r.failures.length === 0) {
+        toast.success(
+          `Importación completa: ${r.created} creados, ${r.updated} actualizados, ${r.skipped} omitidos, ${r.rejected} rechazados`,
+        );
+      } else {
+        toast.warning(
+          `Importación terminada con ${r.failures.length} fila(s) con error: ${r.created} creados, ${r.updated} actualizados, ${r.skipped} omitidos, ${r.rejected} rechazados`,
+        );
+      }
       setRows([]);
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
       void qc.invalidateQueries({ queryKey: ["inventory"] });
       void qc.invalidateQueries({ queryKey: ["import-existing-products"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      setProgress({ current: 0, total: 0 });
+      toast.error(e.message);
+    },
   });
 
   const exportInventory = async (fmt: "xlsx" | "csv") => {
@@ -282,6 +315,34 @@ export function ImportExportPanel() {
               <FileSpreadsheet className="h-4 w-4" />
               {parsing ? "Analizando…" : "Seleccionar archivo"}
             </Button>
+            {doImport.isPending && progress.total > 0 && (
+              <div className="space-y-1">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Importando fila {progress.current} de {progress.total}…
+                </p>
+              </div>
+            )}
+            {!doImport.isPending && lastFailures.length > 0 && (
+              <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+                <p className="text-xs text-destructive">
+                  {lastFailures.length} fila(s) no se pudieron guardar
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto gap-1 p-1 text-xs"
+                  onClick={() => void downloadImportFailures(lastFailures)}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" /> Descargar
+                </Button>
+              </div>
+            )}
             {rows.length > 0 && (
               <>
                 <div className="flex flex-wrap gap-2 text-sm">
