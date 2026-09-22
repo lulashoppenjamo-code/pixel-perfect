@@ -94,7 +94,7 @@ function ClientesPage() {
     queryKey: ["credit-payments"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("credit_payments" as "products")
+        .from("credit_payments")
         .select("customer_id, amount");
       if (error) {
         if (error.message?.includes("does not exist") || error.code === "42P01") {
@@ -102,7 +102,7 @@ function ClientesPage() {
         }
         throw error;
       }
-      return (data ?? []) as { customer_id: string; amount: number }[];
+      return data ?? [];
     },
   });
 
@@ -153,13 +153,13 @@ function ClientesPage() {
   const save = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error("Nombre requerido");
-      const payload: Record<string, unknown> = {
+      const payload = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
         notes: form.notes.trim() || null,
+        address: form.address.trim() || null,
       };
-      if (form.address.trim()) payload.address = form.address.trim();
 
       if (form.id) {
         const { error } = await supabase.from("customers").update(payload).eq("id", form.id);
@@ -195,14 +195,14 @@ function ClientesPage() {
       if (!payCustomerId) throw new Error("Sin cliente");
       const amount = Number(payAmount);
       if (!Number.isFinite(amount) || amount <= 0) throw new Error("Monto inválido");
-      const { error } = await supabase.from("credit_payments" as "products").insert({
+      const { error } = await supabase.from("credit_payments").insert({
         customer_id: payCustomerId,
         amount,
         payment_method: payMethod,
         notes: payNotes.trim() || null,
         branch_id: branchId,
         created_by: user?.id ?? null,
-      } as never);
+      });
       if (error) {
         if (error.message?.includes("does not exist") || error.code === "42P01") {
           throw new Error(

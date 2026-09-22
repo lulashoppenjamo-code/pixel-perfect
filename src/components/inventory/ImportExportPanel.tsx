@@ -235,16 +235,16 @@ export function ImportExportPanel() {
             name: currentById.get(r.existingId!)?.name ?? r.nombre,
           };
           if (action === "update_all" || action === "update_data") {
-            patch.name = r.nombre;
-            patch.sku = r.sku || null;
-            patch.barcode = r.codigo_barras || null;
-            patch.description = r.descripcion || null;
+            patch["name"] = r.nombre;
+            patch["sku"] = r.sku || null;
+            patch["barcode"] = r.codigo_barras || null;
+            patch["description"] = r.descripcion || null;
             const cid = categoryIdFor(r);
-            if (cid) patch.category_id = cid;
+            if (cid) patch["category_id"] = cid;
           }
           if (action === "update_all" || action === "update_price_cost") {
-            patch.price = r.precio_venta;
-            patch.cost = r.costo;
+            patch["price"] = r.precio_venta;
+            patch["cost"] = r.costo;
           }
           return { payload: patch, ref: r };
         });

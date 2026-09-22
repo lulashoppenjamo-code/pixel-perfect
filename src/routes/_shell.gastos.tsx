@@ -80,7 +80,7 @@ function GastosPage() {
     enabled: !!branchId,
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("expenses" as "products")
+        .from("expenses")
         .select("*")
         .eq("branch_id", branchId!)
         .order("expense_date", { ascending: false })
@@ -93,16 +93,7 @@ function GastosPage() {
         throw error;
       }
       setTableMissing(false);
-      return (data ?? []) as {
-        id: string;
-        concept: string;
-        category: string | null;
-        amount: number;
-        expense_date: string;
-        payment_method: string;
-        notes: string | null;
-        created_at: string;
-      }[];
+      return data ?? [];
     },
   });
 
@@ -113,7 +104,7 @@ function GastosPage() {
       const amount = Number(form.amount);
       if (!Number.isFinite(amount) || amount < 0) throw new Error("Monto inválido");
 
-      const { error } = await supabase.from("expenses" as "products").insert({
+      const { error } = await supabase.from("expenses").insert({
         concept: form.concept.trim(),
         category: form.category,
         amount,
@@ -122,7 +113,7 @@ function GastosPage() {
         notes: form.notes.trim() || null,
         branch_id: branchId,
         created_by: user?.id ?? null,
-      } as never);
+      });
       if (error) {
         if (error.message?.includes("does not exist") || error.code === "42P01") {
           throw new Error(

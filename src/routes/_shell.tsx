@@ -45,7 +45,7 @@ function ShellErrorComponent({ error, reset }: { error: Error; reset: () => void
 
 function ShellLayout() {
   const { user, signOut } = useAuth();
-  const { currentBranch, setBranch, branches } = useBranch();
+  const { branchId, setBranchId, branches } = useBranch();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -78,8 +78,8 @@ function ShellLayout() {
               Sucursal Activa
             </label>
             <select 
-              value={currentBranch?.id || ''} 
-              onChange={(e) => setBranch(e.target.value)}
+              value={branchId ?? ''} 
+              onChange={(e) => setBranchId(e.target.value)}
               className="w-full p-2.5 rounded-lg border bg-background text-sm font-medium focus:ring-2 focus:ring-primary outline-none cursor-pointer"
             >
               {branches && branches.length > 0 ? (

@@ -121,7 +121,7 @@ function DevolucionesPage() {
       const { data, error } = await supabase.rpc("refund_sale", {
         _sale_id: selectedSaleId,
         _items: items,
-        _reason: reason || null,
+        ...(reason ? { _reason: reason } : {}),
       });
       if (error) throw error;
       return data;

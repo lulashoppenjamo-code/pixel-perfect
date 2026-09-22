@@ -23,21 +23,21 @@ export type TicketLine = {
 };
 
 export type TicketData = {
-  companyName?: string;
-  branchName?: string;
+  companyName?: string | undefined;
+  branchName?: string | undefined;
   folio: number | string;
   date: string;
-  cashierName?: string;
-  customerName?: string;
+  cashierName?: string | undefined;
+  customerName?: string | undefined;
   paymentMethod: string;
   lines: TicketLine[];
   subtotal: number;
   tax: number;
   discount: number;
   total: number;
-  cashReceived?: number | null;
-  changeGiven?: number | null;
-  footer?: string;
+  cashReceived?: number | null | undefined;
+  changeGiven?: number | null | undefined;
+  footer?: string | undefined;
 };
 
 const PAYMENT_LABEL: Record<string, string> = {

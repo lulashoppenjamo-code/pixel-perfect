@@ -190,8 +190,7 @@ function InventarioPage() {
         _to_branch_id: trTo,
         _product_id: trProduct,
         _quantity: n,
-        _variant_id: null,
-        _notes: trNotes || null,
+        ...(trNotes ? { _notes: trNotes } : {}),
       });
       if (error) throw error;
     },
@@ -211,8 +210,7 @@ function InventarioPage() {
         _branch_id: branchId,
         _product_id: limProduct,
         _min_stock: Number(limMin) || 0,
-        _max_stock: limMax === "" ? null : Number(limMax),
-        _variant_id: null,
+        ...(limMax === "" ? {} : { _max_stock: Number(limMax) }),
       });
       if (error) throw error;
     },

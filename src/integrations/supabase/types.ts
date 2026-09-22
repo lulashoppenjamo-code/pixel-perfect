@@ -170,8 +170,67 @@ export type Database = {
           },
         ]
       }
+      credit_payments: {
+        Row: {
+          amount: number
+          branch_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          payment_method: string
+          sale_id: string | null
+        }
+        Insert: {
+          amount: number
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          sale_id?: string | null
+        }
+        Update: {
+          amount?: number
+          branch_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          customer_id?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          sale_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_payments_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_payments_sale_id_fkey"
+            columns: ["sale_id"]
+            isOneToOne: false
+            referencedRelation: "sales"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       customers: {
         Row: {
+          address: string | null
           created_at: string
           email: string | null
           id: string
@@ -181,6 +240,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          address?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -190,6 +250,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          address?: string | null
           created_at?: string
           email?: string | null
           id?: string
@@ -200,6 +261,66 @@ export type Database = {
         }
         Relationships: []
       }
+      expenses: {
+        Row: {
+          amount: number
+          branch_id: string | null
+          cash_session_id: string | null
+          category: string | null
+          concept: string
+          created_at: string
+          created_by: string | null
+          expense_date: string
+          id: string
+          notes: string | null
+          payment_method: string
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          branch_id?: string | null
+          cash_session_id?: string | null
+          category?: string | null
+          concept: string
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          branch_id?: string | null
+          cash_session_id?: string | null
+          category?: string | null
+          concept?: string
+          created_at?: string
+          created_by?: string | null
+          expense_date?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inventory: {
         Row: {
           branch_id: string
@@ -208,6 +329,7 @@ export type Database = {
           max_stock: number | null
           min_stock: number
           product_id: string
+          reserved_stock: number
           stock: number
           updated_at: string
           variant_id: string | null
@@ -219,6 +341,7 @@ export type Database = {
           max_stock?: number | null
           min_stock?: number
           product_id: string
+          reserved_stock?: number
           stock?: number
           updated_at?: string
           variant_id?: string | null
@@ -230,6 +353,7 @@ export type Database = {
           max_stock?: number | null
           min_stock?: number
           product_id?: string
+          reserved_stock?: number
           stock?: number
           updated_at?: string
           variant_id?: string | null
@@ -322,6 +446,133 @@ export type Database = {
           },
         ]
       }
+      online_order_items: {
+        Row: {
+          created_at: string
+          id: string
+          name_snapshot: string
+          order_id: string
+          product_id: string | null
+          quantity: number
+          total: number
+          unit_price: number
+          variant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name_snapshot: string
+          order_id: string
+          product_id?: string | null
+          quantity?: number
+          total?: number
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name_snapshot?: string
+          order_id?: string
+          product_id?: string | null
+          quantity?: number
+          total?: number
+          unit_price?: number
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "online_order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "online_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "online_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "online_order_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      online_orders: {
+        Row: {
+          branch_id: string
+          created_at: string
+          customer_email: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          discount: number
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          branch_id: string
+          created_at?: string
+          customer_email?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          discount?: number
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          branch_id?: string
+          created_at?: string
+          customer_email?: string | null
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          discount?: number
+          id?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "online_orders_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "online_orders_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       product_variants: {
         Row: {
           cost_override: number | null
@@ -365,6 +616,7 @@ export type Database = {
       }
       products: {
         Row: {
+          barcode: string | null
           category_id: string | null
           cost: number
           created_at: string
@@ -374,13 +626,16 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          is_weighable: boolean
           name: string
           price: number
           sku: string | null
           tax_rate: number
+          unit: string
           updated_at: string
         }
         Insert: {
+          barcode?: string | null
           category_id?: string | null
           cost?: number
           created_at?: string
@@ -390,13 +645,16 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_weighable?: boolean
           name: string
           price?: number
           sku?: string | null
           tax_rate?: number
+          unit?: string
           updated_at?: string
         }
         Update: {
+          barcode?: string | null
           category_id?: string | null
           cost?: number
           created_at?: string
@@ -406,10 +664,12 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          is_weighable?: boolean
           name?: string
           price?: number
           sku?: string | null
           tax_rate?: number
+          unit?: string
           updated_at?: string
         }
         Relationships: [
@@ -636,6 +896,7 @@ export type Database = {
           discount: number
           folio: number
           id: string
+          notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           status: Database["public"]["Enums"]["sale_status"]
           subtotal: number
@@ -654,6 +915,7 @@ export type Database = {
           discount?: number
           folio?: number
           id?: string
+          notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           status?: Database["public"]["Enums"]["sale_status"]
           subtotal?: number
@@ -672,6 +934,7 @@ export type Database = {
           discount?: number
           folio?: number
           id?: string
+          notes?: string | null
           payment_method?: Database["public"]["Enums"]["payment_method"]
           status?: Database["public"]["Enums"]["sale_status"]
           subtotal?: number
@@ -804,6 +1067,36 @@ export type Database = {
         }
         Returns: undefined
       }
+      available_stock: {
+        Args: { _branch_id: string; _product_id: string; _variant_id?: string }
+        Returns: number
+      }
+      cancel_online_order: {
+        Args: { _order_id: string }
+        Returns: {
+          branch_id: string
+          created_at: string
+          customer_email: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          discount: number
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "online_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       close_cash_session: {
         Args: { _closing_amount: number; _session_id: string }
         Returns: {
@@ -824,6 +1117,42 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "cash_sessions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_online_order: {
+        Args: {
+          _branch_id: string
+          _customer_email?: string
+          _customer_id?: string
+          _customer_name?: string
+          _customer_phone?: string
+          _delivery_address?: string
+          _discount?: number
+          _items: Json
+          _notes?: string
+        }
+        Returns: {
+          branch_id: string
+          created_at: string
+          customer_email: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          discount: number
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "online_orders"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -849,6 +1178,7 @@ export type Database = {
           discount: number
           folio: number
           id: string
+          notes: string | null
           payment_method: Database["public"]["Enums"]["payment_method"]
           status: Database["public"]["Enums"]["sale_status"]
           subtotal: number
@@ -864,6 +1194,32 @@ export type Database = {
         }
       }
       ensure_profile: { Args: { _full_name?: string }; Returns: undefined }
+      fulfill_online_order: {
+        Args: { _order_id: string }
+        Returns: {
+          branch_id: string
+          created_at: string
+          customer_email: string | null
+          customer_id: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          discount: number
+          id: string
+          notes: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "online_orders"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -876,20 +1232,32 @@ export type Database = {
       receive_purchase: { Args: { _purchase_id: string }; Returns: undefined }
       receive_purchase_partial: {
         Args: { _items: Json; _purchase_id: string }
+        Returns: undefined
+      }
+      refund_sale: {
+        Args: { _items: Json; _reason?: string; _sale_id: string }
         Returns: {
           branch_id: string
+          cash_received: number | null
+          cash_session_id: string | null
+          cashier_id: string
+          change_given: number | null
           created_at: string
-          created_by: string | null
+          customer_id: string | null
+          discount: number
+          folio: number
           id: string
-          received_at: string | null
-          status: Database["public"]["Enums"]["purchase_status"]
-          supplier_id: string | null
+          notes: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          status: Database["public"]["Enums"]["sale_status"]
+          subtotal: number
+          tax: number
           total: number
           updated_at: string
         }
         SetofOptions: {
           from: "*"
-          to: "purchases"
+          to: "sales"
           isOneToOne: true
           isSetofReturn: false
         }
@@ -898,27 +1266,11 @@ export type Database = {
         Args: {
           _branch_id: string
           _max_stock?: number
-          _min_stock?: number
+          _min_stock: number
           _product_id: string
           _variant_id?: string
         }
-        Returns: {
-          branch_id: string
-          created_at: string
-          id: string
-          max_stock: number | null
-          min_stock: number
-          product_id: string
-          stock: number
-          updated_at: string
-          variant_id: string | null
-        }
-        SetofOptions: {
-          from: "*"
-          to: "inventory"
-          isOneToOne: true
-          isSetofReturn: false
-        }
+        Returns: undefined
       }
       transfer_stock: {
         Args: {
@@ -944,6 +1296,13 @@ export type Database = {
         | "adjustment_out"
         | "transfer_in"
         | "transfer_out"
+      order_status:
+        | "pending"
+        | "confirmed"
+        | "preparing"
+        | "ready"
+        | "delivered"
+        | "cancelled"
       payment_method: "cash" | "card" | "transfer" | "credit" | "mixed"
       purchase_status: "draft" | "ordered" | "received" | "cancelled"
       sale_status: "completed" | "cancelled" | "refunded" | "partially_refunded"
@@ -1085,6 +1444,14 @@ export const Constants = {
         "adjustment_out",
         "transfer_in",
         "transfer_out",
+      ],
+      order_status: [
+        "pending",
+        "confirmed",
+        "preparing",
+        "ready",
+        "delivered",
+        "cancelled",
       ],
       payment_method: ["cash", "card", "transfer", "credit", "mixed"],
       purchase_status: ["draft", "ordered", "received", "cancelled"],
