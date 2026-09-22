@@ -1,22 +1,9 @@
+
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
-
-/*
- * Design system definition.
- *
- * The @theme inline block maps CSS custom properties to Tailwind utility
- * classes (e.g. --color-primary -> bg-primary, text-primary).
- *
- * The :root and .dark blocks define the actual color values using oklch.
- * All colors MUST use oklch format.
- *
- * To add a new semantic color:
- * 1. Add the variable to :root (light value) and .dark (dark value)
- * 2. Register it in @theme inline as --color-<name>: var(--<name>)
- */
 
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
@@ -63,73 +50,77 @@
   --color-sidebar-ring: var(--sidebar-ring);
 }
 
+/*
+ * RÉPLICA VISUAL ZOBAZE POS
+ * Azul #4169E2 (Royal Blue) muestreado de la app oficial
+ * Fondos blancos limpios, cards planas, tipografía densa tipo app
+ */
 :root {
-  --radius: 0.625rem;
-  --background: oklch(0.99 0.002 180);
-  --foreground: oklch(0.2 0.02 240);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.2 0.02 240);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.2 0.02 240);
-  /* Azul Zobaze real — muestreado de tu captura: RGB(65,105,226) / #4169E2 */
-  --primary: oklch(0.56 0.19 266);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.95 0.02 266);
-  --secondary-foreground: oklch(0.3 0.07 266);
-  --muted: oklch(0.96 0.005 266);
-  --muted-foreground: oklch(0.5 0.02 266);
-  --accent: oklch(0.94 0.035 266);
-  --accent-foreground: oklch(0.25 0.07 266);
-  --destructive: oklch(0.55 0.2 25);
-  --destructive-foreground: oklch(0.99 0 0);
-  --success: oklch(0.55 0.15 150);
-  --success-foreground: oklch(0.99 0 0);
-  --border: oklch(0.9 0.01 266);
-  --input: oklch(0.9 0.01 266);
-  --ring: oklch(0.56 0.19 266);
-  --sidebar: oklch(0.98 0.01 266);
-  --sidebar-foreground: oklch(0.25 0.02 240);
-  --sidebar-primary: oklch(0.56 0.19 266);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.94 0.035 266);
-  --sidebar-accent-foreground: oklch(0.25 0.07 266);
-  --sidebar-border: oklch(0.9 0.01 266);
-  --sidebar-ring: oklch(0.56 0.19 266);
-  --chart-1: oklch(0.56 0.19 266);
-  --chart-2: oklch(0.65 0.12 200);
-  --chart-3: oklch(0.7 0.1 160);
-  --chart-4: oklch(0.6 0.15 40);
-  --chart-5: oklch(0.55 0.18 25);
+  --radius: 0.75rem;
+  --background: #f4f6fb;
+  --foreground: #1a1d26;
+  --card: #ffffff;
+  --card-foreground: #1a1d26;
+  --popover: #ffffff;
+  --popover-foreground: #1a1d26;
+  --primary: #4169e2;
+  --primary-foreground: #ffffff;
+  --secondary: #e8eefc;
+  --secondary-foreground: #2a3f8f;
+  --muted: #eef1f8;
+  --muted-foreground: #6b7280;
+  --accent: #e8eefc;
+  --accent-foreground: #2a3f8f;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --success: #30a46c;
+  --success-foreground: #ffffff;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #4169e2;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1d26;
+  --sidebar-primary: #4169e2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e8eefc;
+  --sidebar-accent-foreground: #2a3f8f;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #4169e2;
+  --chart-1: #4169e2;
+  --chart-2: #30a46c;
+  --chart-3: #f5a524;
+  --chart-4: #e5484d;
+  --chart-5: #8b5cf6;
 }
 
 .dark {
-  --background: oklch(0.16 0.02 240);
-  --foreground: oklch(0.95 0.01 180);
-  --card: oklch(0.2 0.02 240);
-  --card-foreground: oklch(0.95 0.01 180);
-  --popover: oklch(0.2 0.02 240);
-  --popover-foreground: oklch(0.95 0.01 180);
-  --primary: oklch(0.65 0.18 266);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.25 0.03 266);
-  --secondary-foreground: oklch(0.9 0.01 266);
-  --muted: oklch(0.25 0.02 266);
-  --muted-foreground: oklch(0.7 0.02 266);
-  --accent: oklch(0.28 0.04 266);
-  --accent-foreground: oklch(0.95 0.01 266);
-  --destructive: oklch(0.6 0.2 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.3 0.02 266);
-  --input: oklch(0.3 0.02 266);
-  --ring: oklch(0.65 0.18 266);
-  --sidebar: oklch(0.18 0.02 266);
-  --sidebar-foreground: oklch(0.9 0.01 266);
-  --sidebar-primary: oklch(0.65 0.18 266);
-  --sidebar-primary-foreground: oklch(0.15 0.03 266);
-  --sidebar-accent: oklch(0.25 0.03 266);
-  --sidebar-accent-foreground: oklch(0.95 0.01 266);
-  --sidebar-border: oklch(0.3 0.02 266);
-  --sidebar-ring: oklch(0.65 0.18 266);
+  --background: #0f1219;
+  --foreground: #f0f2f8;
+  --card: #1a1f2e;
+  --card-foreground: #f0f2f8;
+  --popover: #1a1f2e;
+  --popover-foreground: #f0f2f8;
+  --primary: #5b7ff5;
+  --primary-foreground: #ffffff;
+  --secondary: #252b3d;
+  --secondary-foreground: #c5d0f0;
+  --muted: #252b3d;
+  --muted-foreground: #9aa3b8;
+  --accent: #252b3d;
+  --accent-foreground: #c5d0f0;
+  --destructive: #f2555a;
+  --destructive-foreground: #ffffff;
+  --border: #2e3548;
+  --input: #2e3548;
+  --ring: #5b7ff5;
+  --sidebar: #141824;
+  --sidebar-foreground: #f0f2f8;
+  --sidebar-primary: #5b7ff5;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #252b3d;
+  --sidebar-accent-foreground: #c5d0f0;
+  --sidebar-border: #2e3548;
+  --sidebar-ring: #5b7ff5;
 }
 
 @layer base {
@@ -140,5 +131,44 @@
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    -webkit-font-smoothing: antialiased;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+}
+
+/* Estilos globales réplica Zobaze */
+@layer components {
+  .zb-topbar {
+    background: #4169e2;
+    color: #fff;
+  }
+
+  .zb-pay-btn {
+    background: #4169e2;
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    border-radius: 12px;
+    box-shadow: 0 4px 14px rgba(65, 105, 226, 0.35);
+  }
+
+  .zb-pay-btn:hover {
+    background: #3558c7;
+  }
+
+  .zb-product-card {
+    background: #fff;
+    border: 1px solid #e8ecf4;
+    border-radius: 14px;
+    transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
+  }
+
+  .zb-product-card:hover {
+    border-color: #4169e2;
+    box-shadow: 0 4px 16px rgba(65, 105, 226, 0.12);
+  }
+
+  .zb-product-card:active {
+    transform: scale(0.97);
   }
 }
