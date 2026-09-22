@@ -22,7 +22,6 @@ import {
   Receipt,
   MoreHorizontal,
   LayoutDashboard,
-  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BranchProvider, useBranch } from "@/lib/branch";
@@ -63,7 +62,7 @@ const PRIMARY_NAV: NavItem[] = [
   { key: "productos", to: "/productos", label: "Items", shortLabel: "Items", icon: Package },
 ];
 
-/** Resto de menús (van en "Más") — mismo orden lógico que Zobaze */
+/** Resto de menús (van en "Más") */
 const MORE_NAV: NavItem[] = [
   { key: "inventario", to: "/inventario", label: "Inventario", icon: Boxes },
   { key: "clientes", to: "/clientes", label: "Clientes", icon: Users },
@@ -145,7 +144,7 @@ function ShellInner({
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/40 md:flex-row">
-      {/* ── Desktop sidebar (agrupado estilo Zobaze) ── */}
+      {/* Desktop sidebar */}
       <aside className="hidden shrink-0 flex-col border-r bg-card md:flex md:w-56">
         <div className="border-b px-4 py-4">
           <div className="text-lg font-bold tracking-tight text-primary">LULA OS</div>
@@ -170,7 +169,6 @@ function ShellInner({
         )}
 
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          {/* Grupo Counter */}
           <p className="mb-1 mt-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Counter
           </p>
@@ -180,7 +178,6 @@ function ShellInner({
               <NavLink key={item.to} item={item} pathname={pathname} />
             ))}
 
-          {/* Grupo Items / Stock */}
           <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Items & Stock
           </p>
@@ -190,7 +187,6 @@ function ShellInner({
               <NavLink key={item.to} item={item} pathname={pathname} />
             ))}
 
-          {/* Grupo Operaciones */}
           <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Operaciones
           </p>
@@ -202,7 +198,6 @@ function ShellInner({
               <NavLink key={item.to} item={item} pathname={pathname} />
             ))}
 
-          {/* Grupo Más */}
           <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
             Más
           </p>
@@ -227,12 +222,11 @@ function ShellInner({
         </div>
       </aside>
 
-      {/* ── Contenido principal ── */}
       <main className="min-w-0 flex-1 overflow-auto pb-20 md:pb-0">
         <Outlet />
       </main>
 
-      {/* ── Bottom nav móvil (exacto estilo Zobaze: 5 pestañas) ── */}
+      {/* Bottom nav móvil */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:hidden">
         {primaryNav.map((item) => {
           const active = pathname === item.to || pathname.startsWith(item.to + "/");
@@ -265,7 +259,6 @@ function ShellInner({
           );
         })}
 
-        {/* Pestaña Más */}
         <button
           type="button"
           onClick={() => setMoreOpen(true)}
@@ -279,7 +272,6 @@ function ShellInner({
         </button>
       </nav>
 
-      {/* Sheet "Más" — menús secundarios */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl px-0 pb-8">
           <SheetHeader className="border-b px-4 pb-3 text-left">
