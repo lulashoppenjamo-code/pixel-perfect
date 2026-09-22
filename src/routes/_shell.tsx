@@ -1,8 +1,8 @@
+
+
 /**
- * Shell layout — LULA OS (navegación estilo Zobaze POS)
- * Menús acomodados igual que Zobaze:
- *  - Móvil: barra inferior 5 pestañas (Reportes · Hoy · Counter · Items · Más)
- *  - Escritorio: sidebar con grupos Counter / Inventario / Operaciones / Más
+ * Shell — RÉPLICA ZOBAZE POS 1:1
+ * Bottom nav: Reportes · Hoy · Counter · Items · Más
  */
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
@@ -12,7 +12,6 @@ import {
   Boxes,
   Users,
   Truck,
-  Wallet,
   BarChart3,
   Settings,
   LogOut,
@@ -54,15 +53,13 @@ type NavItem = {
   icon: typeof ShoppingCart;
 };
 
-/** Orden principal estilo Zobaze bottom-nav */
 const PRIMARY_NAV: NavItem[] = [
   { key: "reportes", to: "/reportes", label: "Reportes", shortLabel: "Reportes", icon: BarChart3 },
-  { key: "caja", to: "/caja", label: "Hoy / Caja", shortLabel: "Hoy", icon: LayoutDashboard },
+  { key: "caja", to: "/caja", label: "Hoy", shortLabel: "Hoy", icon: LayoutDashboard },
   { key: "ventas", to: "/ventas", label: "Counter", shortLabel: "Counter", icon: ShoppingCart },
   { key: "productos", to: "/productos", label: "Items", shortLabel: "Items", icon: Package },
 ];
 
-/** Resto de menús (van en "Más") */
 const MORE_NAV: NavItem[] = [
   { key: "inventario", to: "/inventario", label: "Inventario", icon: Boxes },
   { key: "clientes", to: "/clientes", label: "Clientes", icon: Users },
@@ -99,7 +96,7 @@ function ShellLayout() {
 
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f6fb] text-muted-foreground">
         Cargando…
       </div>
     );
@@ -142,19 +139,26 @@ function ShellInner({
     (n) => pathname === n.to || pathname.startsWith(n.to + "/"),
   );
 
+  const storeName =
+    branches.find((b) => b.id === branchId)?.name ?? "Mi tienda";
+
   return (
-    <div className="flex min-h-screen flex-col bg-muted/40 md:flex-row">
-      {/* Desktop sidebar */}
-      <aside className="hidden shrink-0 flex-col border-r bg-card md:flex md:w-56">
-        <div className="border-b px-4 py-4">
-          <div className="text-lg font-bold tracking-tight text-primary">LULA OS</div>
-          <div className="text-[11px] text-muted-foreground">Punto de venta</div>
+    <div className="flex min-h-screen flex-col bg-[#f4f6fb] lg:flex-row">
+      <aside className="hidden w-[220px] shrink-0 flex-col border-r border-[#e2e8f0] bg-white lg:flex">
+        <div className="flex items-center gap-2 bg-[#4169e2] px-4 py-4 text-white">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-sm font-black">
+            Z
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-sm font-bold leading-tight">{storeName}</div>
+            <div className="text-[10px] opacity-80">LULA OS · POS</div>
+          </div>
         </div>
 
         {branches.length > 1 && (
-          <div className="border-b px-3 py-2">
+          <div className="border-b border-[#e2e8f0] px-3 py-2">
             <Select value={branchId ?? undefined} onValueChange={setBranchId}>
-              <SelectTrigger className="h-8 text-xs">
+              <SelectTrigger className="h-8 rounded-lg border-[#e2e8f0] text-xs">
                 <SelectValue placeholder="Sucursal" />
               </SelectTrigger>
               <SelectContent>
@@ -169,51 +173,33 @@ function ShellInner({
         )}
 
         <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-2">
-          <p className="mb-1 mt-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Counter
-          </p>
-          {fullNav
-            .filter((n) => ["ventas", "caja"].includes(n.key))
-            .map((item) => (
-              <NavLink key={item.to} item={item} pathname={pathname} />
-            ))}
-
-          <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Items & Stock
-          </p>
-          {fullNav
-            .filter((n) => ["productos", "inventario", "compras"].includes(n.key))
-            .map((item) => (
-              <NavLink key={item.to} item={item} pathname={pathname} />
-            ))}
-
-          <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Operaciones
-          </p>
-          {fullNav
-            .filter((n) =>
-              ["clientes", "gastos", "devoluciones", "pedidos", "reportes"].includes(n.key),
-            )
-            .map((item) => (
-              <NavLink key={item.to} item={item} pathname={pathname} />
-            ))}
-
-          <p className="mb-1 mt-3 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Más
-          </p>
-          {fullNav
-            .filter((n) => ["ceo", "ajustes"].includes(n.key))
-            .map((item) => (
-              <NavLink key={item.to} item={item} pathname={pathname} />
-            ))}
+          {(
+            [
+              { title: "Counter", keys: ["ventas", "caja"] },
+              { title: "Items & Stock", keys: ["productos", "inventario", "compras"] },
+              { title: "Operaciones", keys: ["clientes", "gastos", "devoluciones", "pedidos", "reportes"] },
+              { title: "Más", keys: ["ceo", "ajustes"] },
+            ] as const
+          ).map((group) => (
+            <div key={group.title}>
+              <p className="mb-1 mt-2 px-2.5 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                {group.title}
+              </p>
+              {fullNav
+                .filter((n) => (group.keys as readonly string[]).includes(n.key))
+                .map((item) => (
+                  <NavLink key={item.to} item={item} pathname={pathname} />
+                ))}
+            </div>
+          ))}
         </nav>
 
-        <div className="border-t p-3">
-          <p className="truncate px-1 text-xs text-muted-foreground">{profileName}</p>
+        <div className="border-t border-[#e2e8f0] p-3">
+          <p className="truncate px-1 text-xs text-[#6b7280]">{profileName}</p>
           <Button
             variant="ghost"
             size="sm"
-            className="mt-1 w-full justify-start gap-2 text-muted-foreground"
+            className="mt-1 w-full justify-start gap-2 text-[#6b7280]"
             onClick={onSignOut}
           >
             <LogOut className="h-4 w-4" />
@@ -222,12 +208,11 @@ function ShellInner({
         </div>
       </aside>
 
-      <main className="min-w-0 flex-1 overflow-auto pb-20 md:pb-0">
+      <main className="min-w-0 flex-1 overflow-auto pb-[72px] lg:pb-0">
         <Outlet />
       </main>
 
-      {/* Bottom nav móvil */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t bg-card shadow-[0_-4px_20px_rgba(0,0,0,0.06)] md:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-50 flex h-[64px] items-end border-t border-[#e2e8f0] bg-white pb-1 shadow-[0_-6px_24px_rgba(0,0,0,0.06)] lg:hidden">
         {primaryNav.map((item) => {
           const active = pathname === item.to || pathname.startsWith(item.to + "/");
           const isCenter = item.key === "ventas";
@@ -236,25 +221,23 @@ function ShellInner({
               key={item.to}
               to={item.to}
               className={cn(
-                "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
-                active ? "text-primary" : "text-muted-foreground",
+                "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-semibold",
+                active ? "text-[#4169e2]" : "text-[#9aa3b8]",
               )}
             >
               {isCenter ? (
                 <span
                   className={cn(
-                    "mb-0.5 flex h-11 w-11 -translate-y-3 items-center justify-center rounded-full shadow-lg transition-transform",
-                    active
-                      ? "bg-primary text-primary-foreground scale-105"
-                      : "bg-primary/90 text-primary-foreground",
+                    "mb-0.5 flex h-14 w-14 -translate-y-5 items-center justify-center rounded-full bg-[#4169e2] text-white shadow-[0_6px_20px_rgba(65,105,226,0.45)]",
+                    active && "ring-4 ring-[#4169e2]/25",
                   )}
                 >
-                  <item.icon className="h-5 w-5" />
+                  <item.icon className="h-6 w-6" strokeWidth={2.5} />
                 </span>
               ) : (
-                <item.icon className={cn("h-5 w-5", active && "stroke-[2.5]")} />
+                <item.icon className="h-5 w-5" strokeWidth={active ? 2.5 : 2} />
               )}
-              <span className={cn(isCenter && "-mt-2")}>{item.shortLabel ?? item.label}</span>
+              <span className={cn(isCenter && "-mt-3")}>{item.shortLabel ?? item.label}</span>
             </Link>
           );
         })}
@@ -263,8 +246,8 @@ function ShellInner({
           type="button"
           onClick={() => setMoreOpen(true)}
           className={cn(
-            "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-colors",
-            isMoreActive || moreOpen ? "text-primary" : "text-muted-foreground",
+            "flex flex-1 flex-col items-center justify-center gap-0.5 py-1.5 text-[10px] font-semibold",
+            isMoreActive || moreOpen ? "text-[#4169e2]" : "text-[#9aa3b8]",
           )}
         >
           <MoreHorizontal className="h-5 w-5" />
@@ -273,11 +256,11 @@ function ShellInner({
       </nav>
 
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
-        <SheetContent side="bottom" className="rounded-t-2xl px-0 pb-8">
-          <SheetHeader className="border-b px-4 pb-3 text-left">
-            <SheetTitle className="text-base">Más opciones</SheetTitle>
+        <SheetContent side="bottom" className="rounded-t-3xl border-0 px-0 pb-10">
+          <SheetHeader className="border-b border-[#e2e8f0] px-5 pb-3 text-left">
+            <SheetTitle className="text-base font-bold">Más</SheetTitle>
           </SheetHeader>
-          <div className="grid grid-cols-3 gap-2 p-4">
+          <div className="grid grid-cols-3 gap-3 p-4">
             {moreNav.map((item) => {
               const active = pathname === item.to || pathname.startsWith(item.to + "/");
               return (
@@ -286,24 +269,30 @@ function ShellInner({
                   to={item.to}
                   onClick={() => setMoreOpen(false)}
                   className={cn(
-                    "flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition-colors",
+                    "flex flex-col items-center gap-2 rounded-2xl border p-4 text-center transition-colors",
                     active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "bg-muted/40 hover:bg-muted",
+                      ? "border-[#4169e2] bg-[#e8eefc] text-[#4169e2]"
+                      : "border-[#e8ecf4] bg-white text-[#1a1d26] hover:border-[#4169e2]/40",
                   )}
                 >
-                  <item.icon className="h-6 w-6" />
-                  <span className="text-xs font-medium leading-tight">{item.label}</span>
+                  <div
+                    className={cn(
+                      "flex h-11 w-11 items-center justify-center rounded-2xl",
+                      active ? "bg-[#4169e2] text-white" : "bg-[#eef1f8] text-[#4169e2]",
+                    )}
+                  >
+                    <item.icon className="h-5 w-5" />
+                  </div>
+                  <span className="text-xs font-semibold leading-tight">{item.label}</span>
                 </Link>
               );
             })}
           </div>
-          <div className="border-t px-4 pt-3">
-            <p className="mb-2 text-xs text-muted-foreground">{profileName}</p>
+          <div className="border-t border-[#e2e8f0] px-5 pt-4">
+            <p className="mb-2 text-xs text-[#6b7280]">{profileName}</p>
             <Button
               variant="outline"
-              size="sm"
-              className="w-full gap-2"
+              className="w-full gap-2 rounded-xl border-[#e2e8f0]"
               onClick={() => {
                 setMoreOpen(false);
                 onSignOut();
@@ -325,10 +314,10 @@ function NavLink({ item, pathname }: { item: NavItem; pathname: string }) {
     <Link
       to={item.to}
       className={cn(
-        "flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
+        "flex items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
         active
-          ? "bg-primary text-primary-foreground shadow-sm"
-          : "text-muted-foreground hover:bg-muted hover:text-foreground",
+          ? "bg-[#4169e2] text-white shadow-sm"
+          : "text-[#4b5563] hover:bg-[#eef1f8] hover:text-[#1a1d26]",
       )}
     >
       <item.icon className="h-4 w-4 shrink-0" />
