@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.reportes.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.reportes.tsx
+// ============================================================================
+
 /**
  * Reportes — LULA OS
  * Ruta: src/routes/_shell.reportes.tsx
@@ -42,7 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TrendingDown, TrendingUp, DollarSign, Receipt, Package } from "lucide-react";
+import { TrendingDown, TrendingUp, DollarSign, Receipt, Package, BarChart3 } from "lucide-react";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/reportes")({
@@ -286,28 +292,26 @@ function ReportesPage() {
   }, [saleItems, costMap]);
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Reportes</h1>
-          <p className="text-sm text-muted-foreground">
-            Ventas, utilidad (ventas − costo − gastos), métodos de pago, stock bajo y top
-            productos.
-          </p>
-        </div>
-        <Select value={rangeDays} onValueChange={setRangeDays}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {RANGES.map((r) => (
-              <SelectItem key={r.value} value={r.value}>
-                {r.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <PageShell className="space-y-5">
+      <PageHeader
+        icon={BarChart3}
+        title="Reportes"
+        description="Ventas, utilidad, métodos de pago, stock bajo y top productos."
+        action={
+          <Select value={rangeDays} onValueChange={setRangeDays}>
+            <SelectTrigger className="w-[180px] rounded-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {RANGES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        }
+      />
 
       {/* KPI cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -422,7 +426,7 @@ function ReportesPage() {
           </Table>
         </CardContent>
       </Card>
-    </div>
+    </PageShell>
   );
 }
 
