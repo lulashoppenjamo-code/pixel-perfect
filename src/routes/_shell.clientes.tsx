@@ -1,8 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.clientes.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.clientes.tsx
-// ============================================================================
-
 /**
  * Clientes — LULA OS (FASE 4)
  * CRUD + historial + saldo crédito + abonos
