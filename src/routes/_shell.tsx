@@ -1,25 +1,23 @@
 import { createFileRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
-import { useState } from 'react';
 import { useAuth } from '@/lib/auth';
 import { useBranch } from '@/lib/branch';
 import { Button } from '@/components/ui/button';
-import { 
-  ShoppingBag, 
-  Receipt, 
-  Package, 
-  Boxes, 
-  Users, 
-  TrendingUp, 
-  Settings, 
+import { filterNavByRoles, type NavKey } from '@/lib/permissions';
+import {
+  ShoppingBag,
+  Receipt,
+  Package,
+  Boxes,
+  Users,
+  Truck,
+  Wallet,
+  Undo2,
+  ClipboardList,
+  TrendingUp,
+  Settings,
   LogOut,
   AlertTriangle,
-  RotateCcw,
-  Menu,
-  X,
-  Wallet,
-  Store,
-  Bot,
-  Truck,
+  RotateCcw
 } from 'lucide-react';
 
 export const Route = createFileRoute('/_shell')({
@@ -51,78 +49,48 @@ function ShellErrorComponent({ error, reset }: { error: Error; reset: () => void
 }
 
 function ShellLayout() {
-  const { user, signOut } = useAuth();
+  const { user, roles, signOut } = useAuth();
   const { branchId, setBranchId, branches } = useBranch();
   const navigate = useNavigate();
   const location = useLocation();
-  // Cerrado por defecto: la pantalla completa queda libre y el menú solo
-  // aparece como panel flotante cuando se toca el botón de hamburguesa.
-  const [open, setOpen] = useState(false);
 
-  const goTo = (path: string) => {
-    navigate({ to: path });
-    setOpen(false);
-  };
-
-  const navItems = [
-    { label: 'Caja (POS)', path: '/caja', icon: ShoppingBag },
-    { label: 'Historial de ventas', path: '/ventas', icon: Receipt },
-    { label: 'Productos', path: '/productos', icon: Package },
-    { label: 'Inventario', path: '/inventario', icon: Boxes },
-    { label: 'Compras', path: '/compras', icon: Truck },
-    { label: 'Clientes', path: '/clientes', icon: Users },
-    { label: 'Gastos', path: '/gastos', icon: Wallet },
-    { label: 'Devoluciones', path: '/devoluciones', icon: RotateCcw },
-    { label: 'Pedidos online', path: '/pedidos', icon: Store },
-    { label: 'Reportes', path: '/reportes', icon: TrendingUp },
-    { label: 'CEO IA', path: '/ceo', icon: Bot },
-    { label: 'Ajustes', path: '/ajustes', icon: Settings },
+  // Todas las rutas reales que existen en src/routes/_shell.*.tsx.
+  // Antes esta lista sólo tenía 7 de las 12 secciones existentes
+  // (faltaban compras, gastos, devoluciones, pedidos y ceo, que ya
+  // tenían página construida pero no eran alcanzables desde el menú).
+  const allNavItems: { label: string; path: string; icon: typeof ShoppingBag; key: NavKey }[] = [
+    { label: 'Caja (POS)', path: '/caja', icon: ShoppingBag, key: 'caja' },
+    { label: 'Historial de ventas', path: '/ventas', icon: Receipt, key: 'ventas' },
+    { label: 'Productos', path: '/productos', icon: Package, key: 'productos' },
+    { label: 'Inventario', path: '/inventario', icon: Boxes, key: 'inventario' },
+    { label: 'Compras', path: '/compras', icon: Truck, key: 'compras' },
+    { label: 'Clientes', path: '/clientes', icon: Users, key: 'clientes' },
+    { label: 'Devoluciones', path: '/devoluciones', icon: Undo2, key: 'devoluciones' },
+    { label: 'Gastos', path: '/gastos', icon: Wallet, key: 'gastos' },
+    { label: 'Pedidos', path: '/pedidos', icon: ClipboardList, key: 'pedidos' },
+    { label: 'Reportes', path: '/reportes', icon: TrendingUp, key: 'reportes' },
+    { label: 'CEO', path: '/ceo', icon: TrendingUp, key: 'ceo' },
+    { label: 'Ajustes', path: '/ajustes', icon: Settings, key: 'ajustes' },
   ];
 
+  // permissions.ts ya definía qué puede ver cada rol, pero nunca se
+  // usaba en ningún lado del frontend: cualquier usuario autenticado
+  // veía (y podía navegar directo por URL a) todas las secciones,
+  // incluidas Ajustes o CEO. Se aplica aquí el filtro ya existente.
+  const navItems = filterNavByRoles(allNavItems, roles);
+
   return (
-    <div className="relative h-screen bg-background overflow-hidden">
-      {/* Botón flotante: siempre visible, la pantalla completa queda libre cuando el menú está cerrado */}
-      <button
-        onClick={() => setOpen(true)}
-        title="Abrir menú"
-        className={`fixed left-3 top-3 z-30 flex h-10 w-10 items-center justify-center rounded-full border bg-card shadow-md hover:bg-accent transition-opacity ${
-          open ? 'pointer-events-none opacity-0' : 'opacity-100'
-        }`}
-      >
-        <Menu className="h-5 w-5" />
-      </button>
-
-      {/* Fondo oscuro: al tocarlo fuera del panel, se cierra */}
-      {open && (
-        <div
-          className="fixed inset-0 z-30 bg-black/40"
-          onClick={() => setOpen(false)}
-        />
-      )}
-
-      <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-72 max-w-[85vw] flex-col justify-between border-r bg-card p-4 shadow-xl select-none transition-transform duration-200 ${
-          open ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
+    <div className="flex h-screen bg-background overflow-hidden">
+      <aside className="w-64 bg-card border-r flex flex-col justify-between p-4 select-none">
         <div className="space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 shrink-0 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-sm">
-                L
-              </div>
-              <div>
-                <h1 className="font-bold text-lg leading-tight">Lula OS</h1>
-                <p className="text-xs text-muted-foreground">Punto de Venta</p>
-              </div>
+          <div className="flex items-center gap-3 px-2">
+            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-sm">
+              L
             </div>
-            <button
-              onClick={() => setOpen(false)}
-              title="Cerrar menú"
-              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-accent"
-            >
-              <X className="h-4 w-4" />
-            </button>
+            <div>
+              <h1 className="font-bold text-lg leading-tight">Lula OS</h1>
+              <p className="text-xs text-muted-foreground">Punto de Venta</p>
+            </div>
           </div>
 
           <div className="px-2">
@@ -144,21 +112,21 @@ function ShellLayout() {
             </select>
           </div>
 
-          <nav className="space-y-1 overflow-y-auto max-h-[calc(100vh-260px)] pr-1">
+          <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname.startsWith(item.path);
               return (
                 <button
                   key={item.path}
-                  onClick={() => goTo(item.path)}
+                  onClick={() => navigate({ to: item.path })}
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                     isActive 
                       ? 'bg-primary text-primary-foreground shadow-sm' 
                       : 'hover:bg-accent text-foreground'
                   }`}
                 >
-                  <Icon className="w-4 h-4 shrink-0" />
+                  <Icon className="w-4 h-4" />
                   {item.label}
                 </button>
               );
@@ -169,7 +137,10 @@ function ShellLayout() {
         <div className="border-t pt-4 space-y-2">
           <div className="px-2 py-1">
             <p className="text-sm font-semibold truncate">{user?.email || 'Operador'}</p>
-            <p className="text-xs text-muted-foreground capitalize">{user?.role || 'Cajero'}</p>
+            {/* user.role viene del objeto de sesión de Supabase Auth
+                (siempre "authenticated") y no del rol de negocio.
+                El rol real vive en user_roles / AuthProvider.roles. */}
+            <p className="text-xs text-muted-foreground capitalize">{roles[0] || 'Sin rol asignado'}</p>
           </div>
           <Button 
             onClick={() => signOut()} 
@@ -182,7 +153,7 @@ function ShellLayout() {
         </div>
       </aside>
 
-      <main className="h-full w-full overflow-y-auto p-6 bg-slate-50/50">
+      <main className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
         <Outlet />
       </main>
     </div>
