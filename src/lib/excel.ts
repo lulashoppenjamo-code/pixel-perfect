@@ -90,12 +90,12 @@ export async function parseProductFile(
       return Number.isFinite(n) ? n : NaN;
     };
 
-    const nombre = get("nombre", "name", "producto");
+    const nombre = get("nombre", "name", "producto", "item_name", "itemname");
     const sku = get("sku");
     const codigo_barras = get("codigo_barras", "barcode", "codigo", "barras");
     const categoria = get("categoria", "category");
     const precio_venta = num(get("precio_venta", "precio", "price"));
-    const costo = num(get("costo", "cost", "coste"));
+    const costo = num(get("costo", "cost", "coste", "cost_price", "costprice"));
     const stock = num(get("stock", "existencia", "qty") || "0");
     const minimo = num(get("minimo", "min_stock", "min") || "0");
     const maxRaw = get("maximo", "max_stock", "max");
