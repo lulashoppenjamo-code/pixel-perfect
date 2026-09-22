@@ -1,7 +1,13 @@
+// ============================================================================
+// RUTA: src/routes/_shell.ajustes.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.ajustes.tsx
+// ============================================================================
+
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Settings } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth, type AppRole } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -12,6 +18,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 
 export const Route = createFileRoute("/_shell/ajustes")({
   head: () => ({
@@ -123,6 +130,12 @@ function AjustesPage() {
   });
 
   return (
+    <PageShell>
+      <PageHeader
+        icon={Settings}
+        title="Ajustes"
+        description="Sucursales, usuarios, roles y configuración general del negocio."
+      />
     <Tabs defaultValue="sucursales" className="space-y-4">
       <TabsList>
         <TabsTrigger value="sucursales">Sucursales</TabsTrigger>
@@ -303,5 +316,6 @@ function AjustesPage() {
         </Card>
       </TabsContent>
     </Tabs>
+    </PageShell>
   );
 }
