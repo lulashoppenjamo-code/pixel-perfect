@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.devoluciones.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.devoluciones.tsx
+// ============================================================================
+
 /**
  * Devoluciones / Cancelaciones — LULA OS
  * Ruta: src/routes/_shell.devoluciones.tsx
@@ -15,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import {
   Table,
   TableBody,
@@ -152,13 +158,12 @@ function DevolucionesPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Devoluciones</h1>
-        <p className="text-muted-foreground">
-          Busca una venta por folio y regresa productos al inventario.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        icon={RotateCcw}
+        title="Devoluciones"
+        description="Busca una venta por folio y regresa productos al inventario."
+      />
 
       <Card>
         <CardHeader className="pb-3">
@@ -294,6 +299,6 @@ function DevolucionesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }
