@@ -424,15 +424,15 @@ function VentasPage() {
         _branch_id: branchId,
         _items: items,
         _payment_method: method,
-        _customer_id: customerId === "none" ? null : customerId,
-        _cash_session_id: openSession?.id ?? null,
+        _customer_id: customerId === "none" ? undefined : customerId,
+        _cash_session_id: openSession?.id ?? undefined,
         _discount: disc,
         _cash_received:
           method === "cash"
             ? cashNum || total
             : method === "mixed"
-              ? Number(mixedCash) || null
-              : null,
+              ? Number(mixedCash) || undefined
+              : undefined,
       });
 
       if (error) throw error;

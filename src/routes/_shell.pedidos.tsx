@@ -146,9 +146,9 @@ function PedidosPage() {
       const { data, error } = await supabase.rpc("create_online_order", {
         _branch_id: branchId,
         _items: items,
-        _customer_name: customerName || null,
-        _customer_phone: customerPhone || null,
-        _delivery_address: address || null,
+        _customer_name: customerName || undefined,
+        _customer_phone: customerPhone || undefined,
+        _delivery_address: address || undefined,
       });
       if (error) throw error;
       return data;
