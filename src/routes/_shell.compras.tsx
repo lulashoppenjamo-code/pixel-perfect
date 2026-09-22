@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, Trash2, Truck } from "lucide-react";
@@ -25,7 +26,11 @@ export const Route = createFileRoute("/_shell/compras")({
       { property: "og:description", content: "Administra proveedores y órdenes de compra; al recibirlas el inventario se actualiza solo." },
     ],
   }),
-  component: ComprasPage,
+  component: () => (
+    <RequireNavAccess navKey="compras">
+      <ComprasPage />
+    </RequireNavAccess>
+  ),
 });
 
 type Line = { product_id: string; name: string; quantity: number; unit_cost: number };
