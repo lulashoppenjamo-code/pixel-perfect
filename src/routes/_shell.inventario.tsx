@@ -1,20 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.inventario.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.inventario.tsx
-// ============================================================================
-
-/**
- * Inventario — LULA OS
- * Ruta: src/routes/_shell.inventario.tsx
- * Reemplaza el archivo existente completo.
- *
- * - Existencias + alertas de mínimo
- * - Ajuste con motivo
- * - Traspasos entre sucursales (RPC transfer_stock)
- * - Límites min/max
- * - Conteo físico
- * - Historial de movimientos
- */
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
