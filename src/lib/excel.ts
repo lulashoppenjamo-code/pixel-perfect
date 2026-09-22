@@ -86,7 +86,30 @@ export async function parseProductFile(
       return "";
     };
     const num = (s: string) => {
-      const n = Number(String(s).replace(",", "."));
+      // Strip currency symbols, spaces and any non numeric/separator chars first
+      // (handles values like "$1,234.56", "MXN 100", " 45 ", etc.)
+      const cleaned = String(s).replace(/[^0-9.,-]/g, "").trim();
+      if (!cleaned) return 0;
+
+      const lastComma = cleaned.lastIndexOf(",");
+      const lastDot = cleaned.lastIndexOf(".");
+      let normalized = cleaned;
+
+      if (lastComma > -1 && lastDot > -1) {
+        // Both separators present: whichever comes LAST is the decimal separator
+        normalized =
+          lastComma > lastDot
+            ? cleaned.replace(/\./g, "").replace(",", ".")
+            : cleaned.replace(/,/g, "");
+      } else if (lastComma > -1) {
+        // Only comma present: treat as decimal separator if exactly 2 digits follow
+        // (e.g. "1234,56"), otherwise treat as a thousands separator (e.g. "1,234")
+        const digitsAfter = cleaned.length - lastComma - 1;
+        normalized =
+          digitsAfter === 2 ? cleaned.replace(",", ".") : cleaned.replace(/,/g, "");
+      }
+
+      const n = Number(normalized);
       return Number.isFinite(n) ? n : NaN;
     };
 
@@ -189,6 +212,17 @@ export async function downloadCsv(filename: string, rows: Record<string, unknown
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export async function downloadImportFailures(
+  failures: { row: number; nombre: string; message: string }[],
+) {
+  const rows = failures.map((f) => ({
+    fila: f.row,
+    producto: f.nombre,
+    error: f.message,
+  }));
+  await downloadWorkbook("fallas_importacion.xlsx", [{ name: "Fallas", rows }]);
 }
 
 export async function downloadImportErrors(
