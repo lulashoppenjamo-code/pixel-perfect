@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useQuery } from "@tanstack/react-query";
 import { Bot, Send, Sparkles } from "lucide-react";
 import { subDays, startOfDay } from "date-fns";
@@ -17,7 +18,11 @@ export const Route = createFileRoute("/_shell/ceo")({
   head: () => ({
     meta: [{ title: "CEO IA — Lula OS" }],
   }),
-  component: CeoPage,
+  component: () => (
+    <RequireNavAccess navKey="ceo">
+      <CeoPage />
+    </RequireNavAccess>
+  ),
 });
 
 type Msg = { role: "user" | "assistant"; text: string };
