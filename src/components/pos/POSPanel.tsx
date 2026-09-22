@@ -33,6 +33,8 @@ import {
   Printer,
   Pencil,
   StickyNote,
+  Camera,
+  CameraOff,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/lib/branch";
@@ -122,6 +124,11 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
   const [editLineKey, setEditLineKey] = useState<string | null>(null);
   const [editPrice, setEditPrice] = useState("");
   const [editDiscount, setEditDiscount] = useState("");
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [scannerError, setScannerError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const scanRafRef = useRef<number | null>(null);
 
   const branchName = branches.find((b) => b.id === branchId)?.name ?? "";
 
@@ -416,11 +423,9 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
     searchRef.current?.focus();
   };
 
-  const handleSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    const q = search.trim();
-    if (!q) return;
+  const resolveAndAddByCode = (rawCode: string): boolean => {
+    const q = rawCode.trim();
+    if (!q) return false;
     // SKU exacto de variante: agrega esa variante directo, sin abrir el picker
     // (mismo comportamiento que un scanner leyendo el código de la variante).
     const byVariantSku = allVariants.find((v) => v.sku === q);
@@ -428,14 +433,103 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
       const parent = products.find((p) => p.id === byVariantSku.product_id);
       if (parent) {
         addVariant(parent, byVariantSku);
-        return;
+        return true;
       }
     }
     const byBarcode = products.find((p) => p.barcode === q);
     const bySku = products.find((p) => p.sku === q);
-    const target = byBarcode ?? bySku ?? filtered[0];
+    const target = byBarcode ?? bySku;
+    if (target) {
+      addProduct(target);
+      return true;
+    }
+    return false;
+  };
+
+  const handleSearchKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const q = search.trim();
+    if (!q) return;
+    if (resolveAndAddByCode(q)) return;
+    const target = filtered[0];
     if (target) addProduct(target);
   };
+
+  // ─── Escaneo de código de barras por cámara ───
+  // Usa la API nativa BarcodeDetector del navegador (Chrome/Edge/Android).
+  // Si el navegador no la soporta, se muestra un aviso — no se agrega
+  // ninguna librería externa nueva al proyecto.
+  useEffect(() => {
+    if (!scannerOpen) return;
+    setScannerError(null);
+
+    const BarcodeDetectorCtor = (window as unknown as {
+      BarcodeDetector?: new (opts?: { formats?: string[] }) => {
+        detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue: string }>>;
+      };
+    }).BarcodeDetector;
+
+    if (!BarcodeDetectorCtor) {
+      setScannerError(
+        "Tu navegador no soporta escaneo por cámara (BarcodeDetector). Usa un lector USB o escribe el código manualmente.",
+      );
+      return;
+    }
+
+    let cancelled = false;
+    const detector = new BarcodeDetectorCtor({
+      formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "qr_code"],
+    });
+
+    navigator.mediaDevices
+      .getUserMedia({ video: { facingMode: "environment" } })
+      .then((stream) => {
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+        streamRef.current = stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          void videoRef.current.play();
+        }
+
+        const tick = async () => {
+          if (cancelled || !videoRef.current) return;
+          try {
+            const codes = await detector.detect(videoRef.current);
+            if (codes.length > 0) {
+              const found = resolveAndAddByCode(codes[0]!.rawValue);
+              if (found) {
+                toast.success(`Escaneado: ${codes[0]!.rawValue}`);
+                setScannerOpen(false);
+                return;
+              }
+            }
+          } catch {
+            // frame no decodificable, se reintenta en el próximo tick
+          }
+          scanRafRef.current = requestAnimationFrame(tick);
+        };
+        scanRafRef.current = requestAnimationFrame(tick);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setScannerError(
+            "No se pudo acceder a la cámara. Revisa los permisos del navegador.",
+          );
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      if (scanRafRef.current) cancelAnimationFrame(scanRafRef.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scannerOpen]);
 
   const updateQty = (key: string, delta: number) => {
     setCart((prev) =>
@@ -720,17 +814,29 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
 
         {/* Search Zobaze */}
         <div className="border-b border-[#e2e8f0] bg-white px-3 py-2.5 sm:px-4">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b8]" />
-            <Input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={handleSearchKey}
-              placeholder="What do you want to sell?"
-              className="h-11 rounded-full border-[#e2e8f0] bg-[#f4f6fb] pl-10 text-[15px] shadow-none focus-visible:ring-[#4169e2]/30"
-              autoComplete="off"
-            />
+          <div className="relative flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b8]" />
+              <Input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleSearchKey}
+                placeholder="What do you want to sell?"
+                className="h-11 rounded-full border-[#e2e8f0] bg-[#f4f6fb] pl-10 text-[15px] shadow-none focus-visible:ring-[#4169e2]/30"
+                autoComplete="off"
+              />
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 rounded-full border-[#e2e8f0]"
+              title="Escanear código de barras"
+              onClick={() => setScannerOpen(true)}
+            >
+              <Camera className="h-4.5 w-4.5 text-[#4169e2]" />
+            </Button>
           </div>
         </div>
 
@@ -1071,6 +1177,44 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
       </div>
 
       {/* Dialogs originales se mantienen abajo si existen en el código residual */}
+
+      {/* Escaneo por cámara */}
+      <Dialog
+        open={scannerOpen}
+        onOpenChange={(o) => {
+          setScannerOpen(o);
+          if (!o) setScannerError(null);
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Escanear código de barras</DialogTitle>
+          </DialogHeader>
+          {scannerError ? (
+            <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+              <CameraOff className="h-8 w-8 opacity-50" />
+              <p>{scannerError}</p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl bg-black">
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                className="aspect-square w-full object-cover"
+              />
+            </div>
+          )}
+          <p className="text-center text-xs text-muted-foreground">
+            Apunta la cámara al código de barras del producto.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setScannerOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Selector de variantes — producto con has_variants = true */}
       <Dialog
