@@ -8,6 +8,7 @@
  */
 import { useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Printer, Receipt, RotateCcw, Search } from "lucide-react";
@@ -42,7 +43,11 @@ export const Route = createFileRoute("/_shell/ventas")({
       },
     ],
   }),
-  component: VentasPage,
+  component: () => (
+    <RequireNavAccess navKey="ventas">
+      <VentasPage />
+    </RequireNavAccess>
+  ),
 });
 
 type SaleRow = {
