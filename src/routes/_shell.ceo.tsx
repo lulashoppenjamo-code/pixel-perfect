@@ -1,17 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.ceo.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.ceo.tsx
-// ============================================================================
-
-/**
- * CEO IA — LULA OS
- * Ruta: src/routes/_shell.ceo.tsx
- * Archivo NUEVO.
- *
- * Asistente empresarial sobre datos reales (ventas, stock, márgenes).
- * Responde preguntas de negocio consultando Supabase.
- * Arquitectura lista para conectar un LLM externo después.
- */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
