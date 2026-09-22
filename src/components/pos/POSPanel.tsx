@@ -100,7 +100,7 @@ type RecentSale = {
   customer_id: string | null;
 };
 
-export function POSPanel() {
+export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: string }) {
   const { branchId, branches } = useBranch();
   const { profile, user, isManager } = useAuth();
   const qc = useQueryClient();
@@ -555,7 +555,7 @@ export function POSPanel() {
   const canSell = !settings?.requireOpenCash || !!openSession;
 
   return (
-    <div className="flex h-[calc(100dvh-4.5rem)] flex-col bg-[#f4f6fb] lg:h-screen lg:flex-row">
+    <div className={cn("flex flex-col bg-[#f4f6fb] lg:flex-row", className)}>
       {/* ═══ IZQUIERDA: Counter (réplica Zobaze) ═══ */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Top bar azul tipo app */}
