@@ -620,7 +620,7 @@ function VentasPage() {
             type="button"
             onClick={() => setCategoryFilter("all")}
             className={
-              "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-colors " +
+              "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors " +
               (categoryFilter === "all"
                 ? "bg-[#4169e2] text-white shadow-sm"
                 : "bg-[#eef1f8] text-[#4b5563]")
@@ -634,7 +634,7 @@ function VentasPage() {
               type="button"
               onClick={() => setCategoryFilter(c.id)}
               className={
-                "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-colors " +
+                "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors " +
                 (categoryFilter === c.id
                   ? "bg-[#4169e2] text-white shadow-sm"
                   : "bg-[#eef1f8] text-[#4b5563]")
