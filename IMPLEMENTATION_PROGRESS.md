@@ -199,3 +199,51 @@ Bloqueos
 
 SIGUIENTE TAREA EXACTA
 Con acceso a un entorno con "npm"/"bun" y red: instalar dependencias, correr "tsc --noEmit" y "build" sobre los dos archivos modificados, corregir cualquier error de tipos, y continuar F3 con el buscador de variantes por SKU y el escaneo por cámara. Después decidir el bloqueo de cancelación de venta con el usuario.
+
+---
+
+Fecha
+2026-09-22
+
+Sesión / IA
+Claude (Claude.ai, misma sesión, continuación)
+
+Fase
+F3 — POS
+
+Estado
+EN PROCESO
+
+Trabajo realizado
+- Búsqueda de variantes por SKU/nombre en el buscador principal del POS: antes el buscador solo indexaba products.name/sku/barcode; ahora un producto con variantes también aparece en la grilla si el texto matchea el SKU o nombre de alguna de sus variantes.
+- Escaneo/Enter: si el texto ingresado coincide exactamente con el SKU de una variante, se agrega esa variante directo al carrito (mismo comportamiento que ya existía para SKU/barcode de producto simple), sin pasar por el selector.
+- Se reemplazó la consulta de variantes "por producto" (lazy, una petición por cada vez que se abría el picker) por una sola consulta "pos-all-variants" que trae todas las variantes una vez; el picker ahora filtra en memoria con useMemo. Reduce round-trips y habilita la búsqueda global.
+
+Archivos creados
+NINGUNO
+
+Archivos modificados
+- src/components/pos/POSPanel.tsx
+
+Archivos eliminados
+NINGUNO
+
+Base de datos
+Sin cambios de base de datos. Sigue usando product_variants e inventory.variant_id existentes.
+
+Validación
+- Revisión manual del diff.
+- Balance de llaves/paréntesis/corchetes verificado con script.
+- Sigue sin poder ejecutarse tsc/build real en esta sesión (sin red para instalar dependencias). Acumulado con el checkpoint anterior: validar ambos cambios juntos antes de desplegar.
+
+Problemas encontrados
+- Ninguno nuevo. Se mantiene el mismo bloqueo de cancelación de venta del checkpoint anterior (RPC refund_sale sin cuerpo conocido).
+
+Pendientes
+- Los mismos del checkpoint anterior (tsc/build real, migration RLS pendiente de ejecutar, escaneo por cámara, cancelación de venta).
+
+Bloqueos
+- Mismo bloqueo: cuerpo real de "refund_sale" o definición de una RPC nueva "cancel_sale" para cancelación en el mismo turno.
+
+SIGUIENTE TAREA EXACTA
+Con red disponible: validar tsc/build de POSPanel.tsx y TicketModal.tsx juntos. Si pasa, continuar con escaneo de código de barras por cámara (BarcodeDetector API con fallback, ya que no todos los navegadores la soportan). Antes de tocar cancelación de venta, se necesita respuesta del usuario sobre el bloqueo documentado arriba.
