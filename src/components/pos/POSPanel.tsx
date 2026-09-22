@@ -180,18 +180,67 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
 
       const { data: inv } = await supabase
         .from("inventory")
-        .select("product_id, stock")
+        .select("product_id, variant_id, stock")
         .eq("branch_id", branchId!);
 
-      const stockMap = new Map((inv ?? []).map((i) => [i.product_id, Number(i.stock)]));
+      // Stock de productos simples (sin variante) por product_id.
+      const stockMap = new Map(
+        (inv ?? [])
+          .filter((i) => !i.variant_id)
+          .map((i) => [i.product_id, Number(i.stock)]),
+      );
+      // Suma de stock de todas las variantes por product_id, para mostrar
+      // disponibilidad agregada en la tarjeta de producto con variantes.
+      const variantStockByProduct = new Map<string, number>();
+      for (const i of inv ?? []) {
+        if (!i.variant_id) continue;
+        variantStockByProduct.set(
+          i.product_id,
+          (variantStockByProduct.get(i.product_id) ?? 0) + Number(i.stock),
+        );
+      }
 
-      return (prods ?? []).map((p) => ({
-        ...p,
-        price: Number(p.price),
-        tax_rate: Number(p.tax_rate),
-        stock: stockMap.get(p.id) ?? 0,
-        has_variants: Boolean((p as { has_variants?: boolean }).has_variants),
-      })) as ProductRow[];
+      return (prods ?? []).map((p) => {
+        const has_variants = Boolean((p as { has_variants?: boolean }).has_variants);
+        return {
+          ...p,
+          price: Number(p.price),
+          tax_rate: Number(p.tax_rate),
+          stock: has_variants
+            ? (variantStockByProduct.get(p.id) ?? 0)
+            : (stockMap.get(p.id) ?? 0),
+          has_variants,
+        };
+      }) as ProductRow[];
+    },
+  });
+
+  const { data: variantStockMap } = useQuery({
+    queryKey: ["pos-variant-inventory", branchId],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("variant_id, stock")
+        .eq("branch_id", branchId!)
+        .not("variant_id", "is", null);
+      if (error) throw error;
+      return new Map((data ?? []).map((i) => [i.variant_id as string, Number(i.stock)]));
+    },
+  });
+
+  const [variantPickerProduct, setVariantPickerProduct] = useState<ProductRow | null>(null);
+  const { data: productVariants = [], isFetching: loadingVariants } = useQuery({
+    queryKey: ["pos-product-variants", variantPickerProduct?.id],
+    enabled: !!variantPickerProduct,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, name, sku, price_override")
+        .eq("product_id", variantPickerProduct!.id)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
     },
   });
 
@@ -257,6 +306,10 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
   const change = method === "cash" ? Math.max(0, cashNum - total) : 0;
 
   const addProduct = (p: ProductRow) => {
+    if (p.has_variants) {
+      setVariantPickerProduct(p);
+      return;
+    }
     if (settings?.blockWithoutStock && p.stock <= 0) {
       toast.error("Sin stock disponible");
       return;
@@ -293,6 +346,53 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
         },
       ];
     });
+    setSearch("");
+    searchRef.current?.focus();
+  };
+
+  const addVariant = (
+    p: ProductRow,
+    v: { id: string; name: string; sku: string | null; price_override: number | null },
+  ) => {
+    const vStock = variantStockMap?.get(v.id) ?? 0;
+    if (settings?.blockWithoutStock && vStock <= 0) {
+      toast.error("Sin stock disponible para esta variante");
+      return;
+    }
+    const unitPrice = v.price_override != null ? Number(v.price_override) : p.price;
+    setCart((prev) => {
+      const idx = prev.findIndex((l) => l.product_id === p.id && l.variant_id === v.id);
+      if (idx >= 0) {
+        const next = [...prev];
+        const line = { ...next[idx]! };
+        if (settings?.blockWithoutStock && line.quantity + 1 > vStock) {
+          toast.error("Stock insuficiente");
+          return prev;
+        }
+        line.quantity += 1;
+        next[idx] = line;
+        return next;
+      }
+      return [
+        ...prev,
+        {
+          key: `${p.id}-${v.id}-${Date.now()}`,
+          product_id: p.id,
+          variant_id: v.id,
+          name: `${p.name} — ${v.name}`,
+          unit_price: unitPrice,
+          original_price: unitPrice,
+          quantity: 1,
+          discount: 0,
+          tax_rate: p.tax_rate,
+          stock: vStock,
+          sku: v.sku ?? p.sku,
+          barcode: p.barcode,
+          emoji: p.emoji,
+        },
+      ];
+    });
+    setVariantPickerProduct(null);
     setSearch("");
     searchRef.current?.focus();
   };
@@ -788,6 +888,36 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
 
         {/* Totals + pay — bloque fijo estilo Zobaze */}
         <div className="space-y-3 border-t border-[#e2e8f0] bg-white p-4">
+          {cart.length > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="w-20 shrink-0 text-xs font-medium text-[#6b7280]">
+                Descuento
+              </span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={ticketDiscount}
+                onChange={(e) => setTicketDiscount(e.target.value)}
+                placeholder="0.00"
+                className="h-9 rounded-xl border-[#e2e8f0] text-sm"
+              />
+            </div>
+          )}
+          {cart.length > 0 && (
+            <div className="flex items-start gap-2">
+              <span className="mt-2 w-20 shrink-0 text-xs font-medium text-[#6b7280]">
+                <StickyNote className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
+                Nota
+              </span>
+              <Input
+                value={saleNotes}
+                onChange={(e) => setSaleNotes(e.target.value)}
+                placeholder="Nota para el ticket (opcional)"
+                className="h-9 rounded-xl border-[#e2e8f0] text-sm"
+              />
+            </div>
+          )}
           <div className="space-y-1 text-sm">
             <div className="flex justify-between text-[#6b7280]">
               <span>Subtotal</span>
@@ -912,6 +1042,59 @@ export function POSPanel({ className = "h-[calc(100dvh-3rem)]" }: { className?: 
       </div>
 
       {/* Dialogs originales se mantienen abajo si existen en el código residual */}
+
+      {/* Selector de variantes — producto con has_variants = true */}
+      <Dialog
+        open={!!variantPickerProduct}
+        onOpenChange={(o) => !o && setVariantPickerProduct(null)}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{variantPickerProduct?.name ?? "Variantes"}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
+            {loadingVariants ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">Cargando…</p>
+            ) : productVariants.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Este producto no tiene variantes configuradas.
+              </p>
+            ) : (
+              productVariants.map((v) => {
+                const vStock = variantStockMap?.get(v.id) ?? 0;
+                const outOfStock = vStock <= 0;
+                const price = v.price_override != null ? Number(v.price_override) : variantPickerProduct?.price ?? 0;
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    disabled={settings?.blockWithoutStock && outOfStock}
+                    onClick={() => variantPickerProduct && addVariant(variantPickerProduct, v)}
+                    className="flex w-full items-center justify-between rounded-xl border border-[#e8ecf4] bg-[#fafbfe] p-3 text-left disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[#1a1d26]">{v.name}</p>
+                      <p
+                        className={
+                          "text-xs " + (outOfStock ? "font-semibold text-[#e5484d]" : "text-[#9aa3b8]")
+                        }
+                      >
+                        {outOfStock ? "Agotado" : `Disponible: ${vStock}`}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-[#4169e2]">{money(price)}</span>
+                  </button>
+                );
+              })
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVariantPickerProduct(null)}>
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editLineKey} onOpenChange={(o) => !o && setEditLineKey(null)}>
         <DialogContent className="max-w-sm">
