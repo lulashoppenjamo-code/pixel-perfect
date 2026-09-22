@@ -2,7 +2,8 @@
  * Productos y categorías — LULA OS
  * Ruta: src/routes/_shell.productos.tsx
  * Reemplaza el archivo existente completo.
- * Incluye campo barcode / código de barras.
+ * Catálogo en cuadrícula (estilo Zobaze "Artículos"): imagen/emoji, nombre,
+ * SKU, precio y etiqueta "Agotado" cuando el stock en la sucursal activa es 0.
  */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -11,20 +12,13 @@ import { toast } from "sonner";
 import { Pencil, Trash2, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import {
   Select,
   SelectContent,
@@ -33,6 +27,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/productos")({
   head: () => ({
@@ -68,6 +63,7 @@ const emptyProduct: ProductForm = {
 
 function ProductosPage() {
   const { isManager } = useAuth();
+  const { branchId } = useBranch();
   const qc = useQueryClient();
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [catName, setCatName] = useState("");
@@ -97,6 +93,24 @@ function ProductosPage() {
         .order("name");
       if (error) throw error;
       return data ?? [];
+    },
+  });
+
+  // Stock en la sucursal activa, para mostrar "Agotado" igual que Zobaze
+  const { data: stockMap = {} } = useQuery({
+    queryKey: ["products-stock", branchId],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory")
+        .select("product_id, stock")
+        .eq("branch_id", branchId!);
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      for (const row of data ?? []) {
+        map[row.product_id] = (map[row.product_id] ?? 0) + Number(row.stock);
+      }
+      return map;
     },
   });
 
@@ -205,6 +219,7 @@ function ProductosPage() {
           <TabsTrigger value="categorias">Categorías</TabsTrigger>
         </TabsList>
 
+        {/* CATÁLOGO — cuadrícula estilo Zobaze */}
         <TabsContent value="lista" className="mt-4 space-y-3">
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -215,91 +230,61 @@ function ProductosPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Card>
-            <CardContent className="overflow-x-auto pt-4">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead></TableHead>
-                    <TableHead>Nombre</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Barcode</TableHead>
-                    <TableHead>Categoría</TableHead>
-                    <TableHead className="text-right">Precio</TableHead>
-                    <TableHead className="text-right">Costo</TableHead>
-                    <TableHead>Estado</TableHead>
-                    <TableHead className="text-right">Acciones</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {isLoading && (
-                    <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
-                        Cargando...
-                      </TableCell>
-                    </TableRow>
+
+          {isLoading && (
+            <p className="py-10 text-center text-muted-foreground">Cargando...</p>
+          )}
+
+          {!isLoading && filtered.length === 0 && (
+            <p className="py-10 text-center text-muted-foreground">Sin productos.</p>
+          )}
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            {filtered.map((p) => {
+              const stock = stockMap[p.id];
+              const agotado = stock !== undefined && stock <= 0;
+              return (
+                <Card
+                  key={p.id}
+                  className={cn(
+                    "relative cursor-pointer overflow-hidden transition hover:shadow-md",
+                    !p.is_active && "opacity-50",
                   )}
-                  {filtered.map((p) => (
-                    <TableRow key={p.id} className={!p.is_active ? "opacity-50" : undefined}>
-                      <TableCell className="text-lg">{p.emoji ?? "📦"}</TableCell>
-                      <TableCell className="font-medium">{p.name}</TableCell>
-                      <TableCell className="font-mono text-xs">{p.sku ?? "—"}</TableCell>
-                      <TableCell className="font-mono text-xs">
-                        {(p as { barcode?: string | null }).barcode ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-sm text-muted-foreground">
-                        {(p.categories as { name?: string } | null)?.name ?? "—"}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {money(Number(p.price))}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {money(Number(p.cost))}
-                      </TableCell>
-                      <TableCell>
-                        {p.is_active ? (
-                          <Badge variant="secondary">Activo</Badge>
-                        ) : (
-                          <Badge variant="outline">Inactivo</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            disabled={!isManager}
-                            onClick={() => editProduct(p)}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-                          {p.is_active && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive"
-                              disabled={!isManager}
-                              onClick={() => removeProduct.mutate(p.id)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {!isLoading && filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={9} className="py-10 text-center text-muted-foreground">
-                        Sin productos.
-                      </TableCell>
-                    </TableRow>
+                  onClick={() => isManager && editProduct(p)}
+                >
+                  {agotado && (
+                    <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive">
+                      Agotado
+                    </div>
                   )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                  {isManager && p.is_active && (
+                    <button
+                      type="button"
+                      className="absolute right-1.5 top-1.5 z-10 rounded-full bg-background/80 p-1 text-destructive hover:bg-background"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        removeProduct.mutate(p.id);
+                      }}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <CardContent className="flex flex-col items-center gap-1.5 p-3 pt-5 text-center">
+                    <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-3xl">
+                      {p.emoji ?? "📦"}
+                    </div>
+                    <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-tight">
+                      {p.name}
+                    </p>
+                    {p.sku && (
+                      <p className="font-mono text-xs text-muted-foreground">{p.sku}</p>
+                    )}
+                    <p className="text-base font-bold text-primary">{money(Number(p.price))}</p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
         </TabsContent>
 
         <TabsContent value="form" className="mt-4">
