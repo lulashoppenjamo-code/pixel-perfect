@@ -4,6 +4,7 @@
  */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Receipt, Plus } from "lucide-react";
@@ -36,7 +37,11 @@ export const Route = createFileRoute("/_shell/gastos")({
   head: () => ({
     meta: [{ title: "Gastos — Lula OS" }],
   }),
-  component: GastosPage,
+  component: () => (
+    <RequireNavAccess navKey="gastos">
+      <GastosPage />
+    </RequireNavAccess>
+  ),
 });
 
 const CATEGORIES = [
