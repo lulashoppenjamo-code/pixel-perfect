@@ -9,6 +9,7 @@
  */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Pencil, Trash2, Search, Package } from "lucide-react";
@@ -36,7 +37,11 @@ export const Route = createFileRoute("/_shell/productos")({
   head: () => ({
     meta: [{ title: "Productos — Lula OS" }],
   }),
-  component: ProductosPage,
+  component: () => (
+    <RequireNavAccess navKey="productos">
+      <ProductosPage />
+    </RequireNavAccess>
+  ),
 });
 
 type ProductForm = {
