@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.pedidos.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.pedidos.tsx
+// ============================================================================
+
 /**
  * Pedidos online — LULA OS
  * Ruta: src/routes/_shell.pedidos.tsx
@@ -16,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import {
   Table,
   TableBody,
@@ -212,19 +218,18 @@ function PedidosPage() {
   const orderTotal = lines.reduce((a, l) => a + l.unit_price * l.quantity, 0);
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Pedidos online</h1>
-          <p className="text-sm text-muted-foreground">
-            Mismo catálogo e inventario. Reserva stock al crear y descuenta al entregar.
-          </p>
-        </div>
-        <Button disabled={!isManager} onClick={() => setCreateOpen(true)}>
-          <Store className="mr-2 h-4 w-4" />
-          Nuevo pedido
-        </Button>
-      </div>
+    <PageShell>
+      <PageHeader
+        icon={Store}
+        title="Pedidos online"
+        description="Mismo catálogo e inventario. Reserva stock al crear y descuenta al entregar."
+        action={
+          <Button disabled={!isManager} onClick={() => setCreateOpen(true)}>
+            <Store className="mr-2 h-4 w-4" />
+            Nuevo pedido
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader className="pb-2">
@@ -372,6 +377,6 @@ function PedidosPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }
