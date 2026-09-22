@@ -1,7 +1,14 @@
+import { useState } from 'react';
 import { createFileRoute, Outlet, useNavigate, useLocation } from '@tanstack/react-router';
 import { useAuth } from '@/lib/auth';
 import { useBranch } from '@/lib/branch';
 import { Button } from '@/components/ui/button';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { filterNavByRoles, type NavKey } from '@/lib/permissions';
 import {
   ShoppingBag,
@@ -17,7 +24,8 @@ import {
   Settings,
   LogOut,
   AlertTriangle,
-  RotateCcw
+  RotateCcw,
+  MoreHorizontal,
 } from 'lucide-react';
 
 export const Route = createFileRoute('/_shell')({
@@ -79,9 +87,26 @@ function ShellLayout() {
   // incluidas Ajustes o CEO. Se aplica aquí el filtro ya existente.
   const navItems = filterNavByRoles(allNavItems, roles);
 
+  // F1 — navegación móvil: antes solo existía el sidebar de escritorio
+  // (w-64, siempre visible), por lo que en celular ocupaba media
+  // pantalla y no había forma pensada para dedo/pulgar de navegar.
+  // Se reutilizan los mismos navItems ya filtrados por rol: los 4
+  // más usados en el día a día de tienda van fijos abajo, el resto
+  // (incluye Ajustes/CEO/Compras/etc., ya sean 1 o 7 según el rol)
+  // vive en la hoja "Más".
+  const [moreOpen, setMoreOpen] = useState(false);
+  const primaryKeys: NavKey[] = ['caja', 'ventas', 'inventario', 'clientes'];
+  const primaryItems = navItems.filter((item) => primaryKeys.includes(item.key));
+  const moreItems = navItems.filter((item) => !primaryKeys.includes(item.key));
+
+  const goTo = (path: string) => {
+    setMoreOpen(false);
+    navigate({ to: path });
+  };
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
-      <aside className="w-64 bg-card border-r flex flex-col justify-between p-4 select-none">
+      <aside className="hidden md:flex w-64 bg-card border-r flex-col justify-between p-4 select-none">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
             <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center text-primary-foreground font-bold text-xl shadow-sm">
@@ -153,9 +178,103 @@ function ShellLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto p-6 bg-slate-50/50">
+      <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6 bg-slate-50/50">
         <Outlet />
       </main>
+
+      {/* Navegación inferior — solo celular/tablet chico (< md) */}
+      <nav
+        className="md:hidden fixed bottom-0 inset-x-0 z-40 flex items-stretch border-t bg-card"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+      >
+        {primaryItems.map((item) => {
+          const Icon = item.icon;
+          const isActive = location.pathname.startsWith(item.path);
+          return (
+            <button
+              key={item.path}
+              onClick={() => goTo(item.path)}
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium ${
+                isActive ? 'text-primary' : 'text-muted-foreground'
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              <span className="truncate max-w-[64px]">{item.label}</span>
+            </button>
+          );
+        })}
+        {moreItems.length > 0 && (
+          <button
+            onClick={() => setMoreOpen(true)}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-muted-foreground"
+          >
+            <MoreHorizontal className="h-5 w-5" />
+            <span>Más</span>
+          </button>
+        )}
+      </nav>
+
+      {/* Hoja "Más" — resto de secciones + sucursal + sesión, en celular */}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="md:hidden rounded-t-2xl max-h-[85vh] overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Más opciones</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block mb-1.5">
+                Sucursal Activa
+              </label>
+              <select
+                value={branchId ?? ''}
+                onChange={(e) => setBranchId(e.target.value)}
+                className="w-full p-2.5 rounded-lg border bg-background text-sm font-medium focus:ring-2 focus:ring-primary outline-none"
+              >
+                {branches && branches.length > 0 ? (
+                  branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))
+                ) : (
+                  <option value="">Cargando sucursales...</option>
+                )}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {moreItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname.startsWith(item.path);
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => goTo(item.path)}
+                    className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-medium ${
+                      isActive ? 'border-primary bg-primary/10 text-primary' : 'text-foreground'
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="text-center leading-tight">{item.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="border-t pt-3">
+              <p className="text-sm font-semibold truncate">{user?.email || 'Operador'}</p>
+              <p className="text-xs text-muted-foreground capitalize mb-2">{roles[0] || 'Sin rol asignado'}</p>
+              <Button
+                onClick={() => signOut()}
+                variant="ghost"
+                className="w-full justify-start text-destructive hover:text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Cerrar Sesión
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
