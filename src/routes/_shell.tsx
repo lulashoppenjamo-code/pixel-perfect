@@ -17,6 +17,7 @@ import {
   RotateCcw,
   Store,
   Bot,
+  Receipt,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { BranchProvider, useBranch } from "@/lib/branch";
@@ -42,6 +43,7 @@ const ALL_NAV: { key: NavKey; to: string; label: string; icon: typeof ShoppingCa
   { key: "clientes", to: "/clientes", label: "Clientes", icon: Users },
   { key: "compras", to: "/compras", label: "Compras", icon: Truck },
   { key: "caja", to: "/caja", label: "Caja", icon: Wallet },
+  { key: "gastos", to: "/gastos", label: "Gastos", icon: Receipt },
   { key: "devoluciones", to: "/devoluciones", label: "Devoluciones", icon: RotateCcw },
   { key: "pedidos", to: "/pedidos", label: "Pedidos online", icon: Store },
   { key: "reportes", to: "/reportes", label: "Reportes", icon: BarChart3 },
