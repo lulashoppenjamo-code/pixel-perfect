@@ -1,7 +1,4 @@
-// ============================================================================
-// RUTA: src/routes/_shell.ventas.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.ventas.tsx
-// ============================================================================
+
 
 /**
  * Punto de Venta — LULA OS (estilo Zobaze)
@@ -567,28 +564,25 @@ function VentasPage() {
   const canSell = !settings?.requireOpenCash || !!openSession;
 
   return (
-    <div className="flex h-[calc(100dvh-5rem)] flex-col gap-0 md:h-screen lg:flex-row">
-      {/* IZQUIERDA: Catálogo — Counter estilo Zobaze */}
-      <div className="flex flex-1 flex-col overflow-hidden border-r bg-background">
-        <div className="flex flex-col gap-3 border-b bg-card p-3 sm:p-4">
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                ref={searchRef}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={handleSearchKey}
-                placeholder="¿Qué quieres vender? Busca o escanea…"
-                className="h-11 rounded-xl border-muted bg-muted/30 pl-10 text-base shadow-none focus-visible:bg-background"
-                autoComplete="off"
-              />
-            </div>
+    <div className="flex h-[calc(100dvh-4.5rem)] flex-col bg-[#f4f6fb] lg:h-screen lg:flex-row">
+      {/* ═══ IZQUIERDA: Counter (réplica Zobaze) ═══ */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Top bar azul tipo app */}
+        <div className="flex items-center justify-between bg-[#4169e2] px-3 py-2.5 text-white sm:px-4">
+          <div className="min-w-0">
+            <p className="truncate text-sm font-bold leading-tight">
+              {branches.find((b) => b.id === branchId)?.name ?? "Counter"}
+            </p>
+            <p className="text-[10px] opacity-80">
+              {canSell ? "Listo para vender" : "Caja cerrada"}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
-              className="h-11 w-11 shrink-0 rounded-xl"
-              title="Historial de ventas"
+              className="h-9 w-9 rounded-full text-white hover:bg-white/15"
+              title="Historial"
               onClick={() => {
                 setHistoryOpen(true);
                 void refetchHistory();
@@ -597,57 +591,71 @@ function VentasPage() {
               <History className="h-4 w-4" />
             </Button>
             {!canSell && (
-              <Badge variant="destructive" className="shrink-0 gap-1">
-                <AlertTriangle className="h-3 w-3" />
+              <span className="rounded-full bg-red-500/90 px-2.5 py-1 text-[10px] font-bold">
                 Caja cerrada
-              </Badge>
+              </span>
             )}
-          </div>
-
-          {/* Chips de categoría estilo Zobaze */}
-          <div className="flex gap-2 overflow-x-auto pb-0.5">
-            <button
-              type="button"
-              onClick={() => setCategoryFilter("all")}
-              className={cn(
-                "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors",
-                categoryFilter === "all"
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80",
-              )}
-            >
-              Todos
-            </button>
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setCategoryFilter(c.id)}
-                className={cn(
-                  "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-medium transition-colors",
-                  categoryFilter === c.id
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80",
-                )}
-              >
-                {c.name}
-              </button>
-            ))}
           </div>
         </div>
 
-        <ScrollArea className="flex-1 p-3 sm:p-4">
+        {/* Search Zobaze */}
+        <div className="border-b border-[#e2e8f0] bg-white px-3 py-2.5 sm:px-4">
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b8]" />
+            <Input
+              ref={searchRef}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={handleSearchKey}
+              placeholder="What do you want to sell?"
+              className="h-11 rounded-full border-[#e2e8f0] bg-[#f4f6fb] pl-10 text-[15px] shadow-none focus-visible:ring-[#4169e2]/30"
+              autoComplete="off"
+            />
+          </div>
+        </div>
+
+        {/* Category chips */}
+        <div className="flex gap-2 overflow-x-auto border-b border-[#e2e8f0] bg-white px-3 py-2.5 scrollbar-none sm:px-4">
+          <button
+            type="button"
+            onClick={() => setCategoryFilter("all")}
+            className={
+              "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-colors " +
+              (categoryFilter === "all"
+                ? "bg-[#4169e2] text-white shadow-sm"
+                : "bg-[#eef1f8] text-[#4b5563]")
+            }
+          >
+            All
+          </button>
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setCategoryFilter(c.id)}
+              className={
+                "shrink-0 rounded-full px-4 py-1.5 text-xs font-bold transition-colors " +
+                (categoryFilter === c.id
+                  ? "bg-[#4169e2] text-white shadow-sm"
+                  : "bg-[#eef1f8] text-[#4b5563]")
+              }
+            >
+              {c.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Product grid */}
+        <ScrollArea className="flex-1 bg-[#f4f6fb] p-3 sm:p-4">
           {loadingProducts ? (
-            <div className="flex h-40 items-center justify-center text-muted-foreground">
-              Cargando productos...
-            </div>
+            <div className="py-16 text-center text-sm text-[#9aa3b8]">Cargando…</div>
           ) : filtered.length === 0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-2 text-muted-foreground">
+            <div className="flex h-40 flex-col items-center justify-center gap-2 text-[#9aa3b8]">
               <Package className="h-10 w-10 opacity-40" />
-              <p>No se encontraron productos</p>
+              <p className="text-sm font-medium">No items found</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
               {filtered.map((p) => {
                 const outOfStock = p.stock <= 0;
                 return (
@@ -656,25 +664,29 @@ function VentasPage() {
                     type="button"
                     disabled={!canSell || (settings?.blockWithoutStock && outOfStock)}
                     onClick={() => addProduct(p)}
-                    className={cn(
-                      "group relative flex flex-col items-start rounded-xl border bg-card p-3 text-left transition-all",
-                      "hover:border-primary hover:shadow-md active:scale-[0.98]",
-                      "disabled:cursor-not-allowed disabled:opacity-50",
-                      outOfStock && "opacity-60",
-                    )}
+                    className={
+                      "zb-product-card group relative flex flex-col items-center p-3 text-center disabled:cursor-not-allowed disabled:opacity-45"
+                    }
                   >
-                    <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-2xl">
+                    {outOfStock && (
+                      <span className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-[#e5484d] px-2 py-0.5 text-[10px] font-bold text-white">
+                        Agotado
+                      </span>
+                    )}
+                    <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8eefc] text-3xl">
                       {p.emoji || "📦"}
                     </div>
-                    <p className="line-clamp-2 text-sm font-medium leading-tight">{p.name}</p>
-                    <p className="mt-1 text-base font-bold text-primary">{money(p.price)}</p>
+                    <p className="line-clamp-2 min-h-[2.25rem] text-[13px] font-semibold leading-tight text-[#1a1d26]">
+                      {p.name}
+                    </p>
+                    <p className="mt-1 text-base font-bold text-[#4169e2]">{money(p.price)}</p>
                     <p
-                      className={cn(
-                        "mt-0.5 text-[11px]",
-                        outOfStock ? "text-destructive font-medium" : "text-muted-foreground",
-                      )}
+                      className={
+                        "mt-0.5 text-[11px] " +
+                        (outOfStock ? "font-semibold text-[#e5484d]" : "text-[#9aa3b8]")
+                      }
                     >
-                      {outOfStock ? "Agotado" : `Disp. ${p.stock}`}
+                      {outOfStock ? "Out of stock" : `Available: ${p.stock}`}
                     </p>
                   </button>
                 );
@@ -684,64 +696,60 @@ function VentasPage() {
         </ScrollArea>
       </div>
 
-      {/* DERECHA: Carrito */}
-      <div className="flex w-full flex-col border-t bg-card lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[420px]">
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      {/* ═══ DERECHA: Cart (réplica Zobaze) ═══ */}
+      <div className="flex w-full flex-col border-t border-[#e2e8f0] bg-white lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[400px]">
+        <div className="flex items-center justify-between border-b border-[#e2e8f0] px-4 py-3">
           <div className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5 text-primary" />
-            <span className="font-semibold">Carrito</span>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc]">
+              <ShoppingCart className="h-4 w-4 text-[#4169e2]" />
+            </div>
+            <span className="font-bold text-[#1a1d26]">Order</span>
             {cart.length > 0 && (
-              <Badge className="ml-1">
+              <span className="rounded-full bg-[#4169e2] px-2 py-0.5 text-[11px] font-bold text-white">
                 {cart.reduce((a, l) => a + l.quantity, 0)}
-              </Badge>
+              </span>
             )}
           </div>
           {cart.length > 0 && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 text-destructive"
+            <button
+              type="button"
+              className="text-xs font-semibold text-[#e5484d]"
               onClick={() => setCart([])}
             >
-              Vaciar
-            </Button>
+              Clear
+            </button>
           )}
         </div>
 
         <ScrollArea className="flex-1 px-3 py-2">
           {cart.length === 0 ? (
-            <div className="flex h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
-              <ShoppingCart className="h-8 w-8 opacity-30" />
-              <p className="text-sm">Agrega productos</p>
+            <div className="flex h-36 flex-col items-center justify-center gap-2 text-[#9aa3b8]">
+              <ShoppingCart className="h-9 w-9 opacity-25" />
+              <p className="text-sm">Tap items to add</p>
             </div>
           ) : (
             <div className="space-y-2">
               {cart.map((l) => (
                 <div
                   key={l.key}
-                  className="flex items-start gap-2 rounded-lg border bg-background p-2"
+                  className="flex items-start gap-2 rounded-xl border border-[#e8ecf4] bg-[#fafbfe] p-2.5"
                 >
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary/10 text-sm">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e8eefc] text-base">
                     {l.emoji || "📦"}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{l.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {money(l.unit_price)} c/u
-                      {l.unit_price !== l.original_price && (
-                        <span className="ml-1 text-amber-600">(mod.)</span>
-                      )}
+                    <p className="truncate text-sm font-semibold text-[#1a1d26]">{l.name}</p>
+                    <p className="text-[11px] text-[#9aa3b8]">
+                      {money(l.unit_price)} × {l.quantity}
                       {l.discount > 0 && (
-                        <span className="ml-1 text-destructive">
-                          −{money(l.discount)}
-                        </span>
+                        <span className="ml-1 text-[#e5484d]">−{money(l.discount)}</span>
                       )}
                     </p>
-                    <div className="mt-1 flex items-center gap-1">
+                    <div className="mt-1.5 flex items-center gap-1">
                       <Button
                         size="icon"
                         variant="outline"
-                        className="h-7 w-7"
+                        className="h-7 w-7 rounded-lg border-[#e2e8f0]"
                         onClick={() => updateQty(l.key, -1)}
                       >
                         <Minus className="h-3 w-3" />
@@ -752,106 +760,84 @@ function VentasPage() {
                         step="any"
                         value={l.quantity}
                         onChange={(e) => setQtyDirect(l.key, e.target.value)}
-                        className="h-7 w-14 px-1 text-center text-sm"
+                        className="h-7 w-14 rounded-lg border-[#e2e8f0] px-1 text-center text-sm"
                       />
                       <Button
                         size="icon"
                         variant="outline"
-                        className="h-7 w-7"
+                        className="h-7 w-7 rounded-lg border-[#e2e8f0]"
                         onClick={() => updateQty(l.key, 1)}
                       >
                         <Plus className="h-3 w-3" />
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        title="Editar precio / descuento"
+                      <button
+                        type="button"
+                        className="ml-auto text-[#9aa3b8] hover:text-[#4169e2]"
                         onClick={() => openEditLine(l)}
                       >
                         <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[#9aa3b8] hover:text-[#e5484d]"
+                        onClick={() => removeLine(l.key)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <span className="text-sm font-semibold">
-                      {money(l.unit_price * l.quantity - l.discount)}
-                    </span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                      onClick={() => removeLine(l.key)}
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
+                  <p className="shrink-0 text-sm font-bold text-[#1a1d26]">
+                    {money(l.unit_price * l.quantity - l.discount)}
+                  </p>
                 </div>
               ))}
             </div>
           )}
         </ScrollArea>
 
-        <div className="space-y-3 border-t bg-muted/30 p-4">
-          <div className="flex items-center gap-2">
-            <User className="h-4 w-4 text-muted-foreground" />
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger className="h-9 flex-1">
-                <SelectValue placeholder="Cliente (opcional)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Público general</SelectItem>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <StickyNote className="h-4 w-4 text-muted-foreground" />
-            <Input
-              value={saleNotes}
-              onChange={(e) => setSaleNotes(e.target.value)}
-              placeholder="Notas de la venta (opcional)"
-              className="h-9"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="w-24 text-sm text-muted-foreground">Descuento $</span>
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={ticketDiscount}
-              onChange={(e) => setTicketDiscount(e.target.value)}
-              className="h-9"
-            />
+        {/* Totals + pay — bloque fijo estilo Zobaze */}
+        <div className="space-y-3 border-t border-[#e2e8f0] bg-white p-4">
+          <div className="space-y-1 text-sm">
+            <div className="flex justify-between text-[#6b7280]">
+              <span>Subtotal</span>
+              <span>{money(linesSubtotal)}</span>
+            </div>
+            {disc > 0 && (
+              <div className="flex justify-between text-[#e5484d]">
+                <span>Discount</span>
+                <span>−{money(disc)}</span>
+              </div>
+            )}
+            <div className="flex justify-between text-[#6b7280]">
+              <span>Tax</span>
+              <span>{money(linesTax)}</span>
+            </div>
+            <div className="flex items-center justify-between border-t border-[#e2e8f0] pt-2">
+              <span className="text-base font-bold text-[#1a1d26]">Total</span>
+              <span className="text-xl font-black text-[#4169e2]">{money(total)}</span>
+            </div>
           </div>
 
           <div className="grid grid-cols-5 gap-1.5">
             {(
               [
-                { id: "cash" as const, label: "Efectivo", icon: Banknote },
-                { id: "card" as const, label: "Tarjeta", icon: CreditCard },
-                { id: "transfer" as const, label: "Transf.", icon: Smartphone },
-                { id: "credit" as const, label: "Crédito", icon: User },
-                { id: "mixed" as const, label: "Mixto", icon: CreditCard },
+                { id: "cash" as const, label: "Cash", icon: Banknote },
+                { id: "card" as const, label: "Card", icon: CreditCard },
+                { id: "transfer" as const, label: "UPI", icon: Smartphone },
+                { id: "credit" as const, label: "Credit", icon: User },
+                { id: "mixed" as const, label: "Split", icon: CreditCard },
               ] as const
             ).map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
                 onClick={() => setMethod(id)}
-                className={cn(
-                  "flex flex-col items-center gap-1 rounded-lg border p-2 text-xs transition-all",
-                  method === id
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "bg-background hover:border-primary/50",
-                )}
+                className={
+                  "flex flex-col items-center gap-1 rounded-xl border p-2 text-[10px] font-semibold transition-all " +
+                  (method === id
+                    ? "border-[#4169e2] bg-[#4169e2] text-white"
+                    : "border-[#e8ecf4] bg-[#fafbfe] text-[#4b5563]")
+                }
               >
                 <Icon className="h-4 w-4" />
                 {label}
@@ -861,7 +847,7 @@ function VentasPage() {
 
           {method === "cash" && (
             <div className="flex items-center gap-2">
-              <span className="w-24 text-sm text-muted-foreground">Recibido $</span>
+              <span className="w-20 text-xs font-medium text-[#6b7280]">Received</span>
               <Input
                 type="number"
                 min="0"
@@ -869,7 +855,7 @@ function VentasPage() {
                 value={cashReceived}
                 onChange={(e) => setCashReceived(e.target.value)}
                 placeholder={String(total.toFixed(2))}
-                className="h-9"
+                className="h-10 rounded-xl border-[#e2e8f0]"
               />
             </div>
           )}
@@ -877,80 +863,65 @@ function VentasPage() {
           {method === "mixed" && (
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <span className="text-xs text-muted-foreground">Efectivo $</span>
+                <span className="text-[11px] text-[#6b7280]">Cash</span>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
                   value={mixedCash}
                   onChange={(e) => setMixedCash(e.target.value)}
-                  className="h-9"
+                  className="h-10 rounded-xl border-[#e2e8f0]"
                 />
               </div>
               <div>
-                <span className="text-xs text-muted-foreground">Tarjeta $</span>
+                <span className="text-[11px] text-[#6b7280]">Card</span>
                 <Input
                   type="number"
                   min="0"
                   step="0.01"
                   value={mixedCard}
                   onChange={(e) => setMixedCard(e.target.value)}
-                  className="h-9"
+                  className="h-10 rounded-xl border-[#e2e8f0]"
                 />
               </div>
             </div>
           )}
 
-          {method === "credit" && customerId === "none" && (
-            <p className="text-xs text-destructive">
-              Selecciona un cliente para vender a crédito.
+          <div className="flex items-center gap-2">
+            <Select value={customerId} onValueChange={setCustomerId}>
+              <SelectTrigger className="h-10 flex-1 rounded-xl border-[#e2e8f0] text-sm">
+                <SelectValue placeholder="Customer" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Walk-in</SelectItem>
+                {customers.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {method === "cash" && cashNum > 0 && cashNum >= total && (
+            <p className="text-center text-sm font-semibold text-[#30a46c]">
+              Change: {money(cashNum - total)}
             </p>
           )}
 
-          <div className="space-y-1 rounded-lg bg-background p-3 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>{money(linesSubtotal)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Impuestos</span>
-              <span>{money(linesTax)}</span>
-            </div>
-            {disc > 0 && (
-              <div className="flex justify-between text-destructive">
-                <span>Descuento</span>
-                <span>-{money(disc)}</span>
-              </div>
-            )}
-            <div className="flex justify-between border-t pt-2 text-lg font-bold">
-              <span>Total</span>
-              <span className="text-primary">{money(total)}</span>
-            </div>
-            {method === "cash" && cashNum > 0 && (
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Cambio</span>
-                <span className="font-semibold">{money(change)}</span>
-              </div>
-            )}
-          </div>
-
-          <Button
-            size="lg"
-            className="h-12 w-full text-base font-semibold"
-            disabled={
-              !canSell ||
-              cart.length === 0 ||
-              checkout.isPending ||
-              (method === "credit" && customerId === "none")
-            }
+          <button
+            type="button"
+            disabled={!canSell || cart.length === 0 || checkout.isPending}
             onClick={() => checkout.mutate()}
+            className="zb-pay-btn flex h-12 w-full items-center justify-center gap-2 text-base disabled:opacity-50"
           >
-            {checkout.isPending ? "Procesando..." : `Cobrar ${money(total)}`}
-          </Button>
+            {checkout.isPending ? "Processing…" : `CHARGE  ${money(total)}`}
+          </button>
         </div>
       </div>
 
-      {/* Editar línea: precio / descuento */}
+      {/* Dialogs originales se mantienen abajo si existen en el código residual */}
+
       <Dialog open={!!editLineKey} onOpenChange={(o) => !o && setEditLineKey(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
