@@ -1,3 +1,8 @@
+// ============================================================================
+// RUTA: src/routes/_shell.productos.tsx
+// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.productos.tsx
+// ============================================================================
+
 /**
  * Productos y categorías — LULA OS
  * Ruta: src/routes/_shell.productos.tsx
@@ -9,7 +14,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Pencil, Trash2, Search } from "lucide-react";
+import { Pencil, Trash2, Search, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -27,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/productos")({
@@ -204,13 +210,12 @@ function ProductosPage() {
   };
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Productos</h1>
-        <p className="text-sm text-muted-foreground">
-          Catálogo, precios, costos, impuestos y códigos de barras.
-        </p>
-      </div>
+    <PageShell>
+      <PageHeader
+        icon={Package}
+        title="Items"
+        description="Catálogo, precios, costos, impuestos y códigos de barras."
+      />
 
       <Tabs defaultValue="lista">
         <TabsList>
@@ -224,7 +229,7 @@ function ProductosPage() {
           <div className="relative max-w-sm">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-9"
+              className="rounded-xl bg-muted/30 pl-9 shadow-none"
               placeholder="Buscar nombre, SKU o barcode…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -468,6 +473,6 @@ function ProductosPage() {
           </div>
         </TabsContent>
       </Tabs>
-    </div>
+    </PageShell>
   );
 }
