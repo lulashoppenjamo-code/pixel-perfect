@@ -4,6 +4,7 @@
  */
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Pencil, Trash2, Search, Wallet, Users } from "lucide-react";
@@ -44,7 +45,11 @@ export const Route = createFileRoute("/_shell/clientes")({
   head: () => ({
     meta: [{ title: "Clientes — Lula OS" }],
   }),
-  component: ClientesPage,
+  component: () => (
+    <RequireNavAccess navKey="clientes">
+      <ClientesPage />
+    </RequireNavAccess>
+  ),
 });
 
 type Form = {
