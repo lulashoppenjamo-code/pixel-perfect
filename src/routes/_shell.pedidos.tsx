@@ -1,13 +1,3 @@
-// ============================================================================
-// RUTA: src/routes/_shell.pedidos.tsx
-// Copia TODO lo de abajo (sin estas 4 líneas de comentario) a: src/routes/_shell.pedidos.tsx
-// ============================================================================
-
-/**
- * Pedidos online — LULA OS
- * Ruta: src/routes/_shell.pedidos.tsx
- * Archivo NUEVO (después de agregarlo, el routeTree se regenera con dev).
- */
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
