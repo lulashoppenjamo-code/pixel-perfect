@@ -3,17 +3,36 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeftRight, ClipboardList, Package, FileSpreadsheet, Boxes } from "lucide-react";
+import {
+  AlertTriangle,
+  ClipboardList,
+  Package,
+  FileSpreadsheet,
+  Boxes,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
-import { useBranch } from "@/lib/branch";
+import {
+  getSharedInventory,
+  setSharedInventoryLimits,
+} from "@/lib/sharedInventory";
 import { shortDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { PageHeader, PageShell } from "@/components/PageHeader";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -39,7 +58,8 @@ export const Route = createFileRoute("/_shell/inventario")({
       { title: "Inventario — Lula OS" },
       {
         name: "description",
-        content: "Existencias, ajustes, traspasos, conteo físico y movimientos.",
+        content:
+          "Inventario compartido, ajustes, conteo físico, límites e historial.",
       },
     ],
   }),
@@ -50,13 +70,24 @@ export const Route = createFileRoute("/_shell/inventario")({
   ),
 });
 
-type InvRow = {
+type SharedRow = {
   id: string;
+  product_id: string;
+  variant_id: string | null;
+  product_name: string;
+  sku: string | null;
+  barcode: string | null;
+  price: number;
+  cost: number;
+  image_url: string | null;
+  emoji: string | null;
+  is_active: boolean;
   stock: number;
+  reserved_stock: number;
+  available_stock: number;
   min_stock: number;
   max_stock: number | null;
-  product_id: string;
-  products: { name: string; emoji: string | null; sku: string | null; barcode: string | null } | null;
+  stock_status: string;
 };
 
 const MOV_LABEL: Record<string, string> = {
@@ -65,213 +96,266 @@ const MOV_LABEL: Record<string, string> = {
   purchase: "Compra",
   adjustment_in: "Ajuste +",
   adjustment_out: "Ajuste −",
-  transfer_in: "Traspaso entrada",
-  transfer_out: "Traspaso salida",
+  transfer_in: "Entrada",
+  transfer_out: "Salida",
 };
 
 function InventarioPage() {
-  const { branchId, branches } = useBranch();
   const { isManager } = useAuth();
   const qc = useQueryClient();
 
-  // Ajuste
   const [adjProduct, setAdjProduct] = useState("");
   const [adjQty, setAdjQty] = useState("");
   const [adjNotes, setAdjNotes] = useState("");
   const [adjDir, setAdjDir] = useState<"in" | "out">("in");
 
-  // Traspaso
-  const [trProduct, setTrProduct] = useState("");
-  const [trTo, setTrTo] = useState("");
-  const [trQty, setTrQty] = useState("");
-  const [trNotes, setTrNotes] = useState("");
-
-  // Límites
   const [limProduct, setLimProduct] = useState("");
   const [limMin, setLimMin] = useState("0");
   const [limMax, setLimMax] = useState("");
 
-  // Conteo físico: product_id -> counted qty
   const [countMap, setCountMap] = useState<Record<string, string>>({});
   const [countFilter, setCountFilter] = useState("");
 
   const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ["inventory"] });
-    void qc.invalidateQueries({ queryKey: ["inventory-movements"] });
-    void qc.invalidateQueries({ queryKey: ["pos-products"] });
+    void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+    void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
+    void qc.invalidateQueries({
+      queryKey: ["pos-variant-inventory-shared"],
+    });
+    void qc.invalidateQueries({
+      queryKey: ["inventory-movements"],
+    });
   };
 
-  const { data: rows = [], isLoading } = useQuery({
-    queryKey: ["inventory", branchId],
-    enabled: !!branchId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inventory")
-        .select(
-          "id, stock, min_stock, max_stock, product_id, products(name, emoji, sku, barcode)",
-        )
-        .eq("branch_id", branchId!)
-        .order("updated_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as unknown as InvRow[];
-    },
+  const {
+    data: rows = [],
+    isLoading,
+    error: inventoryError,
+  } = useQuery({
+    queryKey: ["shared-inventory"],
+    queryFn: getSharedInventory,
   });
 
   const { data: movements = [] } = useQuery({
-    queryKey: ["inventory-movements", branchId],
-    enabled: !!branchId,
+    queryKey: ["inventory-movements"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inventory_movements")
-        .select("id, type, quantity, notes, created_at, products(name)")
-        .eq("branch_id", branchId!)
+        .select(
+          "id, type, quantity, notes, created_at, products(name)",
+        )
         .order("created_at", { ascending: false })
-        .limit(80);
+        .limit(100);
+
       if (error) throw error;
       return data ?? [];
     },
   });
 
   const { data: products = [] } = useQuery({
-    queryKey: ["inv-products"],
+    queryKey: ["inv-products-shared"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
         .select("id, name, sku, barcode")
         .eq("is_active", true)
         .order("name");
+
       if (error) throw error;
       return data ?? [];
     },
   });
 
   const lowStock = useMemo(
-    () => rows.filter((r) => Number(r.stock) <= Number(r.min_stock)),
+    () =>
+      rows.filter(
+        (r) =>
+          Number(r.available_stock) <= Number(r.min_stock),
+      ),
     [rows],
   );
 
   const countRows = useMemo(() => {
     const q = countFilter.trim().toLowerCase();
+
     if (!q) return rows;
+
     return rows.filter((r) => {
-      const name = r.products?.name?.toLowerCase() ?? "";
-      const sku = r.products?.sku?.toLowerCase() ?? "";
-      const barcode = r.products?.barcode?.toLowerCase() ?? "";
-      return name.includes(q) || sku.includes(q) || barcode.includes(q);
+      return (
+        r.product_name.toLowerCase().includes(q) ||
+        (r.sku ?? "").toLowerCase().includes(q) ||
+        (r.barcode ?? "").toLowerCase().includes(q)
+      );
     });
   }, [rows, countFilter]);
 
   const adjust = useMutation({
     mutationFn: async () => {
-      if (!branchId || !adjProduct) throw new Error("Elige sucursal y producto");
-      const n = Math.abs(Number(adjQty));
-      if (!n) throw new Error("Cantidad inválida");
-      const signed = adjDir === "in" ? n : -n;
+      if (!adjProduct) {
+        throw new Error("Selecciona un producto");
+      }
+
+      const quantity = Math.abs(Number(adjQty));
+
+      if (!quantity || quantity <= 0) {
+        throw new Error("Cantidad inválida");
+      }
+
+      const signed =
+        adjDir === "in" ? quantity : -quantity;
+
       const { error } = await supabase.rpc("adjust_stock", {
-        _branch_id: branchId,
+        _branch_id: null,
         _product_id: adjProduct,
-        _variant_id: null as unknown as string,
+        _variant_id: null,
         _quantity: signed,
-        _notes: adjNotes || (adjDir === "in" ? "Ajuste entrada" : "Ajuste salida"),
+        _notes:
+          adjNotes ||
+          (adjDir === "in"
+            ? "Ajuste entrada"
+            : "Ajuste salida"),
       });
+
       if (error) throw error;
     },
     onSuccess: () => {
-      toast.success("Inventario ajustado");
+      toast.success("Inventario compartido ajustado");
       setAdjQty("");
       setAdjNotes("");
       invalidate();
     },
-    onError: (e: Error) => toast.error(e.message),
-  });
-
-  const transfer = useMutation({
-    mutationFn: async () => {
-      if (!branchId || !trTo || !trProduct) throw new Error("Completa origen, destino y producto");
-      const n = Number(trQty);
-      if (!n || n <= 0) throw new Error("Cantidad inválida");
-      const { error } = await supabase.rpc("transfer_stock", {
-        _from_branch_id: branchId,
-        _to_branch_id: trTo,
-        _product_id: trProduct,
-        _quantity: n,
-        ...(trNotes ? { _notes: trNotes } : {}),
-      });
-      if (error) throw error;
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
-    onSuccess: () => {
-      toast.success("Traspaso realizado");
-      setTrQty("");
-      setTrNotes("");
-      invalidate();
-    },
-    onError: (e: Error) => toast.error(e.message),
   });
 
   const setLimits = useMutation({
     mutationFn: async () => {
-      if (!branchId || !limProduct) throw new Error("Elige producto");
-      const { error } = await supabase.rpc("set_inventory_limits", {
-        _branch_id: branchId,
-        _product_id: limProduct,
-        _min_stock: Number(limMin) || 0,
-        ...(limMax === "" ? {} : { _max_stock: Number(limMax) }),
-      });
-      if (error) throw error;
+      if (!limProduct) {
+        throw new Error("Selecciona un producto");
+      }
+
+      const min = Number(limMin);
+
+      if (Number.isNaN(min) || min < 0) {
+        throw new Error("Mínimo inválido");
+      }
+
+      const max =
+        limMax.trim() === ""
+          ? null
+          : Number(limMax);
+
+      if (
+        max !== null &&
+        (Number.isNaN(max) || max < 0)
+      ) {
+        throw new Error("Máximo inválido");
+      }
+
+      await setSharedInventoryLimits(
+        limProduct,
+        null,
+        min,
+        max,
+      );
     },
     onSuccess: () => {
       toast.success("Límites actualizados");
       invalidate();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
   });
 
-  // Conteo físico: aplica diferencias como ajustes
   const applyCount = useMutation({
     mutationFn: async () => {
-      if (!branchId) throw new Error("Sin sucursal");
-      if (!isManager) throw new Error("Sin permisos");
+      if (!isManager) {
+        throw new Error("Sin permisos");
+      }
 
-      const diffs: { product_id: string; delta: number; name: string }[] = [];
-      for (const r of rows) {
-        const raw = countMap[r.product_id];
-        if (raw === undefined || raw === "") continue;
+      const diffs: {
+        product_id: string;
+        delta: number;
+        name: string;
+      }[] = [];
+
+      for (const row of rows) {
+        if (row.variant_id) continue;
+
+        const raw = countMap[row.product_id];
+
+        if (raw === undefined || raw === "") {
+          continue;
+        }
+
         const counted = Number(raw);
-        if (Number.isNaN(counted) || counted < 0) continue;
-        const delta = counted - Number(r.stock);
-        if (delta === 0) continue;
-        diffs.push({
-          product_id: r.product_id,
-          delta,
-          name: r.products?.name ?? r.product_id,
-        });
-      }
-      if (!diffs.length) throw new Error("No hay diferencias para aplicar");
 
-      for (const d of diffs) {
-        const { error } = await supabase.rpc("adjust_stock", {
-          _branch_id: branchId,
-          _product_id: d.product_id,
-          _variant_id: null as unknown as string,
-          _quantity: d.delta,
-          _notes: `Conteo físico (${d.delta > 0 ? "+" : ""}${d.delta})`,
+        if (Number.isNaN(counted) || counted < 0) {
+          continue;
+        }
+
+        const delta =
+          counted - Number(row.stock);
+
+        if (delta === 0) continue;
+
+        diffs.push({
+          product_id: row.product_id,
+          delta,
+          name: row.product_name,
         });
-        if (error) throw new Error(`${d.name}: ${error.message}`);
       }
+
+      if (!diffs.length) {
+        throw new Error(
+          "No hay diferencias para aplicar",
+        );
+      }
+
+      for (const diff of diffs) {
+        const { error } = await supabase.rpc(
+          "adjust_stock",
+          {
+            _branch_id: null,
+            _product_id: diff.product_id,
+            _variant_id: null,
+            _quantity: diff.delta,
+            _notes: `Conteo físico (${
+              diff.delta > 0 ? "+" : ""
+            }${diff.delta})`,
+          },
+        );
+
+        if (error) {
+          throw new Error(
+            `${diff.name}: ${error.message}`,
+          );
+        }
+      }
+
       return diffs.length;
     },
-    onSuccess: (n) => {
-      toast.success(`Conteo aplicado: ${n} producto(s) ajustado(s)`);
+    onSuccess: (total) => {
+      toast.success(
+        `Conteo aplicado: ${total} producto(s)`,
+      );
       setCountMap({});
       invalidate();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
   });
 
-  const productOptions = products.map((p) => (
-    <SelectItem key={p.id} value={p.id}>
-      {p.name}
-      {p.sku ? ` (${p.sku})` : ""}
+  const productOptions = products.map((product) => (
+    <SelectItem
+      key={product.id}
+      value={product.id}
+    >
+      {product.name}
+      {product.sku ? ` (${product.sku})` : ""}
     </SelectItem>
   ));
 
@@ -280,10 +364,13 @@ function InventarioPage() {
       <PageHeader
         icon={Boxes}
         title="Inventario"
-        description="Existencias, ajustes, traspasos, conteo físico e historial."
+        description="Inventario único compartido entre las sucursales."
         action={
           lowStock.length > 0 ? (
-            <Badge variant="destructive" className="w-fit gap-1">
+            <Badge
+              variant="destructive"
+              className="w-fit gap-1"
+            >
               <AlertTriangle className="h-3.5 w-3.5" />
               {lowStock.length} bajo mínimo
             </Badge>
@@ -291,82 +378,168 @@ function InventarioPage() {
         }
       />
 
+      {inventoryError && (
+        <Card className="border-destructive/30">
+          <CardContent className="pt-6 text-sm text-destructive">
+            Error al cargar inventario:{" "}
+            {(inventoryError as Error).message}
+          </CardContent>
+        </Card>
+      )}
+
       <Tabs defaultValue="existencias">
         <TabsList className="flex h-auto flex-wrap gap-1">
-          <TabsTrigger value="existencias">Existencias</TabsTrigger>
-          <TabsTrigger value="ajuste">Ajuste</TabsTrigger>
-          <TabsTrigger value="traspaso">Traspaso</TabsTrigger>
-          <TabsTrigger value="limites">Límites</TabsTrigger>
+          <TabsTrigger value="existencias">
+            Existencias
+          </TabsTrigger>
+
+          <TabsTrigger value="ajuste">
+            Ajuste
+          </TabsTrigger>
+
+          <TabsTrigger value="limites">
+            Límites
+          </TabsTrigger>
+
           <TabsTrigger value="conteo">
             <ClipboardList className="mr-1 h-3.5 w-3.5" />
             Conteo físico
           </TabsTrigger>
-          <TabsTrigger value="movimientos">Movimientos</TabsTrigger>
+
+          <TabsTrigger value="movimientos">
+            Movimientos
+          </TabsTrigger>
+
           <TabsTrigger value="importar">
             <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
             Importar / Exportar
           </TabsTrigger>
         </TabsList>
 
-        {/* EXISTENCIAS */}
-        <TabsContent value="existencias" className="mt-4">
+        <TabsContent
+          value="existencias"
+          className="mt-4"
+        >
           <Card>
             <CardHeader className="pb-2">
-              <CardTitle className="text-base">Stock por sucursal</CardTitle>
+              <CardTitle className="text-base">
+                Existencias compartidas
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                El stock mostrado es único para las dos
+                sucursales.
+              </p>
             </CardHeader>
+
             <CardContent className="px-0 sm:px-6">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Producto</TableHead>
-                    <TableHead className="hidden sm:table-cell">SKU</TableHead>
-                    <TableHead className="text-right">Stock</TableHead>
-                    <TableHead className="hidden text-right sm:table-cell">Mín</TableHead>
-                    <TableHead className="hidden text-right sm:table-cell">Máx</TableHead>
-                    <TableHead className="text-right sm:text-left">Estado</TableHead>
+                    <TableHead className="hidden sm:table-cell">
+                      SKU
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Stock
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Reservado
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Disponible
+                    </TableHead>
+                    <TableHead className="hidden text-right sm:table-cell">
+                      Mín.
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Estado
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
                   {isLoading && (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
+                      <TableCell
+                        colSpan={7}
+                        className="py-10 text-center text-muted-foreground"
+                      >
                         Cargando...
                       </TableCell>
                     </TableRow>
                   )}
-                  {!isLoading && rows.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                        <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                        Sin registros de inventario en esta sucursal.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                  {rows.map((r) => {
-                    const low = Number(r.stock) <= Number(r.min_stock);
+
+                  {!isLoading &&
+                    rows.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={7}
+                          className="py-10 text-center text-muted-foreground"
+                        >
+                          <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
+                          Sin existencias registradas.
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+                  {rows.map((row) => {
+                    const low =
+                      Number(row.available_stock) <=
+                      Number(row.min_stock);
+
                     return (
-                      <TableRow key={r.id} className={cn(low && "bg-destructive/5")}>
-                        <TableCell className="max-w-[9rem] truncate font-medium sm:max-w-none">
-                          <span className="mr-1.5">{r.products?.emoji ?? "📦"}</span>
-                          {r.products?.name ?? "—"}
+                      <TableRow
+                        key={`${row.product_id}-${row.variant_id ?? "base"}`}
+                        className={cn(
+                          low && "bg-destructive/5",
+                        )}
+                      >
+                        <TableCell className="max-w-[12rem] truncate font-medium sm:max-w-none">
+                          <span className="mr-1.5">
+                            {row.emoji ?? "📦"}
+                          </span>
+
+                          {row.product_name}
+
+                          {row.variant_id && (
+                            <Badge
+                              variant="outline"
+                              className="ml-2"
+                            >
+                              Variante
+                            </Badge>
+                          )}
                         </TableCell>
+
                         <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
-                          {r.products?.sku ?? "—"}
+                          {row.sku ?? "—"}
                         </TableCell>
+
                         <TableCell className="text-right font-semibold">
-                          {Number(r.stock)}
+                          {Number(row.stock)}
                         </TableCell>
+
+                        <TableCell className="text-right">
+                          {Number(row.reserved_stock)}
+                        </TableCell>
+
+                        <TableCell className="text-right font-semibold">
+                          {Number(row.available_stock)}
+                        </TableCell>
+
                         <TableCell className="hidden text-right sm:table-cell">
-                          {Number(r.min_stock)}
+                          {Number(row.min_stock)}
                         </TableCell>
-                        <TableCell className="hidden text-right sm:table-cell">
-                          {r.max_stock != null ? Number(r.max_stock) : "—"}
-                        </TableCell>
-                        <TableCell className="text-right sm:text-left">
+
+                        <TableCell className="text-right">
                           {low ? (
-                            <Badge variant="destructive">Bajo</Badge>
+                            <Badge variant="destructive">
+                              Bajo
+                            </Badge>
                           ) : (
-                            <Badge variant="secondary">OK</Badge>
+                            <Badge variant="secondary">
+                              OK
+                            </Badge>
                           )}
                         </TableCell>
                       </TableRow>
@@ -378,270 +551,332 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        {/* AJUSTE */}
         <TabsContent value="ajuste" className="mt-4">
           <Card className="max-w-lg">
             <CardHeader>
-              <CardTitle className="text-base">Ajuste manual</CardTitle>
+              <CardTitle className="text-base">
+                Ajuste de inventario compartido
+              </CardTitle>
             </CardHeader>
+
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Producto</Label>
-                <Select value={adjProduct} onValueChange={setAdjProduct}>
+
+                <Select
+                  value={adjProduct}
+                  onValueChange={setAdjProduct}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona producto" />
                   </SelectTrigger>
-                  <SelectContent>{productOptions}</SelectContent>
+
+                  <SelectContent>
+                    {productOptions}
+                  </SelectContent>
                 </Select>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Dirección</Label>
-                  <Select value={adjDir} onValueChange={(v) => setAdjDir(v as "in" | "out")}>
+
+                  <Select
+                    value={adjDir}
+                    onValueChange={(value) =>
+                      setAdjDir(
+                        value as "in" | "out",
+                      )
+                    }
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
+
                     <SelectContent>
-                      <SelectItem value="in">Entrada (+)</SelectItem>
-                      <SelectItem value="out">Salida (−)</SelectItem>
+                      <SelectItem value="in">
+                        Entrada (+)
+                      </SelectItem>
+
+                      <SelectItem value="out">
+                        Salida (−)
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-1.5">
                   <Label>Cantidad</Label>
+
                   <Input
                     type="number"
                     min="0"
                     step="0.01"
                     value={adjQty}
-                    onChange={(e) => setAdjQty(e.target.value)}
+                    onChange={(event) =>
+                      setAdjQty(event.target.value)
+                    }
                   />
                 </div>
               </div>
+
               <div className="space-y-1.5">
                 <Label>Motivo</Label>
+
                 <Input
                   value={adjNotes}
-                  onChange={(e) => setAdjNotes(e.target.value)}
-                  placeholder="Merma, conteo, daño…"
+                  onChange={(event) =>
+                    setAdjNotes(event.target.value)
+                  }
+                  placeholder="Merma, daño, conteo..."
                 />
               </div>
+
               <Button
                 className="w-full"
-                disabled={!isManager || !adjProduct || !adjQty || adjust.isPending}
+                disabled={
+                  !isManager ||
+                  !adjProduct ||
+                  !adjQty ||
+                  adjust.isPending
+                }
                 onClick={() => adjust.mutate()}
               >
-                {adjust.isPending ? "Aplicando…" : "Aplicar ajuste"}
+                {adjust.isPending
+                  ? "Aplicando..."
+                  : "Aplicar ajuste"}
               </Button>
+
               {!isManager && (
-                <p className="text-xs text-muted-foreground">Solo managers pueden ajustar stock.</p>
+                <p className="text-xs text-muted-foreground">
+                  Solo managers pueden ajustar stock.
+                </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* TRASPASO */}
-        <TabsContent value="traspaso" className="mt-4">
-          <Card className="max-w-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <ArrowLeftRight className="h-4 w-4" />
-                Traspaso entre sucursales
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Origen: sucursal activa. Destino: otra sucursal.
-              </p>
-              <div className="space-y-1.5">
-                <Label>Producto</Label>
-                <Select value={trProduct} onValueChange={setTrProduct}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecciona producto" />
-                  </SelectTrigger>
-                  <SelectContent>{productOptions}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Sucursal destino</Label>
-                <Select value={trTo} onValueChange={setTrTo}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branches
-                      .filter((b) => b.id !== branchId)
-                      .map((b) => (
-                        <SelectItem key={b.id} value={b.id}>
-                          {b.name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>Cantidad</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={trQty}
-                  onChange={(e) => setTrQty(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>Notas</Label>
-                <Input
-                  value={trNotes}
-                  onChange={(e) => setTrNotes(e.target.value)}
-                  placeholder="Opcional"
-                />
-              </div>
-              <Button
-                className="w-full"
-                disabled={!isManager || !trProduct || !trTo || !trQty || transfer.isPending}
-                onClick={() => transfer.mutate()}
-              >
-                {transfer.isPending ? "Traspasando…" : "Traspasar"}
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* LÍMITES */}
         <TabsContent value="limites" className="mt-4">
           <Card className="max-w-lg">
             <CardHeader>
-              <CardTitle className="text-base">Mínimo / máximo</CardTitle>
+              <CardTitle className="text-base">
+                Mínimo / máximo
+              </CardTitle>
             </CardHeader>
+
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
                 <Label>Producto</Label>
-                <Select value={limProduct} onValueChange={setLimProduct}>
+
+                <Select
+                  value={limProduct}
+                  onValueChange={setLimProduct}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona producto" />
                   </SelectTrigger>
-                  <SelectContent>{productOptions}</SelectContent>
+
+                  <SelectContent>
+                    {productOptions}
+                  </SelectContent>
                 </Select>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Mínimo</Label>
+
                   <Input
                     type="number"
                     min="0"
                     value={limMin}
-                    onChange={(e) => setLimMin(e.target.value)}
+                    onChange={(event) =>
+                      setLimMin(event.target.value)
+                    }
                   />
                 </div>
+
                 <div className="space-y-1.5">
-                  <Label>Máximo (vacío = sin límite)</Label>
+                  <Label>
+                    Máximo (vacío = sin límite)
+                  </Label>
+
                   <Input
                     type="number"
                     min="0"
                     value={limMax}
-                    onChange={(e) => setLimMax(e.target.value)}
+                    onChange={(event) =>
+                      setLimMax(event.target.value)
+                    }
                   />
                 </div>
               </div>
+
               <Button
                 className="w-full"
-                disabled={!isManager || !limProduct || setLimits.isPending}
+                disabled={
+                  !isManager ||
+                  !limProduct ||
+                  setLimits.isPending
+                }
                 onClick={() => setLimits.mutate()}
               >
-                {setLimits.isPending ? "Guardando…" : "Guardar límites"}
+                {setLimits.isPending
+                  ? "Guardando..."
+                  : "Guardar límites"}
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* CONTEO FÍSICO */}
         <TabsContent value="conteo" className="mt-4">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <CardTitle className="text-base">Conteo físico</CardTitle>
+                  <CardTitle className="text-base">
+                    Conteo físico
+                  </CardTitle>
+
                   <p className="text-xs text-muted-foreground">
-                    Captura la cantidad real. Al aplicar se generan ajustes por la diferencia.
+                    Cuenta físicamente el inventario
+                    compartido y aplica las diferencias.
                   </p>
                 </div>
+
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Filtrar producto / SKU / barcode…"
+                    placeholder="Producto / SKU / código..."
                     value={countFilter}
-                    onChange={(e) => setCountFilter(e.target.value)}
+                    onChange={(event) =>
+                      setCountFilter(event.target.value)
+                    }
                     className="w-full sm:w-56"
                   />
+
                   <Button
-                    disabled={!isManager || applyCount.isPending}
-                    onClick={() => applyCount.mutate()}
+                    disabled={
+                      !isManager ||
+                      applyCount.isPending
+                    }
+                    onClick={() =>
+                      applyCount.mutate()
+                    }
                   >
-                    {applyCount.isPending ? "Aplicando…" : "Aplicar diferencias"}
+                    {applyCount.isPending
+                      ? "Aplicando..."
+                      : "Aplicar"}
                   </Button>
                 </div>
               </div>
             </CardHeader>
+
             <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Producto</TableHead>
-                    <TableHead className="text-right">Teórico</TableHead>
-                    <TableHead className="w-36 text-right">Contado</TableHead>
-                    <TableHead className="text-right">Diferencia</TableHead>
+                    <TableHead className="text-right">
+                      Teórico
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Contado
+                    </TableHead>
+                    <TableHead className="text-right">
+                      Diferencia
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
-                  {countRows.map((r) => {
-                    const theoretical = Number(r.stock);
-                    const raw = countMap[r.product_id];
-                    const counted = raw === undefined || raw === "" ? null : Number(raw);
-                    const diff =
-                      counted === null || Number.isNaN(counted) ? null : counted - theoretical;
-                    return (
-                      <TableRow key={r.id}>
-                        <TableCell className="font-medium">
-                          {r.products?.emoji ?? "📦"} {r.products?.name ?? "—"}
-                          {r.products?.sku && (
-                            <span className="ml-2 font-mono text-xs text-muted-foreground">
-                              {r.products.sku}
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right">{theoretical}</TableCell>
-                        <TableCell className="text-right">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            className="ml-auto h-8 w-28 text-right"
-                            value={raw ?? ""}
-                            onChange={(e) =>
-                              setCountMap((prev) => ({
-                                ...prev,
-                                [r.product_id]: e.target.value,
-                              }))
-                            }
-                            placeholder="—"
-                          />
-                        </TableCell>
-                        <TableCell
-                          className={cn(
-                            "text-right font-medium",
-                            diff !== null && diff > 0 && "text-emerald-600",
-                            diff !== null && diff < 0 && "text-destructive",
-                          )}
+                  {countRows
+                    .filter((row) => !row.variant_id)
+                    .map((row) => {
+                      const theoretical =
+                        Number(row.stock);
+
+                      const raw =
+                        countMap[row.product_id];
+
+                      const counted =
+                        raw === undefined ||
+                        raw === ""
+                          ? null
+                          : Number(raw);
+
+                      const difference =
+                        counted === null ||
+                        Number.isNaN(counted)
+                          ? null
+                          : counted - theoretical;
+
+                      return (
+                        <TableRow
+                          key={row.id}
                         >
-                          {diff === null ? "—" : diff > 0 ? `+${diff}` : diff}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          <TableCell className="font-medium">
+                            {row.emoji ?? "📦"}{" "}
+                            {row.product_name}
+
+                            {row.sku && (
+                              <span className="ml-2 font-mono text-xs text-muted-foreground">
+                                {row.sku}
+                              </span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {theoretical}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              className="ml-auto h-8 w-28 text-right"
+                              value={raw ?? ""}
+                              onChange={(event) =>
+                                setCountMap(
+                                  (previous) => ({
+                                    ...previous,
+                                    [row.product_id]:
+                                      event.target.value,
+                                  }),
+                                )
+                              }
+                              placeholder="—"
+                            />
+                          </TableCell>
+
+                          <TableCell
+                            className={cn(
+                              "text-right font-medium",
+                              difference !== null &&
+                                difference > 0 &&
+                                "text-emerald-600",
+                              difference !== null &&
+                                difference < 0 &&
+                                "text-destructive",
+                            )}
+                          >
+                            {difference === null
+                              ? "—"
+                              : difference > 0
+                                ? `+${difference}`
+                                : difference}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+
                   {!countRows.length && (
                     <TableRow>
-                      <TableCell colSpan={4} className="py-10 text-center text-muted-foreground">
-                        No hay productos para contar en esta sucursal.
+                      <TableCell
+                        colSpan={4}
+                        className="py-10 text-center text-muted-foreground"
+                      >
+                        No hay productos para contar.
                       </TableCell>
                     </TableRow>
                   )}
@@ -651,12 +886,17 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        {/* MOVIMIENTOS */}
-        <TabsContent value="movimientos" className="mt-4">
+        <TabsContent
+          value="movimientos"
+          className="mt-4"
+        >
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Historial reciente</CardTitle>
+              <CardTitle className="text-base">
+                Historial de movimientos
+              </CardTitle>
             </CardHeader>
+
             <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
@@ -664,33 +904,60 @@ function InventarioPage() {
                     <TableHead>Fecha</TableHead>
                     <TableHead>Producto</TableHead>
                     <TableHead>Tipo</TableHead>
-                    <TableHead className="text-right">Cantidad</TableHead>
+                    <TableHead className="text-right">
+                      Cantidad
+                    </TableHead>
                     <TableHead>Notas</TableHead>
                   </TableRow>
                 </TableHeader>
+
                 <TableBody>
-                  {movements.map((m) => (
-                    <TableRow key={m.id}>
+                  {movements.map((movement) => (
+                    <TableRow
+                      key={movement.id}
+                    >
                       <TableCell className="whitespace-nowrap text-xs">
-                        {shortDate(m.created_at)}
+                        {shortDate(
+                          movement.created_at,
+                        )}
                       </TableCell>
+
                       <TableCell>
-                        {(m.products as { name?: string } | null)?.name ?? "—"}
+                        {(
+                          movement.products as {
+                            name?: string;
+                          } | null
+                        )?.name ?? "—"}
                       </TableCell>
+
                       <TableCell>
-                        <Badge variant="outline">{MOV_LABEL[m.type] ?? m.type}</Badge>
+                        <Badge variant="outline">
+                          {MOV_LABEL[
+                            movement.type
+                          ] ?? movement.type}
+                        </Badge>
                       </TableCell>
+
                       <TableCell className="text-right font-medium">
-                        {Number(m.quantity) > 0 ? `+${m.quantity}` : m.quantity}
+                        {Number(
+                          movement.quantity,
+                        ) > 0
+                          ? `+${movement.quantity}`
+                          : movement.quantity}
                       </TableCell>
-                      <TableCell className="max-w-[200px] truncate text-xs text-muted-foreground">
-                        {m.notes ?? "—"}
+
+                      <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
+                        {movement.notes ?? "—"}
                       </TableCell>
                     </TableRow>
                   ))}
+
                   {!movements.length && (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
+                      <TableCell
+                        colSpan={5}
+                        className="py-8 text-center text-muted-foreground"
+                      >
                         Sin movimientos todavía.
                       </TableCell>
                     </TableRow>
@@ -701,7 +968,10 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="importar" className="mt-4">
+        <TabsContent
+          value="importar"
+          className="mt-4"
+        >
           <ImportExportPanel />
         </TabsContent>
       </Tabs>
