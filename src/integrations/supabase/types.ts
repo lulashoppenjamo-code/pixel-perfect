@@ -1234,37 +1234,6 @@ export type Database = {
         Args: { _items: Json; _purchase_id: string }
         Returns: undefined
       }
-      cancel_sale: {
-        Args: {
-          _sale_id: string
-          _reason?: string
-        }
-        Returns: {
-          branch_id: string
-          cash_received: number | null
-          cash_session_id: string | null
-          cashier_id: string
-          change_given: number | null
-          created_at: string
-          customer_id: string | null
-          discount: number
-          folio: number
-          id: string
-          notes: string | null
-          payment_method: Database["public"]["Enums"]["payment_method"]
-          status: Database["public"]["Enums"]["sale_status"]
-          subtotal: number
-          tax: number
-          total: number
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "sales"
-          isOneToOne: true
-          isSetofReturn: false
-        }
-      }
       refund_sale: {
         Args: { _items: Json; _reason?: string; _sale_id: string }
         Returns: {
