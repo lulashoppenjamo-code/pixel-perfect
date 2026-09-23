@@ -833,6 +833,7 @@ export type Database = {
           quantity: number
           sale_id: string
           total: number
+          unit_cost: number
           unit_price: number
           variant_id: string | null
         }
@@ -845,6 +846,7 @@ export type Database = {
           quantity?: number
           sale_id: string
           total?: number
+          unit_cost?: number
           unit_price?: number
           variant_id?: string | null
         }
@@ -857,6 +859,7 @@ export type Database = {
           quantity?: number
           sale_id?: string
           total?: number
+          unit_cost?: number
           unit_price?: number
           variant_id?: string | null
         }
@@ -1097,6 +1100,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_sale: {
+        Args: { _reason?: string; _sale_id: string }
+        Returns: string
+      }
       close_cash_session: {
         Args: { _closing_amount: number; _session_id: string }
         Returns: {
@@ -1220,6 +1227,38 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_shared_inventory: {
+        Args: never
+        Returns: {
+          available_stock: number
+          barcode: string
+          cost: number
+          emoji: string
+          id: string
+          image_url: string
+          is_active: boolean
+          max_stock: number
+          min_stock: number
+          price: number
+          product_id: string
+          product_name: string
+          reserved_stock: number
+          sku: string
+          stock: number
+          stock_status: string
+          variant_id: string
+        }[]
+      }
+      get_shared_product_stock: {
+        Args: { _product_id: string; _variant_id?: string }
+        Returns: {
+          available_stock: number
+          product_id: string
+          reserved_stock: number
+          stock: number
+          variant_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1267,6 +1306,15 @@ export type Database = {
           _branch_id: string
           _max_stock?: number
           _min_stock: number
+          _product_id: string
+          _variant_id?: string
+        }
+        Returns: undefined
+      }
+      set_shared_inventory_limits: {
+        Args: {
+          _max_stock?: number
+          _min_stock?: number
           _product_id: string
           _variant_id?: string
         }
