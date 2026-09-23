@@ -1,44 +1,50 @@
+-- ============================================================
+-- LULA OS — DEVOLUCIONES
+-- MOTOR TRANSACCIONAL SOBRE INVENTARIO CENTRAL
+--
+-- shared_inventory = fuente única de existencia
+--
+-- Funciones:
+-- 1. Control de cantidad ya devuelta
+-- 2. Devolución parcial
+-- 3. Devolución total
+-- 4. Restauración de stock central
+-- 5. Registro de movimiento
+-- 6. Protección contra devolución duplicada
+-- 7. Actualización automática del estado de la venta
+-- ============================================================
+
 BEGIN;
 
 -- ============================================================
--- LULA OS
--- DEVOLUCIONES + INVENTARIO CENTRAL COMPARTIDO
---
--- Objetivos:
---
--- 1. Registrar devoluciones parciales.
--- 2. Evitar devolver más unidades de las vendidas.
--- 3. Evitar devolver dos veces la misma unidad.
--- 4. Restaurar existencia en shared_inventory.
--- 5. Registrar el movimiento histórico.
--- 6. Cambiar automáticamente el estado de la venta:
---      completed
---      partially_refunded
---      refunded
---
--- IMPORTANTE:
--- shared_inventory es la fuente operativa de existencia.
--- inventory queda únicamente como compatibilidad/histórico.
--- ============================================================
-
-
--- ============================================================
--- 1. CANTIDAD YA DEVUELTA POR PARTIDA
---
--- Esto permite controlar devoluciones parciales y evita que
--- una misma partida pueda devolverse infinitamente.
+-- 1. CANTIDAD DEVUELTA POR PARTIDA
 -- ============================================================
 
 ALTER TABLE public.sale_items
 ADD COLUMN IF NOT EXISTS returned_quantity numeric
-NOT NULL DEFAULT 0;
-
-COMMENT ON COLUMN public.sale_items.returned_quantity IS
-'LULA OS: cantidad acumulada devuelta de esta partida de venta.';
-
+NOT NULL
+DEFAULT 0;
 
 -- ============================================================
--- 2. ÍNDICE
+-- 2. VALIDACIÓN BÁSICA
+-- ============================================================
+
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.sale_items
+    WHERE returned_quantity < 0
+       OR returned_quantity > quantity
+  ) THEN
+    RAISE EXCEPTION
+      'Existen partidas con returned_quantity inválido';
+  END IF;
+END;
+$$;
+
+-- ============================================================
+-- 3. ÍNDICES
 -- ============================================================
 
 CREATE INDEX IF NOT EXISTS
@@ -48,43 +54,21 @@ ON public.sale_items (
   returned_quantity
 );
 
+CREATE INDEX IF NOT EXISTS
+sale_items_product_returned_idx
+ON public.sale_items (
+  product_id,
+  variant_id,
+  returned_quantity
+);
 
 -- ============================================================
--- 3. VALIDACIÓN DE DATOS
--- ============================================================
-
-DO $$
-BEGIN
-
-  IF EXISTS (
-    SELECT 1
-    FROM public.sale_items
-    WHERE returned_quantity < 0
-       OR returned_quantity > quantity
-  ) THEN
-
-    RAISE EXCEPTION
-      'Existen sale_items con returned_quantity inválido.';
-
-  END IF;
-
-END;
-$$;
-
-
--- ============================================================
--- 4. RPC refund_sale()
+-- 4. MOTOR DE DEVOLUCIÓN
 --
--- Firma compatible con el frontend existente:
+-- Parámetros:
 --
--- refund_sale(
---   _sale_id uuid,
---   _items jsonb,
---   _reason text
--- )
---
+-- _sale_id
 -- _items:
---
 -- [
 --   {
 --     "sale_item_id": "...",
@@ -92,7 +76,7 @@ $$;
 --   }
 -- ]
 --
--- La operación se ejecuta dentro de una única transacción.
+-- _reason
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.refund_sale(
@@ -103,53 +87,51 @@ CREATE OR REPLACE FUNCTION public.refund_sale(
 RETURNS public.sales
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO public
+SET search_path = public
 AS $$
 DECLARE
+  uid uuid := auth.uid();
 
-  v_sale public.sales%ROWTYPE;
+  v_sale public.sales;
 
   v_item jsonb;
 
-  v_sale_item public.sale_items%ROWTYPE;
+  v_sale_item public.sale_items;
 
-  v_product_id uuid;
+  v_requested_qty numeric;
 
-  v_variant_id uuid;
+  v_remaining_qty numeric;
 
-  v_quantity numeric;
+  v_total_refund numeric := 0;
 
-  v_available_to_refund numeric;
-
-  v_new_returned_quantity numeric;
-
-  v_total_items integer := 0;
-
-  v_total_returned_items integer := 0;
-
-  v_branch_id uuid;
-
-  v_user_id uuid;
-
-  v_reason text;
+  v_all_returned boolean := true;
 
 BEGIN
 
-  -- ----------------------------------------------------------
-  -- Usuario actual
-  -- ----------------------------------------------------------
+  -- ==========================================================
+  -- AUTENTICACIÓN
+  -- ==========================================================
 
-  v_user_id := auth.uid();
-
-  IF v_user_id IS NULL THEN
+  IF uid IS NULL THEN
     RAISE EXCEPTION
-      'Debes iniciar sesión para registrar una devolución.';
+      'not authenticated';
   END IF;
 
+  -- ==========================================================
+  -- VALIDACIÓN DEL ARRAY
+  -- ==========================================================
 
-  -- ----------------------------------------------------------
-  -- Validar venta
-  -- ----------------------------------------------------------
+  IF _items IS NULL
+     OR jsonb_typeof(_items) <> 'array'
+     OR jsonb_array_length(_items) = 0
+  THEN
+    RAISE EXCEPTION
+      'refund items are required';
+  END IF;
+
+  -- ==========================================================
+  -- BLOQUEAR LA VENTA
+  -- ==========================================================
 
   SELECT *
   INTO v_sale
@@ -159,16 +141,12 @@ BEGIN
 
   IF NOT FOUND THEN
     RAISE EXCEPTION
-      'La venta no existe.';
+      'sale not found';
   END IF;
 
-
-  v_branch_id := v_sale.branch_id;
-
-
-  -- ----------------------------------------------------------
-  -- Validar estado
-  -- ----------------------------------------------------------
+  -- ==========================================================
+  -- SOLO SE PUEDEN DEVOLVER VENTAS ACTIVAS
+  -- ==========================================================
 
   IF v_sale.status NOT IN (
     'completed',
@@ -176,37 +154,23 @@ BEGIN
   ) THEN
 
     RAISE EXCEPTION
-      'La venta no puede recibir otra devolución. Estado actual: %',
-      v_sale.status;
+      'sale cannot be refunded in its current status';
 
   END IF;
 
+  -- ==========================================================
+  -- PERMISOS
+  --
+  -- El cajero que realizó la venta puede devolver.
+  -- Manager/admin/owner también.
+  -- ==========================================================
 
-  -- ----------------------------------------------------------
-  -- Validar JSON
-  -- ----------------------------------------------------------
-
-  IF _items IS NULL
-     OR jsonb_typeof(_items) <> 'array'
-     OR jsonb_array_length(_items) = 0 THEN
-
+  IF v_sale.cashier_id <> uid
+     AND NOT public.is_manager()
+  THEN
     RAISE EXCEPTION
-      'Debes indicar al menos un producto para devolver.';
-
+      'not allowed';
   END IF;
-
-
-  v_reason :=
-    NULLIF(
-      BTRIM(
-        COALESCE(
-          _reason,
-          ''
-        )
-      ),
-      ''
-    );
-
 
   -- ==========================================================
   -- PROCESAR CADA PARTIDA
@@ -214,159 +178,97 @@ BEGIN
 
   FOR v_item IN
     SELECT value
-    FROM jsonb_array_elements(
-      _items
-    )
+    FROM jsonb_array_elements(_items)
   LOOP
 
     -- --------------------------------------------------------
-    -- Validar IDs
+    -- ID DE LA PARTIDA
     -- --------------------------------------------------------
 
-    IF v_item->>'sale_item_id' IS NULL THEN
+    IF NOT (v_item ? 'sale_item_id') THEN
       RAISE EXCEPTION
-        'Una partida de devolución no contiene sale_item_id.';
+        'sale_item_id is required';
     END IF;
 
-
     -- --------------------------------------------------------
-    -- Cantidad
+    -- CANTIDAD
     -- --------------------------------------------------------
 
-    v_quantity :=
+    v_requested_qty :=
       COALESCE(
-        (v_item->>'quantity')::numeric,
+        (v_item ->> 'quantity')::numeric,
         0
       );
 
-
-    IF v_quantity <= 0 THEN
+    IF v_requested_qty <= 0 THEN
       RAISE EXCEPTION
-        'La cantidad a devolver debe ser mayor que cero.';
+        'refund quantity must be greater than zero';
     END IF;
 
-
     -- --------------------------------------------------------
-    -- Obtener partida bloqueada
+    -- BLOQUEAR PARTIDA
     -- --------------------------------------------------------
 
     SELECT *
     INTO v_sale_item
     FROM public.sale_items
     WHERE id =
-      (v_item->>'sale_item_id')::uuid
+      (v_item ->> 'sale_item_id')::uuid
       AND sale_id = _sale_id
     FOR UPDATE;
 
-
     IF NOT FOUND THEN
       RAISE EXCEPTION
-        'La partida % no pertenece a la venta.',
-        v_item->>'sale_item_id';
+        'sale item does not belong to sale';
     END IF;
 
+    -- --------------------------------------------------------
+    -- CANTIDAD DISPONIBLE PARA DEVOLVER
+    -- --------------------------------------------------------
+
+    v_remaining_qty :=
+      v_sale_item.quantity
+      - COALESCE(
+          v_sale_item.returned_quantity,
+          0
+        );
+
+    IF v_requested_qty > v_remaining_qty THEN
+      RAISE EXCEPTION
+        'refund quantity exceeds remaining quantity for sale item';
+    END IF;
 
     -- --------------------------------------------------------
-    -- Validar producto
+    -- PRODUCTO
+    --
+    -- Una partida sin producto no puede regresar al inventario.
     -- --------------------------------------------------------
 
     IF v_sale_item.product_id IS NULL THEN
       RAISE EXCEPTION
-        'La partida "%" no tiene producto asociado y no puede regresar al inventario.',
-        v_sale_item.name_snapshot;
+        'cannot restore inventory for sale item without product';
     END IF;
 
-
-    v_product_id :=
-      v_sale_item.product_id;
-
-    v_variant_id :=
-      v_sale_item.variant_id;
-
-
-    -- --------------------------------------------------------
-    -- Calcular cantidad todavía disponible para devolver
-    -- --------------------------------------------------------
-
-    v_available_to_refund :=
-      GREATEST(
-        v_sale_item.quantity
-        -
-        COALESCE(
-          v_sale_item.returned_quantity,
-          0
-        ),
-        0
-      );
-
-
-    IF v_quantity >
-       v_available_to_refund THEN
-
-      RAISE EXCEPTION
-        'No puedes devolver % unidades de "%". Solo quedan % unidades disponibles para devolución.',
-        v_quantity,
-        v_sale_item.name_snapshot,
-        v_available_to_refund;
-
-    END IF;
-
-
-    -- --------------------------------------------------------
-    -- Nueva cantidad devuelta
-    -- --------------------------------------------------------
-
-    v_new_returned_quantity :=
-      COALESCE(
-        v_sale_item.returned_quantity,
-        0
-      )
-      +
-      v_quantity;
-
+    -- ========================================================
+    -- ACTUALIZAR CANTIDAD DEVUELTA
+    -- ========================================================
 
     UPDATE public.sale_items
-    SET returned_quantity =
-      v_new_returned_quantity
-    WHERE id =
-      v_sale_item.id;
-
+    SET
+      returned_quantity =
+        COALESCE(returned_quantity, 0)
+        + v_requested_qty
+    WHERE id = v_sale_item.id;
 
     -- ========================================================
-    -- RESTAURAR STOCK CENTRAL
+    -- RESTAURAR INVENTARIO CENTRAL
     -- ========================================================
 
-    INSERT INTO public.shared_inventory (
-      product_id,
-      variant_id,
-      stock,
-      reserved_stock,
-      min_stock,
-      max_stock
-    )
-    VALUES (
-      v_product_id,
-      v_variant_id,
-      v_quantity,
-      0,
-      0,
-      0
-    )
-    ON CONFLICT (
-      product_id,
-      COALESCE(
-        variant_id,
-        '00000000-0000-0000-0000-000000000000'::uuid
-      )
-    )
-    DO UPDATE SET
-      stock =
-        public.shared_inventory.stock
-        +
-        EXCLUDED.stock,
-      updated_at =
-        now();
-
+    PERFORM public.return_shared_stock(
+      v_sale_item.product_id,
+      v_sale_item.variant_id,
+      v_requested_qty
+    );
 
     -- ========================================================
     -- REGISTRAR MOVIMIENTO
@@ -384,112 +286,108 @@ BEGIN
       created_by
     )
     VALUES (
-      v_branch_id,
-      v_product_id,
-      v_variant_id,
+      v_sale.branch_id,
+      v_sale_item.product_id,
+      v_sale_item.variant_id,
       'return',
-      v_quantity,
+      v_requested_qty,
       _sale_id,
       'sale_refund',
       COALESCE(
-        v_reason,
+        _reason,
         'Devolución de venta'
       ),
-      v_user_id
+      uid
     );
 
+    -- ========================================================
+    -- CALCULAR IMPORTE DEVUELTO
+    -- ========================================================
 
-    v_total_items :=
-      v_total_items + 1;
+    v_total_refund :=
+      v_total_refund
+      +
+      (
+        CASE
+          WHEN v_sale_item.quantity > 0
+          THEN
+            (
+              v_sale_item.total
+              / v_sale_item.quantity
+            )
+            * v_requested_qty
+          ELSE 0
+        END
+      );
 
   END LOOP;
 
-
   -- ==========================================================
-  -- DETERMINAR NUEVO ESTADO DE LA VENTA
-  -- ==========================================================
-
-  SELECT
-    COUNT(*),
-    COUNT(*) FILTER (
-      WHERE
-        COALESCE(
-          returned_quantity,
-          0
-        ) >= quantity
-    )
-  INTO
-    v_total_items,
-    v_total_returned_items
-  FROM public.sale_items
-  WHERE sale_id = _sale_id;
-
-
-  IF v_total_items > 0
-     AND v_total_returned_items =
-         v_total_items THEN
-
-    UPDATE public.sales
-    SET
-      status = 'refunded',
-      notes =
-        CASE
-          WHEN v_reason IS NULL THEN
-            notes
-          WHEN notes IS NULL
-               OR BTRIM(notes) = '' THEN
-            'Devolución: ' || v_reason
-          ELSE
-            notes ||
-            E'\nDevolución: ' ||
-            v_reason
-        END,
-      updated_at = now()
-    WHERE id = _sale_id;
-
-
-  ELSE
-
-    UPDATE public.sales
-    SET
-      status = 'partially_refunded',
-      notes =
-        CASE
-          WHEN v_reason IS NULL THEN
-            notes
-          WHEN notes IS NULL
-               OR BTRIM(notes) = '' THEN
-            'Devolución parcial: ' ||
-            v_reason
-          ELSE
-            notes ||
-            E'\nDevolución parcial: ' ||
-            v_reason
-        END,
-      updated_at = now()
-    WHERE id = _sale_id;
-
-  END IF;
-
-
-  -- ==========================================================
-  -- DEVOLVER LA VENTA ACTUALIZADA
+  -- VERIFICAR SI TODA LA VENTA YA FUE DEVUELTA
   -- ==========================================================
 
-  SELECT *
-  INTO v_sale
-  FROM public.sales
-  WHERE id = _sale_id;
+  SELECT NOT EXISTS (
+    SELECT 1
+    FROM public.sale_items si
+    WHERE si.sale_id = _sale_id
+      AND COALESCE(
+        si.returned_quantity,
+        0
+      ) < si.quantity
+  )
+  INTO v_all_returned;
 
+  -- ==========================================================
+  -- ACTUALIZAR ESTADO
+  -- ==========================================================
+
+  UPDATE public.sales
+  SET
+    status =
+      CASE
+        WHEN v_all_returned
+        THEN 'refunded'::public.sale_status
+
+        ELSE
+          'partially_refunded'::public.sale_status
+      END,
+
+    notes =
+      CASE
+        WHEN _reason IS NULL
+          OR trim(_reason) = ''
+        THEN notes
+
+        WHEN notes IS NULL
+          OR trim(notes) = ''
+        THEN
+          'Devolución: '
+          || trim(_reason)
+
+        ELSE
+          notes
+          || ' | Devolución: '
+          || trim(_reason)
+      END,
+
+    updated_at = now()
+
+  WHERE id = _sale_id
+
+  RETURNING *
+  INTO v_sale;
+
+  -- ==========================================================
+  -- DEVOLVER VENTA ACTUALIZADA
+  -- ==========================================================
 
   RETURN v_sale;
 
 END;
 $$;
 
-
 -- ============================================================
--- 5. PERMISOS
+-- 5. PERMISO
 -- ============================================================
 
 GRANT EXECUTE
@@ -500,42 +398,55 @@ ON FUNCTION public.refund_sale(
 )
 TO authenticated;
 
-
 -- ============================================================
 -- 6. DOCUMENTACIÓN
 -- ============================================================
+
+COMMENT ON COLUMN public.sale_items.returned_quantity IS
+'LULA OS: cantidad de unidades de esta partida que ya fueron devueltas.';
 
 COMMENT ON FUNCTION public.refund_sale(
   uuid,
   jsonb,
   text
-)
-IS
-'LULA OS: registra devoluciones parciales o totales, controla returned_quantity, restaura shared_inventory y actualiza el estado de la venta.';
-
+) IS
+'LULA OS: registra devolución parcial o total y restaura existencia en shared_inventory.';
 
 -- ============================================================
--- 7. VALIDACIÓN FINAL
+-- 7. ASEGURAR CONSISTENCIA
 -- ============================================================
 
-DO $$
+CREATE OR REPLACE FUNCTION public.validate_sale_item_returned_quantity()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
 BEGIN
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM information_schema.columns
-    WHERE table_schema = 'public'
-      AND table_name = 'sale_items'
-      AND column_name = 'returned_quantity'
-  ) THEN
-
+  IF NEW.returned_quantity < 0 THEN
     RAISE EXCEPTION
-      'La columna sale_items.returned_quantity no fue creada.';
-
+      'returned_quantity cannot be negative';
   END IF;
+
+  IF NEW.returned_quantity > NEW.quantity THEN
+    RAISE EXCEPTION
+      'returned_quantity cannot exceed quantity';
+  END IF;
+
+  RETURN NEW;
 
 END;
 $$;
 
+DROP TRIGGER IF EXISTS
+sale_items_validate_returned_quantity
+ON public.sale_items;
+
+CREATE TRIGGER
+sale_items_validate_returned_quantity
+BEFORE INSERT OR UPDATE
+ON public.sale_items
+FOR EACH ROW
+EXECUTE FUNCTION
+public.validate_sale_item_returned_quantity();
 
 COMMIT;
