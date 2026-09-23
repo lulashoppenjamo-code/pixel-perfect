@@ -1,6 +1,12 @@
 /**
- * Clientes — LULA OS (FASE 4)
+ * Clientes — LULA OS
  * CRUD + historial + saldo crédito + abonos
+ *
+ * IMPORTANTE:
+ * Los abonos se registran mediante RPC:
+ *   register_credit_payment()
+ *
+ * No se inserta directamente en credit_payments desde el frontend.
  */
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
@@ -8,15 +14,28 @@ import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Pencil, Trash2, Search, Wallet, Users } from "lucide-react";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { PageHeader, PageShell } from "@/components/PageHeader";
+
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+
+import {
+  PageHeader,
+  PageShell,
+} from "@/components/PageHeader";
+
 import {
   Table,
   TableBody,
@@ -25,6 +44,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
 import {
   Dialog,
   DialogContent,
@@ -32,6 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+
 import {
   Select,
   SelectContent,
@@ -39,12 +60,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { Badge } from "@/components/ui/badge";
 
 export const Route = createFileRoute("/_shell/clientes")({
   head: () => ({
     meta: [{ title: "Clientes — Lula OS" }],
   }),
+
   component: () => (
     <RequireNavAccess navKey="clientes">
       <ClientesPage />
@@ -60,104 +83,226 @@ type Form = {
   notes: string;
   address: string;
 };
-const empty: Form = { name: "", phone: "", email: "", notes: "", address: "" };
+
+const empty: Form = {
+  name: "",
+  phone: "",
+  email: "",
+  notes: "",
+  address: "",
+};
+
+type CustomerRow = {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  notes: string | null;
+  address?: string | null;
+};
+
+type SaleCustomerRow = {
+  customer_id: string | null;
+  total: number;
+  status: string;
+  payment_method: string;
+  created_at: string;
+};
+
+type CreditPaymentRow = {
+  customer_id: string;
+  amount: number;
+};
 
 function ClientesPage() {
-  const { isManager, user } = useAuth();
+  const { isManager } = useAuth();
   const { branchId } = useBranch();
   const qc = useQueryClient();
+
   const [form, setForm] = useState<Form>(empty);
   const [search, setSearch] = useState("");
-  const [payCustomerId, setPayCustomerId] = useState<string | null>(null);
+
+  const [payCustomerId, setPayCustomerId] =
+    useState<string | null>(null);
+
   const [payAmount, setPayAmount] = useState("");
   const [payMethod, setPayMethod] = useState("cash");
   const [payNotes, setPayNotes] = useState("");
 
-  const { data: customers = [], isLoading } = useQuery({
+  // ============================================================
+  // CLIENTES
+  // ============================================================
+
+  const {
+    data: customers = [],
+    isLoading,
+  } = useQuery<CustomerRow[]>({
     queryKey: ["customers"],
+
     queryFn: async () => {
-      const { data, error } = await supabase.from("customers").select("*").order("name");
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .order("name");
+
       if (error) throw error;
-      return data ?? [];
+
+      return (data ?? []) as CustomerRow[];
     },
   });
 
-  const { data: salesByCustomer = [] } = useQuery({
+  // ============================================================
+  // VENTAS POR CLIENTE
+  // ============================================================
+
+  const {
+    data: salesByCustomer = [],
+  } = useQuery<SaleCustomerRow[]>({
     queryKey: ["customer-sales-agg"],
+
     queryFn: async () => {
       const { data, error } = await supabase
         .from("sales")
-        .select("customer_id, total, status, payment_method, created_at")
+        .select(
+          "customer_id, total, status, payment_method, created_at",
+        )
         .not("customer_id", "is", null)
-        .in("status", ["completed", "partially_refunded"]);
+        .in("status", [
+          "completed",
+          "partially_refunded",
+        ]);
+
       if (error) throw error;
-      return data ?? [];
+
+      return (data ?? []) as SaleCustomerRow[];
     },
   });
 
-  const { data: creditPayments = [] } = useQuery({
+  // ============================================================
+  // ABONOS
+  // ============================================================
+
+  const {
+    data: creditPayments = [],
+  } = useQuery<CreditPaymentRow[]>({
     queryKey: ["credit-payments"],
+
     queryFn: async () => {
       const { data, error } = await supabase
         .from("credit_payments")
         .select("customer_id, amount");
+
       if (error) {
-        if (error.message?.includes("does not exist") || error.code === "42P01") {
+        if (
+          error.message?.includes("does not exist") ||
+          error.code === "42P01"
+        ) {
           return [];
         }
+
         throw error;
       }
-      return data ?? [];
+
+      return (data ?? []) as CreditPaymentRow[];
     },
   });
+
+  // ============================================================
+  // ESTADÍSTICAS
+  // ============================================================
 
   const stats = useMemo(() => {
     const map = new Map<
       string,
-      { count: number; total: number; credit: number; last: string | null }
-    >();
-    for (const s of salesByCustomer) {
-      if (!s.customer_id) continue;
-      const cur = map.get(s.customer_id) ?? {
-        count: 0,
-        total: 0,
-        credit: 0,
-        last: null,
-      };
-      cur.count += 1;
-      cur.total += Number(s.total);
-      if (s.payment_method === "credit") {
-        cur.credit += Number(s.total);
+      {
+        count: number;
+        total: number;
+        credit: number;
+        last: string | null;
       }
-      if (!cur.last || s.created_at > cur.last) cur.last = s.created_at;
-      map.set(s.customer_id, cur);
+    >();
+
+    for (const sale of salesByCustomer) {
+      if (!sale.customer_id) continue;
+
+      const current =
+        map.get(sale.customer_id) ?? {
+          count: 0,
+          total: 0,
+          credit: 0,
+          last: null,
+        };
+
+      current.count += 1;
+      current.total += Number(sale.total ?? 0);
+
+      if (sale.payment_method === "credit") {
+        current.credit += Number(sale.total ?? 0);
+      }
+
+      if (
+        !current.last ||
+        sale.created_at > current.last
+      ) {
+        current.last = sale.created_at;
+      }
+
+      map.set(sale.customer_id, current);
     }
+
     const paid = new Map<string, number>();
-    for (const p of creditPayments) {
-      paid.set(p.customer_id, (paid.get(p.customer_id) ?? 0) + Number(p.amount));
+
+    for (const payment of creditPayments) {
+      paid.set(
+        payment.customer_id,
+        (paid.get(payment.customer_id) ?? 0) +
+          Number(payment.amount ?? 0),
+      );
     }
-    for (const [, st] of map) {
-      /* balance applied below per customer */
+
+    for (const [customerId, current] of map) {
+      current.credit = Math.max(
+        0,
+        current.credit -
+          (paid.get(customerId) ?? 0),
+      );
     }
-    for (const [id, st] of map) {
-      st.credit = Math.max(0, st.credit - (paid.get(id) ?? 0));
-    }
+
     return map;
   }, [salesByCustomer, creditPayments]);
 
-  const filtered = customers.filter((c) => {
+  // ============================================================
+  // FILTRO
+  // ============================================================
+
+  const filtered = customers.filter((customer) => {
     if (!search.trim()) return true;
+
     const q = search.trim().toLowerCase();
+
     return (
-      c.name.toLowerCase().includes(q) ||
-      (c.phone ?? "").toLowerCase().includes(q) ||
-      (c.email ?? "").toLowerCase().includes(q)
+      customer.name
+        .toLowerCase()
+        .includes(q) ||
+      (customer.phone ?? "")
+        .toLowerCase()
+        .includes(q) ||
+      (customer.email ?? "")
+        .toLowerCase()
+        .includes(q)
     );
   });
 
+  // ============================================================
+  // CREAR / ACTUALIZAR CLIENTE
+  // ============================================================
+
   const save = useMutation({
     mutationFn: async () => {
-      if (!form.name.trim()) throw new Error("Nombre requerido");
+      if (!form.name.trim()) {
+        throw new Error("Nombre requerido");
+      }
+
       const payload = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
@@ -167,66 +312,197 @@ function ClientesPage() {
       };
 
       if (form.id) {
-        const { error } = await supabase.from("customers").update(payload).eq("id", form.id);
+        const { error } = await supabase
+          .from("customers")
+          .update(payload)
+          .eq("id", form.id);
+
         if (error) throw error;
-      } else {
-        const { error } = await supabase.from("customers").insert(payload);
-        if (error) throw error;
+
+        return;
       }
+
+      const { error } = await supabase
+        .from("customers")
+        .insert(payload);
+
+      if (error) throw error;
     },
+
     onSuccess: () => {
-      toast.success(form.id ? "Cliente actualizado" : "Cliente creado");
+      toast.success(
+        form.id
+          ? "Cliente actualizado"
+          : "Cliente creado",
+      );
+
       setForm(empty);
-      void qc.invalidateQueries({ queryKey: ["customers"] });
-      void qc.invalidateQueries({ queryKey: ["pos-customers"] });
+
+      void qc.invalidateQueries({
+        queryKey: ["customers"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["pos-customers"],
+      });
     },
-    onError: (e: Error) => toast.error(e.message),
+
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
   });
+
+  // ============================================================
+  // ELIMINAR CLIENTE
+  // ============================================================
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("customers").delete().eq("id", id);
+      const { error } = await supabase
+        .from("customers")
+        .delete()
+        .eq("id", id);
+
       if (error) throw error;
     },
+
     onSuccess: () => {
       toast.success("Cliente eliminado");
-      void qc.invalidateQueries({ queryKey: ["customers"] });
+
+      void qc.invalidateQueries({
+        queryKey: ["customers"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["pos-customers"],
+      });
     },
-    onError: (e: Error) => toast.error(e.message),
+
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
   });
+
+  // ============================================================
+  // REGISTRAR ABONO
+  //
+  // IMPORTANTE:
+  // Ya NO hacemos:
+  //
+  // supabase.from("credit_payments").insert(...)
+  //
+  // Todo pasa por register_credit_payment().
+  // ============================================================
 
   const registerPayment = useMutation({
     mutationFn: async () => {
-      if (!payCustomerId) throw new Error("Sin cliente");
+      if (!payCustomerId) {
+        throw new Error("Selecciona un cliente");
+      }
+
       const amount = Number(payAmount);
-      if (!Number.isFinite(amount) || amount <= 0) throw new Error("Monto inválido");
-      const { error } = await supabase.from("credit_payments").insert({
-        customer_id: payCustomerId,
-        amount,
-        payment_method: payMethod,
-        notes: payNotes.trim() || null,
-        branch_id: branchId,
-        created_by: user?.id ?? null,
-      });
+
+      if (
+        !Number.isFinite(amount) ||
+        amount <= 0
+      ) {
+        throw new Error(
+          "El monto debe ser mayor a cero",
+        );
+      }
+
+      if (
+        !["cash", "card", "transfer"].includes(
+          payMethod,
+        )
+      ) {
+        throw new Error(
+          "Método de pago inválido",
+        );
+      }
+
+      const { data, error } =
+        await (supabase as any).rpc(
+          "register_credit_payment",
+          {
+            _customer_id: payCustomerId,
+            _amount: amount,
+            _payment_method: payMethod,
+            _branch_id: branchId ?? null,
+            _cash_session_id: null,
+            _notes:
+              payNotes.trim() || null,
+          },
+        );
+
       if (error) {
-        if (error.message?.includes("does not exist") || error.code === "42P01") {
-          throw new Error(
-            "Tabla credit_payments no existe. Ejecuta la migración SQL en supabase/migrations/",
-          );
-        }
         throw error;
       }
+
+      return data;
     },
+
     onSuccess: () => {
-      toast.success("Abono registrado");
+      toast.success("Abono registrado correctamente");
+
       setPayCustomerId(null);
       setPayAmount("");
+      setPayMethod("cash");
       setPayNotes("");
-      void qc.invalidateQueries({ queryKey: ["credit-payments"] });
-      void qc.invalidateQueries({ queryKey: ["customer-sales-agg"] });
+
+      void qc.invalidateQueries({
+        queryKey: ["credit-payments"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["customer-sales-agg"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["customers"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["cash-session"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["cash-movements"],
+      });
     },
-    onError: (e: Error) => toast.error(e.message),
+
+    onError: (error: Error) => {
+      const message =
+        error.message ||
+        "No se pudo registrar el abono";
+
+      toast.error(message);
+    },
   });
+
+  // ============================================================
+  // CLIENTE SELECCIONADO PARA ABONO
+  // ============================================================
+
+  const paymentCustomer = useMemo(() => {
+    if (!payCustomerId) return null;
+
+    return (
+      customers.find(
+        (customer) =>
+          customer.id === payCustomerId,
+      ) ?? null
+    );
+  }, [customers, payCustomerId]);
+
+  const paymentCustomerBalance =
+    payCustomerId
+      ? stats.get(payCustomerId)?.credit ?? 0
+      : 0;
+
+  // ============================================================
+  // UI
+  // ============================================================
 
   return (
     <PageShell>
@@ -237,113 +513,222 @@ function ClientesPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* ======================================================
+            FORMULARIO CLIENTE
+        ====================================================== */}
+
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">
-              {form.id ? "Editar cliente" : "Nuevo cliente"}
+              {form.id
+                ? "Editar cliente"
+                : "Nuevo cliente"}
             </CardTitle>
           </CardHeader>
+
           <CardContent className="space-y-3">
             <div>
               <Label>Nombre</Label>
+
               <Input
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
               />
             </div>
+
             <div>
               <Label>Teléfono</Label>
+
               <Input
                 value={form.phone}
-                onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    phone: event.target.value,
+                  }))
+                }
               />
             </div>
+
             <div>
               <Label>Correo</Label>
+
               <Input
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    email: event.target.value,
+                  }))
+                }
               />
             </div>
+
             <div>
               <Label>Dirección</Label>
+
               <Input
                 value={form.address}
-                onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                placeholder="Opcional (requiere migración)"
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    address: event.target.value,
+                  }))
+                }
+                placeholder="Opcional"
               />
             </div>
+
             <div>
               <Label>Notas</Label>
+
               <Input
                 value={form.notes}
-                onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                onChange={(event) =>
+                  setForm((current) => ({
+                    ...current,
+                    notes: event.target.value,
+                  }))
+                }
               />
             </div>
+
             <div className="flex gap-2">
               {form.id && (
-                <Button variant="outline" className="flex-1" onClick={() => setForm(empty)}>
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() =>
+                    setForm(empty)
+                  }
+                >
                   Cancelar
                 </Button>
               )}
+
               <Button
                 className="flex-1"
                 disabled={save.isPending}
-                onClick={() => save.mutate()}
+                onClick={() =>
+                  save.mutate()
+                }
               >
-                {save.isPending ? "Guardando…" : form.id ? "Actualizar" : "Crear"}
+                {save.isPending
+                  ? "Guardando…"
+                  : form.id
+                    ? "Actualizar"
+                    : "Crear"}
               </Button>
             </div>
           </CardContent>
         </Card>
 
+        {/* ======================================================
+            LISTADO
+        ====================================================== */}
+
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base">Listado</CardTitle>
+            <CardTitle className="text-base">
+              Listado
+            </CardTitle>
+
             <div className="relative w-48">
               <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+
               <Input
                 className="h-8 pl-7"
                 placeholder="Buscar…"
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(event) =>
+                  setSearch(event.target.value)
+                }
               />
             </div>
           </CardHeader>
+
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nombre</TableHead>
-                  <TableHead>Teléfono</TableHead>
-                  <TableHead className="text-right">Compras</TableHead>
-                  <TableHead className="text-right">Total</TableHead>
-                  <TableHead className="text-right">Saldo crédito</TableHead>
-                  <TableHead className="text-right">Acciones</TableHead>
+                  <TableHead>
+                    Nombre
+                  </TableHead>
+
+                  <TableHead>
+                    Teléfono
+                  </TableHead>
+
+                  <TableHead className="text-right">
+                    Compras
+                  </TableHead>
+
+                  <TableHead className="text-right">
+                    Total
+                  </TableHead>
+
+                  <TableHead className="text-right">
+                    Saldo crédito
+                  </TableHead>
+
+                  <TableHead className="text-right">
+                    Acciones
+                  </TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
-                {filtered.map((c) => {
-                  const st = stats.get(c.id);
-                  const balance = st?.credit ?? 0;
+                {filtered.map((customer) => {
+                  const stat =
+                    stats.get(customer.id);
+
+                  const balance =
+                    stat?.credit ?? 0;
+
                   return (
-                    <TableRow key={c.id}>
-                      <TableCell className="font-medium">{c.name}</TableCell>
-                      <TableCell className="text-sm">{c.phone ?? "—"}</TableCell>
-                      <TableCell className="text-right">{st?.count ?? 0}</TableCell>
-                      <TableCell className="text-right font-medium">
-                        {money(st?.total ?? 0)}
+                    <TableRow
+                      key={customer.id}
+                    >
+                      <TableCell className="font-medium">
+                        {customer.name}
                       </TableCell>
+
+                      <TableCell className="text-sm">
+                        {customer.phone ?? "—"}
+                      </TableCell>
+
                       <TableCell className="text-right">
-                        {balance > 0 ? (
-                          <Badge variant="destructive">{money(balance)}</Badge>
-                        ) : (
-                          <span className="text-muted-foreground">$0</span>
+                        {stat?.count ?? 0}
+                      </TableCell>
+
+                      <TableCell className="text-right font-medium">
+                        {money(
+                          stat?.total ?? 0,
                         )}
                       </TableCell>
+
+                      <TableCell className="text-right">
+                        {balance > 0 ? (
+                          <Badge variant="destructive">
+                            {money(balance)}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            $0
+                          </span>
+                        )}
+                      </TableCell>
+
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
+                          {/* ABONO */}
+
                           {balance > 0 && (
                             <Button
                               size="icon"
@@ -351,38 +736,70 @@ function ClientesPage() {
                               className="h-8 w-8"
                               title="Registrar abono"
                               onClick={() => {
-                                setPayCustomerId(c.id);
-                                setPayAmount(String(balance));
+                                setPayCustomerId(
+                                  customer.id,
+                                );
+
+                                setPayAmount(
+                                  balance.toFixed(
+                                    2,
+                                  ),
+                                );
+
+                                setPayMethod(
+                                  "cash",
+                                );
+
+                                setPayNotes("");
                               }}
                             >
                               <Wallet className="h-3.5 w-3.5" />
                             </Button>
                           )}
+
+                          {/* EDITAR */}
+
                           <Button
                             size="icon"
                             variant="ghost"
                             className="h-8 w-8"
+                            title="Editar cliente"
                             onClick={() =>
                               setForm({
-                                id: c.id,
-                                name: c.name,
-                                phone: c.phone ?? "",
-                                email: c.email ?? "",
-                                notes: c.notes ?? "",
+                                id: customer.id,
+                                name:
+                                  customer.name,
+                                phone:
+                                  customer.phone ??
+                                  "",
+                                email:
+                                  customer.email ??
+                                  "",
+                                notes:
+                                  customer.notes ??
+                                  "",
                                 address:
-                                  ((c as { address?: string | null }).address as string) ??
+                                  customer.address ??
                                   "",
                               })
                             }
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </Button>
+
+                          {/* ELIMINAR */}
+
                           {isManager && (
                             <Button
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8 text-destructive"
-                              onClick={() => remove.mutate(c.id)}
+                              title="Eliminar cliente"
+                              onClick={() =>
+                                remove.mutate(
+                                  customer.id,
+                                )
+                              }
                             >
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
@@ -392,62 +809,191 @@ function ClientesPage() {
                     </TableRow>
                   );
                 })}
-                {!isLoading && filtered.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6} className="py-10 text-center text-muted-foreground">
-                      Sin clientes.
-                    </TableCell>
-                  </TableRow>
-                )}
+
+                {!isLoading &&
+                  filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-10 text-center text-muted-foreground"
+                      >
+                        Sin clientes.
+                      </TableCell>
+                    </TableRow>
+                  )}
               </TableBody>
             </Table>
           </CardContent>
         </Card>
       </div>
 
-      <Dialog open={!!payCustomerId} onOpenChange={(o) => !o && setPayCustomerId(null)}>
+      {/* ========================================================
+          DIALOG ABONO
+      ======================================================== */}
+
+      <Dialog
+        open={!!payCustomerId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPayCustomerId(null);
+            setPayAmount("");
+            setPayMethod("cash");
+            setPayNotes("");
+          }
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Registrar abono</DialogTitle>
+            <DialogTitle>
+              Registrar abono
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+
+          <div className="space-y-4">
+            {/* CLIENTE */}
+
+            {paymentCustomer && (
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <div className="text-sm font-medium">
+                  {paymentCustomer.name}
+                </div>
+
+                {paymentCustomer.phone && (
+                  <div className="text-xs text-muted-foreground">
+                    {paymentCustomer.phone}
+                  </div>
+                )}
+
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    Saldo pendiente
+                  </span>
+
+                  <span className="font-semibold">
+                    {money(
+                      paymentCustomerBalance,
+                    )}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* MONTO */}
+
             <div>
               <Label>Monto</Label>
+
               <Input
                 type="number"
                 min="0.01"
+                max={
+                  paymentCustomerBalance > 0
+                    ? paymentCustomerBalance
+                    : undefined
+                }
                 step="0.01"
                 value={payAmount}
-                onChange={(e) => setPayAmount(e.target.value)}
+                onChange={(event) =>
+                  setPayAmount(
+                    event.target.value,
+                  )
+                }
               />
+
+              <p className="mt-1 text-xs text-muted-foreground">
+                Máximo permitido:{" "}
+                {money(
+                  paymentCustomerBalance,
+                )}
+              </p>
             </div>
+
+            {/* MÉTODO */}
+
             <div>
-              <Label>Método</Label>
-              <Select value={payMethod} onValueChange={setPayMethod}>
+              <Label>
+                Método de pago
+              </Label>
+
+              <Select
+                value={payMethod}
+                onValueChange={
+                  setPayMethod
+                }
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
-                  <SelectItem value="cash">Efectivo</SelectItem>
-                  <SelectItem value="card">Tarjeta</SelectItem>
-                  <SelectItem value="transfer">Transferencia</SelectItem>
+                  <SelectItem value="cash">
+                    Efectivo
+                  </SelectItem>
+
+                  <SelectItem value="card">
+                    Tarjeta
+                  </SelectItem>
+
+                  <SelectItem value="transfer">
+                    Transferencia
+                  </SelectItem>
                 </SelectContent>
               </Select>
+
+              {payMethod === "cash" && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  El sistema buscará automáticamente
+                  la caja abierta y registrará el
+                  efectivo como entrada.
+                </p>
+              )}
             </div>
+
+            {/* NOTAS */}
+
             <div>
               <Label>Notas</Label>
-              <Input value={payNotes} onChange={(e) => setPayNotes(e.target.value)} />
+
+              <Input
+                value={payNotes}
+                onChange={(event) =>
+                  setPayNotes(
+                    event.target.value,
+                  )
+                }
+                placeholder="Opcional"
+              />
             </div>
           </div>
+
           <DialogFooter>
-            <Button variant="outline" onClick={() => setPayCustomerId(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setPayCustomerId(null);
+                setPayAmount("");
+                setPayMethod("cash");
+                setPayNotes("");
+              }}
+            >
               Cancelar
             </Button>
+
             <Button
-              disabled={registerPayment.isPending}
-              onClick={() => registerPayment.mutate()}
+              disabled={
+                registerPayment.isPending ||
+                !payCustomerId ||
+                Number(payAmount) <= 0 ||
+                Number(payAmount) >
+                  paymentCustomerBalance
+              }
+              onClick={() =>
+                registerPayment.mutate()
+              }
             >
-              {registerPayment.isPending ? "Guardando…" : "Abonar"}
+              {registerPayment.isPending
+                ? "Registrando…"
+                : "Abonar"}
             </Button>
           </DialogFooter>
         </DialogContent>
