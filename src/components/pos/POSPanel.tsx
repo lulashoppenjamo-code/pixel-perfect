@@ -2032,6 +2032,61 @@ export function POSPanel({
 
   /*
    * =========================================================
+   * CANCELACIÓN DE VENTA (mismo turno)
+   * Usa la RPC real cancel_sale(uuid, text) definida en
+   * las migrations (shared stock).
+   * =========================================================
+   */
+
+  const cancelSale = useMutation({
+    mutationFn: async ({
+      saleId,
+      reason,
+    }: {
+      saleId: string;
+      reason?: string;
+    }) => {
+      const { data, error } = await supabase.rpc(
+        "cancel_sale",
+        {
+          _sale_id: saleId,
+          _reason: reason ?? "Cancelación desde POS",
+        },
+      );
+
+      if (error) throw error;
+      return data;
+    },
+
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: ["pos-recent-sales"],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["pos-products-shared"],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["pos-variant-inventory-shared"],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory"],
+      });
+      void qc.invalidateQueries({
+        queryKey: ["open-cash"],
+      });
+
+      toast.success("Venta cancelada. Stock restaurado.");
+    },
+
+    onError: (error: Error) => {
+      toast.error(
+        error.message || "No se pudo cancelar la venta",
+      );
+    },
+  });
+
+  /*
+   * =========================================================
    * AUTOFOCUS
    * =========================================================
    */
@@ -3176,21 +3231,65 @@ export function POSPanel({
                         </p>
                       </div>
 
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={
-                          reprintSale.isPending
-                        }
-                        onClick={() =>
-                          reprintSale.mutate(
-                            sale.id,
-                          )
-                        }
-                      >
-                        <Printer className="mr-1 h-3.5 w-3.5" />
-                        Ticket
-                      </Button>
+                      <div className="flex flex-col gap-1.5 sm:flex-row">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={
+                            reprintSale.isPending
+                          }
+                          onClick={() =>
+                            reprintSale.mutate(
+                              sale.id,
+                            )
+                          }
+                        >
+                          <Printer className="mr-1 h-3.5 w-3.5" />
+                          Ticket
+                        </Button>
+
+                        {sale.status ===
+                          "completed" && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            disabled={
+                              cancelSale.isPending
+                            }
+                            onClick={() => {
+                              const reason =
+                                window.prompt(
+                                  `Motivo de cancelación del folio #${sale.folio} (opcional):`,
+                                  "Error de cobro",
+                                );
+
+                              // null = usuario canceló el prompt
+                              if (
+                                reason === null
+                              ) {
+                                return;
+                              }
+
+                              if (
+                                !window.confirm(
+                                  `¿Cancelar la venta #${sale.folio}? Se restaurará el stock.`,
+                                )
+                              ) {
+                                return;
+                              }
+
+                              cancelSale.mutate({
+                                saleId: sale.id,
+                                reason:
+                                  reason.trim() ||
+                                  undefined,
+                              });
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   ),
                 )
