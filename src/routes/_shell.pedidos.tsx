@@ -754,4 +754,410 @@ function PedidosPage() {
                   >
                     Cargando pedidos...
                   </TableCell>
-                </
+                </TableRow>
+              )}
+
+              {!loadingOrders &&
+                orders.map((order) => (
+                  <TableRow key={order.id}>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {shortDate(
+                        order.created_at,
+                      )}
+                    </TableCell>
+
+                    <TableCell className="font-medium">
+                      {order.customer_name ??
+                        "Cliente online"}
+                    </TableCell>
+
+                    <TableCell className="text-sm">
+                      {order.customer_phone ??
+                        "—"}
+                    </TableCell>
+
+                    <TableCell className="max-w-[220px] truncate text-sm">
+                      {order.delivery_address ??
+                        "—"}
+                    </TableCell>
+
+                    <TableCell className="font-medium">
+                      {money(
+                        Number(order.total),
+                      )}
+                    </TableCell>
+
+                    <TableCell>
+                      {statusBadge(
+                        order.status,
+                      )}
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      {order.status !==
+                        "delivered" &&
+                        order.status !==
+                          "cancelled" &&
+                        isManager && (
+                          <div className="flex justify-end gap-1">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={
+                                fulfill.isPending ||
+                                cancel.isPending
+                              }
+                              onClick={() =>
+                                fulfill.mutate(
+                                  order.id,
+                                )
+                              }
+                            >
+                              <Check className="mr-1 h-3.5 w-3.5" />
+                              Entregar
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive"
+                              disabled={
+                                fulfill.isPending ||
+                                cancel.isPending
+                              }
+                              onClick={() =>
+                                cancel.mutate(
+                                  order.id,
+                                )
+                              }
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              Cancelar
+                            </Button>
+                          </div>
+                        )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+
+              {!loadingOrders &&
+                orders.length === 0 && (
+                  <TableRow>
+                    <TableCell
+                      colSpan={7}
+                      className="py-10 text-center text-muted-foreground"
+                    >
+                      Aún no hay pedidos
+                      online.
+                    </TableCell>
+                  </TableRow>
+                )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog
+        open={createOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeCreateDialog();
+          } else {
+            setCreateOpen(true);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Nuevo pedido online
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>Cliente</Label>
+
+                <Input
+                  value={customerName}
+                  onChange={(event) =>
+                    setCustomerName(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Nombre del cliente"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Teléfono</Label>
+
+                <Input
+                  value={customerPhone}
+                  onChange={(event) =>
+                    setCustomerPhone(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="Teléfono / WhatsApp"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>
+                Dirección de entrega
+              </Label>
+
+              <Input
+                value={address}
+                onChange={(event) =>
+                  setAddress(
+                    event.target.value,
+                  )
+                }
+                placeholder="Dirección"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Notas</Label>
+
+              <Input
+                value={notes}
+                onChange={(event) =>
+                  setNotes(
+                    event.target.value,
+                  )
+                }
+                placeholder="Notas del pedido"
+              />
+            </div>
+
+            <div className="rounded-lg border p-3">
+              <div className="mb-3 font-medium">
+                Agregar productos
+              </div>
+
+              <div className="flex gap-2">
+                <Select
+                  value={pickProduct}
+                  onValueChange={
+                    setPickProduct
+                  }
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue
+                      placeholder={
+                        loadingProducts ||
+                        loadingInventory
+                          ? "Cargando..."
+                          : "Seleccionar producto"
+                      }
+                    />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {selectableProducts.map(
+                      (product) => {
+                        const stock =
+                          stockByProduct.get(
+                            product.id,
+                          ) ?? 0;
+
+                        return (
+                          <SelectItem
+                            key={
+                              product.id
+                            }
+                            value={
+                              product.id
+                            }
+                          >
+                            {product.name} —{" "}
+                            {money(
+                              product.price,
+                            )}{" "}
+                            · Stock: {stock}
+                          </SelectItem>
+                        );
+                      },
+                    )}
+
+                    {selectableProducts.length ===
+                      0 && (
+                      <SelectItem
+                        value="__none__"
+                        disabled
+                      >
+                        No hay productos con
+                        existencia
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+
+                <Input
+                  className="w-20"
+                  type="number"
+                  min="1"
+                  value={pickQty}
+                  onChange={(event) =>
+                    setPickQty(
+                      event.target.value,
+                    )
+                  }
+                />
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={addLine}
+                  disabled={
+                    !pickProduct ||
+                    pickProduct ===
+                      "__none__"
+                  }
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="rounded-lg border">
+              {lines.length === 0 ? (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  Agrega productos al
+                  pedido.
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {lines.map((line) => (
+                    <div
+                      key={
+                        line.product_id
+                      }
+                      className="flex items-center gap-3 p-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">
+                          {line.name}
+                        </div>
+
+                        <div className="text-xs text-muted-foreground">
+                          {money(
+                            line.unit_price,
+                          )}{" "}
+                          c/u · disponible{" "}
+                          {
+                            line.available_stock
+                          }
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8"
+                          onClick={() =>
+                            decreaseLine(
+                              line.product_id,
+                            )
+                          }
+                        >
+                          <Minus className="h-3.5 w-3.5" />
+                        </Button>
+
+                        <span className="w-8 text-center text-sm font-medium">
+                          {line.quantity}
+                        </span>
+
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="outline"
+                          className="h-8 w-8"
+                          onClick={() =>
+                            increaseLine(
+                              line.product_id,
+                            )
+                          }
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+
+                      <div className="w-24 text-right font-medium">
+                        {money(
+                          line.unit_price *
+                            line.quantity,
+                        )}
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() =>
+                          removeLine(
+                            line.product_id,
+                          )
+                        }
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {lines.length > 0 && (
+              <div className="flex items-center justify-between rounded-lg bg-muted p-4">
+                <span className="font-medium">
+                  Total del pedido
+                </span>
+
+                <span className="text-xl font-bold">
+                  {money(orderTotal)}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={
+                closeCreateDialog
+              }
+              disabled={
+                createOrder.isPending
+              }
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              disabled={
+                createOrder.isPending ||
+                !lines.length
+              }
+              onClick={() =>
+                createOrder.mutate()
+              }
+            >
+              {createOrder.isPending
+                ? "Creando..."
+                : "Crear pedido y reservar stock"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </PageShell>
+  );
+}
