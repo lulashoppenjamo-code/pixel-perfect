@@ -258,3 +258,40 @@ Cada sesión debe:
 8. agregar una entrada aquí.
 
 Nunca borrar historial.
+---
+
+2026-09-23 — Grok (xAI)
+
+F3 — POS — CANCELACIÓN DE VENTA DESBLOQUEADA
+
+Hallazgo:
+La RPC public.cancel_sale(uuid, text) ya existía en las migrations
+(última versión en 20260922270000_lula_os_parte6_10_motor_final.sql).
+Usa return_shared_stock. El bloqueo documentado por sesiones anteriores
+era incorrecto: el cuerpo estaba en el repositorio.
+
+Modificado:
+- src/components/pos/POSPanel.tsx
+
+Implementado:
+- Mutation cancelSale que llama a supabase.rpc("cancel_sale").
+- Botón "Cancelar" en el diálogo de ventas recientes (solo status=completed).
+- Prompt de motivo + confirmación de seguridad.
+- Invalidación de queries de stock compartido, productos POS, caja e historial.
+
+No se inventó ninguna RPC, tabla ni columna.
+No se tocó create_sale ni el flujo de cobro.
+No se modificó inventario legacy.
+
+Validación pendiente: tsc/build una vez que node_modules termine de instalarse.
+
+---
+
+2026-09-23 — Grok (xAI) continuación
+
+F3 — POS — CERRADA
+
+- Cancelación de venta implementada y entregada (código completo de POSPanel.tsx).
+- Tipado de cancel_sale agregado a types.ts.
+- F3 marcada como TERMINADA.
+- Siguiente foco: Reportes + CEO + verificación de inventario físico.
