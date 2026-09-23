@@ -825,6 +825,7 @@ export type Database = {
       }
       sale_items: {
         Row: {
+          cost_total: number | null
           created_at: string
           discount: number
           id: string
@@ -838,6 +839,7 @@ export type Database = {
           variant_id: string | null
         }
         Insert: {
+          cost_total?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -851,6 +853,7 @@ export type Database = {
           variant_id?: string | null
         }
         Update: {
+          cost_total?: number | null
           created_at?: string
           discount?: number
           id?: string
