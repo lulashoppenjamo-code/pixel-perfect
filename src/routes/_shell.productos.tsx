@@ -1124,4 +1124,4 @@ function ProductosPage() {
       </Tabs>
     </PageShell>
   );
-}
+} 
