@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   AlertTriangle,
   ClipboardList,
-  Package,
   FileSpreadsheet,
   Boxes,
+  Package,
 } from "lucide-react";
+
+import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import {
@@ -17,22 +18,27 @@ import {
   setSharedInventoryLimits,
 } from "@/lib/sharedInventory";
 import { shortDate } from "@/lib/format";
+
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+
 import { PageHeader, PageShell } from "@/components/PageHeader";
+
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+
 import {
   Table,
   TableBody,
@@ -41,6 +47,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
 import {
   Select,
   SelectContent,
@@ -48,14 +55,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+
 import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
 
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
     meta: [
-      { title: "Inventario — Lula OS" },
+      {
+        title: "Inventario — Lula OS",
+      },
       {
         name: "description",
         content:
@@ -63,6 +74,7 @@ export const Route = createFileRoute("/_shell/inventario")({
       },
     ],
   }),
+
   component: () => (
     <RequireNavAccess navKey="inventario">
       <InventarioPage />
@@ -70,27 +82,11 @@ export const Route = createFileRoute("/_shell/inventario")({
   ),
 });
 
-type SharedRow = {
-  id: string;
-  product_id: string;
-  variant_id: string | null;
-  product_name: string;
-  sku: string | null;
-  barcode: string | null;
-  price: number;
-  cost: number;
-  image_url: string | null;
-  emoji: string | null;
-  is_active: boolean;
-  stock: number;
-  reserved_stock: number;
-  available_stock: number;
-  min_stock: number;
-  max_stock: number | null;
-  stock_status: string;
-};
+type InventoryRow = Awaited<
+  ReturnType<typeof getSharedInventory>
+>[number];
 
-const MOV_LABEL: Record<string, string> = {
+const MOVEMENT_LABELS: Record<string, string> = {
   sale: "Venta",
   return: "Devolución",
   purchase: "Compra",
@@ -101,59 +97,78 @@ const MOV_LABEL: Record<string, string> = {
 };
 
 function InventarioPage() {
-  const { isManager } = useAuth();
-  const qc = useQueryClient();
+  const { isManager, profile } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [adjProduct, setAdjProduct] = useState("");
-  const [adjQty, setAdjQty] = useState("");
-  const [adjNotes, setAdjNotes] = useState("");
-  const [adjDir, setAdjDir] = useState<"in" | "out">("in");
+  /*
+   * IMPORTANTE:
+   * El inventario es global/compartido.
+   *
+   * branchId únicamente identifica qué sucursal/usuario
+   * realizó un movimiento para efectos de auditoría.
+   *
+   * NO se utiliza para seleccionar una existencia.
+   */
+  const branchId = profile?.branch_id ?? null;
 
-  const [limProduct, setLimProduct] = useState("");
-  const [limMin, setLimMin] = useState("0");
-  const [limMax, setLimMax] = useState("");
+  const [adjustProduct, setAdjustProduct] = useState("");
+  const [adjustQuantity, setAdjustQuantity] = useState("");
+  const [adjustNotes, setAdjustNotes] = useState("");
+  const [adjustDirection, setAdjustDirection] =
+    useState<"in" | "out">("in");
 
-  const [countMap, setCountMap] = useState<Record<string, string>>({});
+  const [limitProduct, setLimitProduct] = useState("");
+  const [limitMin, setLimitMin] = useState("0");
+  const [limitMax, setLimitMax] = useState("");
+
+  const [physicalCount, setPhysicalCount] = useState<
+    Record<string, string>
+  >({});
+
   const [countFilter, setCountFilter] = useState("");
 
-  const invalidate = () => {
-    void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
-    void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
-    void qc.invalidateQueries({
+  const invalidateInventory = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["shared-inventory"],
+    });
+
+    void queryClient.invalidateQueries({
+      queryKey: ["pos-products-shared"],
+    });
+
+    void queryClient.invalidateQueries({
       queryKey: ["pos-variant-inventory-shared"],
     });
-    void qc.invalidateQueries({
+
+    void queryClient.invalidateQueries({
       queryKey: ["inventory-movements"],
     });
   };
 
+  /*
+   * ============================================================
+   * INVENTARIO CENTRAL
+   * ============================================================
+   */
+
   const {
-    data: rows = [],
-    isLoading,
+    data: inventory = [],
+    isLoading: inventoryLoading,
     error: inventoryError,
   } = useQuery({
     queryKey: ["shared-inventory"],
     queryFn: getSharedInventory,
   });
 
-  const { data: movements = [] } = useQuery({
-    queryKey: ["inventory-movements"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("inventory_movements")
-        .select(
-          "id, type, quantity, notes, created_at, products(name)",
-        )
-        .order("created_at", { ascending: false })
-        .limit(100);
-
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+  /*
+   * ============================================================
+   * PRODUCTOS
+   * ============================================================
+   */
 
   const { data: products = [] } = useQuery({
     queryKey: ["inv-products-shared"],
+
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
@@ -161,203 +176,408 @@ function InventarioPage() {
         .eq("is_active", true)
         .order("name");
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
+
       return data ?? [];
     },
   });
 
-  const lowStock = useMemo(
-    () =>
-      rows.filter(
-        (r) =>
-          Number(r.available_stock) <= Number(r.min_stock),
-      ),
-    [rows],
-  );
+  /*
+   * ============================================================
+   * MOVIMIENTOS
+   * ============================================================
+   *
+   * Aquí sí conservamos el historial de movimientos.
+   * La existencia sigue siendo shared_inventory.
+   */
+
+  const { data: movements = [] } = useQuery({
+    queryKey: ["inventory-movements"],
+
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory_movements")
+        .select(
+          "id, type, quantity, notes, created_at, products(name)",
+        )
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(100);
+
+      if (error) {
+        throw error;
+      }
+
+      return data ?? [];
+    },
+  });
+
+  /*
+   * ============================================================
+   * PRODUCTOS BAJO MÍNIMO
+   * ============================================================
+   */
+
+  const lowStock = useMemo(() => {
+    return inventory.filter(
+      (row) =>
+        Number(row.available_stock) <=
+        Number(row.min_stock),
+    );
+  }, [inventory]);
+
+  /*
+   * ============================================================
+   * FILTRO DEL CONTEO
+   * ============================================================
+   */
 
   const countRows = useMemo(() => {
-    const q = countFilter.trim().toLowerCase();
+    const query = countFilter
+      .trim()
+      .toLowerCase();
 
-    if (!q) return rows;
+    if (!query) {
+      return inventory;
+    }
 
-    return rows.filter((r) => {
+    return inventory.filter((row) => {
       return (
-        r.product_name.toLowerCase().includes(q) ||
-        (r.sku ?? "").toLowerCase().includes(q) ||
-        (r.barcode ?? "").toLowerCase().includes(q)
+        row.product_name
+          .toLowerCase()
+          .includes(query) ||
+        (row.sku ?? "")
+          .toLowerCase()
+          .includes(query) ||
+        (row.barcode ?? "")
+          .toLowerCase()
+          .includes(query)
       );
     });
-  }, [rows, countFilter]);
+  }, [inventory, countFilter]);
 
-  const adjust = useMutation({
+  /*
+   * ============================================================
+   * AJUSTE DE INVENTARIO
+   * ============================================================
+   */
+
+  const adjustInventory = useMutation({
     mutationFn: async () => {
-      if (!adjProduct) {
-        throw new Error("Selecciona un producto");
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para ajustar inventario.",
+        );
       }
 
-      const quantity = Math.abs(Number(adjQty));
-
-      if (!quantity || quantity <= 0) {
-        throw new Error("Cantidad inválida");
+      if (!branchId) {
+        throw new Error(
+          "Tu usuario no tiene una sucursal asignada.",
+        );
       }
 
-      const signed =
-        adjDir === "in" ? quantity : -quantity;
+      if (!adjustProduct) {
+        throw new Error(
+          "Selecciona un producto.",
+        );
+      }
 
-      const { error } = await supabase.rpc("adjust_stock", {
-        _branch_id: null,
-        _product_id: adjProduct,
-        _variant_id: null,
-        _quantity: signed,
-        _notes:
-          adjNotes ||
-          (adjDir === "in"
-            ? "Ajuste entrada"
-            : "Ajuste salida"),
-      });
+      const quantity = Math.abs(
+        Number(adjustQuantity),
+      );
 
-      if (error) throw error;
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new Error(
+          "La cantidad debe ser mayor que cero.",
+        );
+      }
+
+      const signedQuantity =
+        adjustDirection === "in"
+          ? quantity
+          : -quantity;
+
+      const { error } = await supabase.rpc(
+        "adjust_stock",
+        {
+          /*
+           * branch_id NO determina dónde existe
+           * el inventario.
+           *
+           * Solo sirve para registrar quién/sucursal
+           * realizó el movimiento.
+           */
+          _branch_id: branchId,
+          _product_id: adjustProduct,
+          _variant_id: null,
+          _quantity: signedQuantity,
+          _notes:
+            adjustNotes ||
+            (adjustDirection === "in"
+              ? "Ajuste de entrada"
+              : "Ajuste de salida"),
+        },
+      );
+
+      if (error) {
+        throw error;
+      }
     },
+
     onSuccess: () => {
-      toast.success("Inventario compartido ajustado");
-      setAdjQty("");
-      setAdjNotes("");
-      invalidate();
+      toast.success(
+        "Inventario compartido ajustado correctamente.",
+      );
+
+      setAdjustQuantity("");
+      setAdjustNotes("");
+
+      invalidateInventory();
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
 
-  const setLimits = useMutation({
+  /*
+   * ============================================================
+   * MÍNIMOS Y MÁXIMOS
+   * ============================================================
+   */
+
+  const updateLimits = useMutation({
     mutationFn: async () => {
-      if (!limProduct) {
-        throw new Error("Selecciona un producto");
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para modificar límites.",
+        );
       }
 
-      const min = Number(limMin);
+      if (!limitProduct) {
+        throw new Error(
+          "Selecciona un producto.",
+        );
+      }
 
-      if (Number.isNaN(min) || min < 0) {
-        throw new Error("Mínimo inválido");
+      const min = Number(limitMin);
+
+      if (
+        !Number.isFinite(min) ||
+        min < 0
+      ) {
+        throw new Error(
+          "El mínimo no es válido.",
+        );
       }
 
       const max =
-        limMax.trim() === ""
+        limitMax.trim() === ""
           ? null
-          : Number(limMax);
+          : Number(limitMax);
 
       if (
         max !== null &&
-        (Number.isNaN(max) || max < 0)
+        (!Number.isFinite(max) || max < 0)
       ) {
-        throw new Error("Máximo inválido");
+        throw new Error(
+          "El máximo no es válido.",
+        );
+      }
+
+      if (
+        max !== null &&
+        max < min
+      ) {
+        throw new Error(
+          "El máximo no puede ser menor que el mínimo.",
+        );
       }
 
       await setSharedInventoryLimits(
-        limProduct,
+        limitProduct,
         null,
         min,
         max,
       );
     },
+
     onSuccess: () => {
-      toast.success("Límites actualizados");
-      invalidate();
+      toast.success(
+        "Límites de inventario actualizados.",
+      );
+
+      invalidateInventory();
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
 
-  const applyCount = useMutation({
+  /*
+   * ============================================================
+   * CONTEO FÍSICO
+   * ============================================================
+   *
+   * El usuario introduce la existencia real.
+   *
+   * Diferencia:
+   *
+   * contado - teórico = ajuste
+   *
+   * El ajuste entra al motor shared_inventory.
+   */
+
+  const applyPhysicalCount = useMutation({
     mutationFn: async () => {
       if (!isManager) {
-        throw new Error("Sin permisos");
+        throw new Error(
+          "No tienes permisos para aplicar un conteo.",
+        );
       }
 
-      const diffs: {
-        product_id: string;
-        delta: number;
+      if (!branchId) {
+        throw new Error(
+          "Tu usuario no tiene una sucursal asignada.",
+        );
+      }
+
+      const differences: {
+        productId: string;
+        difference: number;
         name: string;
       }[] = [];
 
-      for (const row of rows) {
-        if (row.variant_id) continue;
+      for (const row of inventory) {
+        /*
+         * En esta pantalla contamos productos base.
+         *
+         * Las variantes se manejan mediante sus propias
+         * existencias cuando se implementa el conteo
+         * específico de variantes.
+         */
+        if (row.variant_id) {
+          continue;
+        }
 
-        const raw = countMap[row.product_id];
+        const raw =
+          physicalCount[row.product_id];
 
-        if (raw === undefined || raw === "") {
+        if (
+          raw === undefined ||
+          raw === ""
+        ) {
           continue;
         }
 
         const counted = Number(raw);
 
-        if (Number.isNaN(counted) || counted < 0) {
+        if (
+          !Number.isFinite(counted) ||
+          counted < 0
+        ) {
+          throw new Error(
+            `Cantidad inválida: ${row.product_name}`,
+          );
+        }
+
+        const theoretical =
+          Number(row.stock);
+
+        const difference =
+          counted - theoretical;
+
+        if (difference === 0) {
           continue;
         }
 
-        const delta =
-          counted - Number(row.stock);
-
-        if (delta === 0) continue;
-
-        diffs.push({
-          product_id: row.product_id,
-          delta,
+        differences.push({
+          productId: row.product_id,
+          difference,
           name: row.product_name,
         });
       }
 
-      if (!diffs.length) {
+      if (!differences.length) {
         throw new Error(
-          "No hay diferencias para aplicar",
+          "No existen diferencias para aplicar.",
         );
       }
 
-      for (const diff of diffs) {
-        const { error } = await supabase.rpc(
-          "adjust_stock",
-          {
-            _branch_id: null,
-            _product_id: diff.product_id,
-            _variant_id: null,
-            _quantity: diff.delta,
-            _notes: `Conteo físico (${
-              diff.delta > 0 ? "+" : ""
-            }${diff.delta})`,
-          },
-        );
+      /*
+       * Aplicamos todos los ajustes mediante el motor
+       * oficial de inventario compartido.
+       */
+      for (const difference of differences) {
+        const { error } =
+          await supabase.rpc(
+            "adjust_stock",
+            {
+              _branch_id: branchId,
+              _product_id:
+                difference.productId,
+              _variant_id: null,
+              _quantity:
+                difference.difference,
+              _notes:
+                `Conteo físico (${
+                  difference.difference > 0
+                    ? "+"
+                    : ""
+                }${
+                  difference.difference
+                })`,
+            },
+          );
 
         if (error) {
           throw new Error(
-            `${diff.name}: ${error.message}`,
+            `${difference.name}: ${error.message}`,
           );
         }
       }
 
-      return diffs.length;
+      return differences.length;
     },
+
     onSuccess: (total) => {
       toast.success(
-        `Conteo aplicado: ${total} producto(s)`,
+        `Conteo aplicado: ${total} producto(s).`,
       );
-      setCountMap({});
-      invalidate();
+
+      setPhysicalCount({});
+
+      invalidateInventory();
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
   });
 
-  const productOptions = products.map((product) => (
-    <SelectItem
-      key={product.id}
-      value={product.id}
-    >
-      {product.name}
-      {product.sku ? ` (${product.sku})` : ""}
-    </SelectItem>
-  ));
+  /*
+   * ============================================================
+   * SELECT DE PRODUCTOS
+   * ============================================================
+   */
+
+  const productOptions = products.map(
+    (product) => (
+      <SelectItem
+        key={product.id}
+        value={product.id}
+      >
+        {product.name}
+        {product.sku
+          ? ` (${product.sku})`
+          : ""}
+      </SelectItem>
+    ),
+  );
 
   return (
     <PageShell>
@@ -369,7 +589,7 @@ function InventarioPage() {
           lowStock.length > 0 ? (
             <Badge
               variant="destructive"
-              className="w-fit gap-1"
+              className="gap-1"
             >
               <AlertTriangle className="h-3.5 w-3.5" />
               {lowStock.length} bajo mínimo
@@ -416,6 +636,10 @@ function InventarioPage() {
           </TabsTrigger>
         </TabsList>
 
+        {/* ================================================== */}
+        {/* EXISTENCIAS                                       */}
+        {/* ================================================== */}
+
         <TabsContent
           value="existencias"
           className="mt-4"
@@ -425,9 +649,11 @@ function InventarioPage() {
               <CardTitle className="text-base">
                 Existencias compartidas
               </CardTitle>
+
               <p className="text-xs text-muted-foreground">
-                El stock mostrado es único para las dos
-                sucursales.
+                Una sola existencia para ambas sucursales.
+                Las ventas, compras, devoluciones y ajustes
+                modifican este mismo stock.
               </p>
             </CardHeader>
 
@@ -435,22 +661,30 @@ function InventarioPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Producto</TableHead>
+                    <TableHead>
+                      Producto
+                    </TableHead>
+
                     <TableHead className="hidden sm:table-cell">
                       SKU
                     </TableHead>
+
                     <TableHead className="text-right">
                       Stock
                     </TableHead>
+
                     <TableHead className="text-right">
                       Reservado
                     </TableHead>
+
                     <TableHead className="text-right">
                       Disponible
                     </TableHead>
+
                     <TableHead className="hidden text-right sm:table-cell">
                       Mín.
                     </TableHead>
+
                     <TableHead className="text-right">
                       Estado
                     </TableHead>
@@ -458,100 +692,130 @@ function InventarioPage() {
                 </TableHeader>
 
                 <TableBody>
-                  {isLoading && (
+                  {inventoryLoading && (
                     <TableRow>
                       <TableCell
                         colSpan={7}
-                        className="py-10 text-center text-muted-foreground"
+                        className="py-10 text-center"
                       >
-                        Cargando...
+                        Cargando inventario...
                       </TableCell>
                     </TableRow>
                   )}
 
-                  {!isLoading &&
-                    rows.length === 0 && (
+                  {!inventoryLoading &&
+                    inventory.length === 0 && (
                       <TableRow>
                         <TableCell
                           colSpan={7}
                           className="py-10 text-center text-muted-foreground"
                         >
                           <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
+
                           Sin existencias registradas.
                         </TableCell>
                       </TableRow>
                     )}
 
-                  {rows.map((row) => {
-                    const low =
-                      Number(row.available_stock) <=
-                      Number(row.min_stock);
+                  {inventory.map(
+                    (row: InventoryRow) => {
+                      const isLow =
+                        Number(
+                          row.available_stock,
+                        ) <=
+                        Number(
+                          row.min_stock,
+                        );
 
-                    return (
-                      <TableRow
-                        key={`${row.product_id}-${row.variant_id ?? "base"}`}
-                        className={cn(
-                          low && "bg-destructive/5",
-                        )}
-                      >
-                        <TableCell className="max-w-[12rem] truncate font-medium sm:max-w-none">
-                          <span className="mr-1.5">
-                            {row.emoji ?? "📦"}
-                          </span>
+                      const isOut =
+                        Number(
+                          row.available_stock,
+                        ) <= 0;
 
-                          {row.product_name}
-
-                          {row.variant_id && (
-                            <Badge
-                              variant="outline"
-                              className="ml-2"
-                            >
-                              Variante
-                            </Badge>
+                      return (
+                        <TableRow
+                          key={`${row.product_id}-${
+                            row.variant_id ??
+                            "base"
+                          }`}
+                          className={cn(
+                            isLow &&
+                              "bg-destructive/5",
                           )}
-                        </TableCell>
+                        >
+                          <TableCell className="font-medium">
+                            {row.emoji ?? "📦"}{" "}
+                            {row.product_name}
 
-                        <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
-                          {row.sku ?? "—"}
-                        </TableCell>
+                            {row.variant_id && (
+                              <Badge
+                                variant="outline"
+                                className="ml-2"
+                              >
+                                Variante
+                              </Badge>
+                            )}
+                          </TableCell>
 
-                        <TableCell className="text-right font-semibold">
-                          {Number(row.stock)}
-                        </TableCell>
+                          <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
+                            {row.sku ?? "—"}
+                          </TableCell>
 
-                        <TableCell className="text-right">
-                          {Number(row.reserved_stock)}
-                        </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {Number(row.stock)}
+                          </TableCell>
 
-                        <TableCell className="text-right font-semibold">
-                          {Number(row.available_stock)}
-                        </TableCell>
+                          <TableCell className="text-right">
+                            {Number(
+                              row.reserved_stock,
+                            )}
+                          </TableCell>
 
-                        <TableCell className="hidden text-right sm:table-cell">
-                          {Number(row.min_stock)}
-                        </TableCell>
+                          <TableCell className="text-right font-semibold">
+                            {Number(
+                              row.available_stock,
+                            )}
+                          </TableCell>
 
-                        <TableCell className="text-right">
-                          {low ? (
-                            <Badge variant="destructive">
-                              Bajo
-                            </Badge>
-                          ) : (
-                            <Badge variant="secondary">
-                              OK
-                            </Badge>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                          <TableCell className="hidden text-right sm:table-cell">
+                            {Number(
+                              row.min_stock,
+                            )}
+                          </TableCell>
+
+                          <TableCell className="text-right">
+                            {isOut ? (
+                              <Badge variant="destructive">
+                                Agotado
+                              </Badge>
+                            ) : isLow ? (
+                              <Badge variant="destructive">
+                                Bajo
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">
+                                OK
+                              </Badge>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    },
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="ajuste" className="mt-4">
+        {/* ================================================== */}
+        {/* AJUSTE                                            */}
+        {/* ================================================== */}
+
+        <TabsContent
+          value="ajuste"
+          className="mt-4"
+        >
           <Card className="max-w-lg">
             <CardHeader>
               <CardTitle className="text-base">
@@ -561,11 +825,15 @@ function InventarioPage() {
 
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
-                <Label>Producto</Label>
+                <Label>
+                  Producto
+                </Label>
 
                 <Select
-                  value={adjProduct}
-                  onValueChange={setAdjProduct}
+                  value={adjustProduct}
+                  onValueChange={
+                    setAdjustProduct
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona producto" />
@@ -579,13 +847,19 @@ function InventarioPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Dirección</Label>
+                  <Label>
+                    Dirección
+                  </Label>
 
                   <Select
-                    value={adjDir}
+                    value={
+                      adjustDirection
+                    }
                     onValueChange={(value) =>
-                      setAdjDir(
-                        value as "in" | "out",
+                      setAdjustDirection(
+                        value as
+                          | "in"
+                          | "out",
                       )
                     }
                   >
@@ -606,29 +880,40 @@ function InventarioPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>Cantidad</Label>
+                  <Label>
+                    Cantidad
+                  </Label>
 
                   <Input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={adjQty}
+                    value={
+                      adjustQuantity
+                    }
                     onChange={(event) =>
-                      setAdjQty(event.target.value)
+                      setAdjustQuantity(
+                        event.target
+                          .value,
+                      )
                     }
                   />
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Motivo</Label>
+                <Label>
+                  Motivo
+                </Label>
 
                 <Input
-                  value={adjNotes}
+                  value={adjustNotes}
                   onChange={(event) =>
-                    setAdjNotes(event.target.value)
+                    setAdjustNotes(
+                      event.target.value,
+                    )
                   }
-                  placeholder="Merma, daño, conteo..."
+                  placeholder="Merma, daño, corrección..."
                 />
               </div>
 
@@ -636,27 +921,38 @@ function InventarioPage() {
                 className="w-full"
                 disabled={
                   !isManager ||
-                  !adjProduct ||
-                  !adjQty ||
-                  adjust.isPending
+                  !branchId ||
+                  !adjustProduct ||
+                  !adjustQuantity ||
+                  adjustInventory.isPending
                 }
-                onClick={() => adjust.mutate()}
+                onClick={() =>
+                  adjustInventory.mutate()
+                }
               >
-                {adjust.isPending
+                {adjustInventory.isPending
                   ? "Aplicando..."
                   : "Aplicar ajuste"}
               </Button>
 
               {!isManager && (
                 <p className="text-xs text-muted-foreground">
-                  Solo managers pueden ajustar stock.
+                  Solo managers pueden ajustar
+                  stock.
                 </p>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="limites" className="mt-4">
+        {/* ================================================== */}
+        {/* LIMITES                                            */}
+        {/* ================================================== */}
+
+        <TabsContent
+          value="limites"
+          className="mt-4"
+        >
           <Card className="max-w-lg">
             <CardHeader>
               <CardTitle className="text-base">
@@ -666,11 +962,15 @@ function InventarioPage() {
 
             <CardContent className="space-y-3">
               <div className="space-y-1.5">
-                <Label>Producto</Label>
+                <Label>
+                  Producto
+                </Label>
 
                 <Select
-                  value={limProduct}
-                  onValueChange={setLimProduct}
+                  value={limitProduct}
+                  onValueChange={
+                    setLimitProduct
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecciona producto" />
@@ -684,30 +984,37 @@ function InventarioPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Mínimo</Label>
+                  <Label>
+                    Mínimo
+                  </Label>
 
                   <Input
                     type="number"
                     min="0"
-                    value={limMin}
+                    value={limitMin}
                     onChange={(event) =>
-                      setLimMin(event.target.value)
+                      setLimitMin(
+                        event.target.value,
+                      )
                     }
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label>
-                    Máximo (vacío = sin límite)
+                    Máximo
                   </Label>
 
                   <Input
                     type="number"
                     min="0"
-                    value={limMax}
+                    value={limitMax}
                     onChange={(event) =>
-                      setLimMax(event.target.value)
+                      setLimitMax(
+                        event.target.value,
+                      )
                     }
+                    placeholder="Sin límite"
                   />
                 </div>
               </div>
@@ -716,12 +1023,14 @@ function InventarioPage() {
                 className="w-full"
                 disabled={
                   !isManager ||
-                  !limProduct ||
-                  setLimits.isPending
+                  !limitProduct ||
+                  updateLimits.isPending
                 }
-                onClick={() => setLimits.mutate()}
+                onClick={() =>
+                  updateLimits.mutate()
+                }
               >
-                {setLimits.isPending
+                {updateLimits.isPending
                   ? "Guardando..."
                   : "Guardar límites"}
               </Button>
@@ -729,9 +1038,16 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="conteo" className="mt-4">
+        {/* ================================================== */}
+        {/* CONTEO FÍSICO                                      */}
+        {/* ================================================== */}
+
+        <TabsContent
+          value="conteo"
+          className="mt-4"
+        >
           <Card>
-            <CardHeader className="pb-3">
+            <CardHeader>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <CardTitle className="text-base">
@@ -739,8 +1055,9 @@ function InventarioPage() {
                   </CardTitle>
 
                   <p className="text-xs text-muted-foreground">
-                    Cuenta físicamente el inventario
-                    compartido y aplica las diferencias.
+                    Captura el conteo real y aplica
+                    únicamente las diferencias al
+                    inventario central.
                   </p>
                 </div>
 
@@ -749,7 +1066,9 @@ function InventarioPage() {
                     placeholder="Producto / SKU / código..."
                     value={countFilter}
                     onChange={(event) =>
-                      setCountFilter(event.target.value)
+                      setCountFilter(
+                        event.target.value,
+                      )
                     }
                     className="w-full sm:w-56"
                   />
@@ -757,13 +1076,14 @@ function InventarioPage() {
                   <Button
                     disabled={
                       !isManager ||
-                      applyCount.isPending
+                      !branchId ||
+                      applyPhysicalCount.isPending
                     }
                     onClick={() =>
-                      applyCount.mutate()
+                      applyPhysicalCount.mutate()
                     }
                   >
-                    {applyCount.isPending
+                    {applyPhysicalCount.isPending
                       ? "Aplicando..."
                       : "Aplicar"}
                   </Button>
@@ -775,13 +1095,18 @@ function InventarioPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Producto</TableHead>
+                    <TableHead>
+                      Producto
+                    </TableHead>
+
                     <TableHead className="text-right">
                       Teórico
                     </TableHead>
+
                     <TableHead className="text-right">
                       Contado
                     </TableHead>
+
                     <TableHead className="text-right">
                       Diferencia
                     </TableHead>
@@ -790,13 +1115,18 @@ function InventarioPage() {
 
                 <TableBody>
                   {countRows
-                    .filter((row) => !row.variant_id)
+                    .filter(
+                      (row) =>
+                        !row.variant_id,
+                    )
                     .map((row) => {
                       const theoretical =
                         Number(row.stock);
 
                       const raw =
-                        countMap[row.product_id];
+                        physicalCount[
+                          row.product_id
+                        ];
 
                       const counted =
                         raw === undefined ||
@@ -806,16 +1136,20 @@ function InventarioPage() {
 
                       const difference =
                         counted === null ||
-                        Number.isNaN(counted)
+                        Number.isNaN(
+                          counted,
+                        )
                           ? null
-                          : counted - theoretical;
+                          : counted -
+                            theoretical;
 
                       return (
                         <TableRow
                           key={row.id}
                         >
                           <TableCell className="font-medium">
-                            {row.emoji ?? "📦"}{" "}
+                            {row.emoji ??
+                              "📦"}{" "}
                             {row.product_name}
 
                             {row.sku && (
@@ -835,34 +1169,47 @@ function InventarioPage() {
                               min="0"
                               step="0.01"
                               className="ml-auto h-8 w-28 text-right"
-                              value={raw ?? ""}
-                              onChange={(event) =>
-                                setCountMap(
-                                  (previous) => ({
+                              value={
+                                raw ?? ""
+                              }
+                              onChange={(
+                                event,
+                              ) =>
+                                setPhysicalCount(
+                                  (
+                                    previous,
+                                  ) => ({
                                     ...previous,
                                     [row.product_id]:
-                                      event.target.value,
+                                      event
+                                        .target
+                                        .value,
                                   }),
                                 )
                               }
-                              placeholder="—"
                             />
                           </TableCell>
 
                           <TableCell
                             className={cn(
                               "text-right font-medium",
-                              difference !== null &&
-                                difference > 0 &&
+                              difference !==
+                                null &&
+                                difference >
+                                  0 &&
                                 "text-emerald-600",
-                              difference !== null &&
-                                difference < 0 &&
+                              difference !==
+                                null &&
+                                difference <
+                                  0 &&
                                 "text-destructive",
                             )}
                           >
-                            {difference === null
+                            {difference ===
+                            null
                               ? "—"
-                              : difference > 0
+                              : difference >
+                                  0
                                 ? `+${difference}`
                                 : difference}
                           </TableCell>
@@ -870,13 +1217,17 @@ function InventarioPage() {
                       );
                     })}
 
-                  {!countRows.length && (
+                  {!countRows.filter(
+                    (row) =>
+                      !row.variant_id,
+                  ).length && (
                     <TableRow>
                       <TableCell
                         colSpan={4}
                         className="py-10 text-center text-muted-foreground"
                       >
-                        No hay productos para contar.
+                        No hay productos para
+                        contar.
                       </TableCell>
                     </TableRow>
                   )}
@@ -885,6 +1236,10 @@ function InventarioPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ================================================== */}
+        {/* MOVIMIENTOS                                        */}
+        {/* ================================================== */}
 
         <TabsContent
           value="movimientos"
@@ -901,56 +1256,74 @@ function InventarioPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Fecha</TableHead>
-                    <TableHead>Producto</TableHead>
-                    <TableHead>Tipo</TableHead>
+                    <TableHead>
+                      Fecha
+                    </TableHead>
+
+                    <TableHead>
+                      Producto
+                    </TableHead>
+
+                    <TableHead>
+                      Tipo
+                    </TableHead>
+
                     <TableHead className="text-right">
                       Cantidad
                     </TableHead>
-                    <TableHead>Notas</TableHead>
+
+                    <TableHead>
+                      Notas
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
 
                 <TableBody>
-                  {movements.map((movement) => (
-                    <TableRow
-                      key={movement.id}
-                    >
-                      <TableCell className="whitespace-nowrap text-xs">
-                        {shortDate(
-                          movement.created_at,
-                        )}
-                      </TableCell>
+                  {movements.map(
+                    (movement) => (
+                      <TableRow
+                        key={movement.id}
+                      >
+                        <TableCell className="whitespace-nowrap text-xs">
+                          {shortDate(
+                            movement.created_at,
+                          )}
+                        </TableCell>
 
-                      <TableCell>
-                        {(
-                          movement.products as {
-                            name?: string;
-                          } | null
-                        )?.name ?? "—"}
-                      </TableCell>
+                        <TableCell>
+                          {(
+                            movement.products as
+                              | {
+                                  name?: string;
+                                }
+                              | null
+                          )?.name ?? "—"}
+                        </TableCell>
 
-                      <TableCell>
-                        <Badge variant="outline">
-                          {MOV_LABEL[
-                            movement.type
-                          ] ?? movement.type}
-                        </Badge>
-                      </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {MOVEMENT_LABELS[
+                              movement.type
+                            ] ??
+                              movement.type}
+                          </Badge>
+                        </TableCell>
 
-                      <TableCell className="text-right font-medium">
-                        {Number(
-                          movement.quantity,
-                        ) > 0
-                          ? `+${movement.quantity}`
-                          : movement.quantity}
-                      </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {Number(
+                            movement.quantity,
+                          ) > 0
+                            ? `+${movement.quantity}`
+                            : movement.quantity}
+                        </TableCell>
 
-                      <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
-                        {movement.notes ?? "—"}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
+                          {movement.notes ??
+                            "—"}
+                        </TableCell>
+                      </TableRow>
+                    ),
+                  )}
 
                   {!movements.length && (
                     <TableRow>
@@ -958,7 +1331,8 @@ function InventarioPage() {
                         colSpan={5}
                         className="py-8 text-center text-muted-foreground"
                       >
-                        Sin movimientos todavía.
+                        Sin movimientos
+                        todavía.
                       </TableCell>
                     </TableRow>
                   )}
@@ -967,6 +1341,10 @@ function InventarioPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ================================================== */}
+        {/* IMPORTAR / EXPORTAR                               */}
+        {/* ================================================== */}
 
         <TabsContent
           value="importar"
