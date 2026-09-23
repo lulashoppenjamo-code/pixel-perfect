@@ -825,6 +825,7 @@ export type Database = {
       }
       sale_items: {
         Row: {
+          cost_total: number | null
           created_at: string
           discount: number
           id: string
@@ -833,10 +834,12 @@ export type Database = {
           quantity: number
           sale_id: string
           total: number
+          unit_cost: number
           unit_price: number
           variant_id: string | null
         }
         Insert: {
+          cost_total?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -845,10 +848,12 @@ export type Database = {
           quantity?: number
           sale_id: string
           total?: number
+          unit_cost?: number
           unit_price?: number
           variant_id?: string | null
         }
         Update: {
+          cost_total?: number | null
           created_at?: string
           discount?: number
           id?: string
@@ -857,6 +862,7 @@ export type Database = {
           quantity?: number
           sale_id?: string
           total?: number
+          unit_cost?: number
           unit_price?: number
           variant_id?: string | null
         }
@@ -1097,6 +1103,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      cancel_sale: {
+        Args: { _reason?: string; _sale_id: string }
+        Returns: string
+      }
       close_cash_session: {
         Args: { _closing_amount: number; _session_id: string }
         Returns: {
@@ -1220,6 +1230,38 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_shared_inventory: {
+        Args: never
+        Returns: {
+          available_stock: number
+          barcode: string
+          cost: number
+          emoji: string
+          id: string
+          image_url: string
+          is_active: boolean
+          max_stock: number
+          min_stock: number
+          price: number
+          product_id: string
+          product_name: string
+          reserved_stock: number
+          sku: string
+          stock: number
+          stock_status: string
+          variant_id: string
+        }[]
+      }
+      get_shared_product_stock: {
+        Args: { _product_id: string; _variant_id?: string }
+        Returns: {
+          available_stock: number
+          product_id: string
+          reserved_stock: number
+          stock: number
+          variant_id: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1233,37 +1275,6 @@ export type Database = {
       receive_purchase_partial: {
         Args: { _items: Json; _purchase_id: string }
         Returns: undefined
-      }
-      cancel_sale: {
-        Args: {
-          _sale_id: string
-          _reason?: string
-        }
-        Returns: {
-          branch_id: string
-          cash_received: number | null
-          cash_session_id: string | null
-          cashier_id: string
-          change_given: number | null
-          created_at: string
-          customer_id: string | null
-          discount: number
-          folio: number
-          id: string
-          notes: string | null
-          payment_method: Database["public"]["Enums"]["payment_method"]
-          status: Database["public"]["Enums"]["sale_status"]
-          subtotal: number
-          tax: number
-          total: number
-          updated_at: string
-        }
-        SetofOptions: {
-          from: "*"
-          to: "sales"
-          isOneToOne: true
-          isSetofReturn: false
-        }
       }
       refund_sale: {
         Args: { _items: Json; _reason?: string; _sale_id: string }
@@ -1298,6 +1309,15 @@ export type Database = {
           _branch_id: string
           _max_stock?: number
           _min_stock: number
+          _product_id: string
+          _variant_id?: string
+        }
+        Returns: undefined
+      }
+      set_shared_inventory_limits: {
+        Args: {
+          _max_stock?: number
+          _min_stock?: number
           _product_id: string
           _variant_id?: string
         }
