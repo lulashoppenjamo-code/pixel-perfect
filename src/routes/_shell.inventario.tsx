@@ -1355,4 +1355,4 @@ function InventarioPage() {
       </Tabs>
     </PageShell>
   );
-}
+} 
