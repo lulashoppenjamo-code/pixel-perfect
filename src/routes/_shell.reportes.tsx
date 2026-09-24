@@ -1702,4 +1702,4 @@ function ComparisonRow({
       </div>
     </div>
   );
-}
+} 
