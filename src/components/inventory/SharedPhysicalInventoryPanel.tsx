@@ -11,14 +11,27 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/lib/auth";
+import { useBranch } from "@/lib/branch";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 type CountItem = {
   id: string;
@@ -42,14 +55,28 @@ type CountItem = {
 
 type Count = {
   id: string;
+  branch_id: string;
   status: "open" | "completed" | "cancelled";
   notes: string | null;
   started_at: string;
   completed_at: string | null;
 };
 
+type Summary = {
+  total_items: number;
+  counted_items: number;
+  pending_items: number;
+  difference_items: number;
+  shortage_units: number;
+  surplus_units: number;
+  shortage_value: number;
+  surplus_value: number;
+  net_difference_value: number;
+};
+
 export function SharedPhysicalInventoryPanel() {
   const { isManager } = useAuth();
+  const { branchId } = useBranch();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
@@ -122,7 +149,10 @@ export function SharedPhysicalInventoryPanel() {
   });
 
   const summaryQuery = useQuery({
-    queryKey: ["shared-inventory-count-summary", selectedCountId],
+    queryKey: [
+      "shared-inventory-count-summary",
+      selectedCountId,
+    ],
     enabled: Boolean(selectedCountId),
     queryFn: async () => {
       const { data, error } = await supabase.rpc(
@@ -134,15 +164,24 @@ export function SharedPhysicalInventoryPanel() {
 
       if (error) throw error;
 
-      return Array.isArray(data) ? data[0] : data;
+      return (Array.isArray(data) ? data[0] : data) as
+        | Summary
+        | null;
     },
   });
 
   const startMutation = useMutation({
     mutationFn: async () => {
+      if (!branchId) {
+        throw new Error(
+          "No hay una sucursal activa seleccionada.",
+        );
+      }
+
       const { data, error } = await supabase.rpc(
         "start_shared_inventory_count",
         {
+          _branch_id: branchId,
           _notes: notes.trim() || null,
         },
       );
@@ -151,6 +190,7 @@ export function SharedPhysicalInventoryPanel() {
 
       return data as string;
     },
+
     onSuccess: (id) => {
       setCountId(id);
       setNotes("");
@@ -159,8 +199,17 @@ export function SharedPhysicalInventoryPanel() {
         queryKey: ["shared-inventory-counts"],
       });
 
+      queryClient.invalidateQueries({
+        queryKey: ["shared-inventory-count-items"],
+      });
+
+      queryClient.invalidateQueries({
+        queryKey: ["shared-inventory-count-summary"],
+      });
+
       toast.success("Inventario físico iniciado");
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
@@ -174,6 +223,12 @@ export function SharedPhysicalInventoryPanel() {
       item: CountItem;
       value: number;
     }) => {
+      if (!Number.isFinite(value) || value < 0) {
+        throw new Error(
+          "La existencia física debe ser un número válido.",
+        );
+      }
+
       const { error } = await supabase.rpc(
         "set_shared_inventory_count_item",
         {
@@ -186,15 +241,23 @@ export function SharedPhysicalInventoryPanel() {
 
       if (error) throw error;
     },
+
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: ["shared-inventory-count-items", selectedCountId],
+        queryKey: [
+          "shared-inventory-count-items",
+          selectedCountId,
+        ],
       });
 
       queryClient.invalidateQueries({
-        queryKey: ["shared-inventory-count-summary", selectedCountId],
+        queryKey: [
+          "shared-inventory-count-summary",
+          selectedCountId,
+        ],
       });
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
@@ -203,10 +266,12 @@ export function SharedPhysicalInventoryPanel() {
   const completeMutation = useMutation({
     mutationFn: async () => {
       if (!selectedCountId) {
-        throw new Error("No hay inventario físico seleccionado");
+        throw new Error(
+          "No hay inventario físico seleccionado.",
+        );
       }
 
-      const { error } = await supabase.rpc(
+      const { data, error } = await supabase.rpc(
         "complete_shared_inventory_count",
         {
           _count_id: selectedCountId,
@@ -214,10 +279,13 @@ export function SharedPhysicalInventoryPanel() {
       );
 
       if (error) throw error;
+
+      return Array.isArray(data) ? data[0] : data;
     },
+
     onSuccess: () => {
       toast.success(
-        "Inventario físico completado y diferencias aplicadas",
+        "Inventario físico completado y diferencias aplicadas.",
       );
 
       queryClient.invalidateQueries({
@@ -239,7 +307,10 @@ export function SharedPhysicalInventoryPanel() {
       queryClient.invalidateQueries({
         queryKey: ["inventory-movements"],
       });
+
+      setCountId(null);
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
@@ -248,7 +319,9 @@ export function SharedPhysicalInventoryPanel() {
   const cancelMutation = useMutation({
     mutationFn: async () => {
       if (!selectedCountId) {
-        throw new Error("No hay inventario físico seleccionado");
+        throw new Error(
+          "No hay inventario físico seleccionado.",
+        );
       }
 
       const { error } = await supabase.rpc(
@@ -260,8 +333,9 @@ export function SharedPhysicalInventoryPanel() {
 
       if (error) throw error;
     },
+
     onSuccess: () => {
-      toast.success("Inventario físico cancelado");
+      toast.success("Inventario físico cancelado.");
 
       queryClient.invalidateQueries({
         queryKey: ["shared-inventory-counts"],
@@ -270,7 +344,14 @@ export function SharedPhysicalInventoryPanel() {
       queryClient.invalidateQueries({
         queryKey: ["shared-inventory-count-items"],
       });
+
+      queryClient.invalidateQueries({
+        queryKey: ["shared-inventory-count-summary"],
+      });
+
+      setCountId(null);
     },
+
     onError: (error: Error) => {
       toast.error(error.message);
     },
@@ -279,7 +360,9 @@ export function SharedPhysicalInventoryPanel() {
   const items = useMemo(() => {
     const term = search.trim().toLowerCase();
 
-    if (!term) return itemsQuery.data ?? [];
+    if (!term) {
+      return itemsQuery.data ?? [];
+    }
 
     return (itemsQuery.data ?? []).filter((item) => {
       const product = item.products;
@@ -294,17 +377,28 @@ export function SharedPhysicalInventoryPanel() {
 
   const summary = summaryQuery.data;
 
-  const totalItems = Number(summary?.total_items ?? 0);
-  const countedItems = Number(summary?.counted_items ?? 0);
-  const pendingItems = Number(summary?.pending_items ?? 0);
+  const totalItems = Number(
+    summary?.total_items ?? 0,
+  );
+
+  const countedItems = Number(
+    summary?.counted_items ?? 0,
+  );
+
+  const pendingItems = Number(
+    summary?.pending_items ?? 0,
+  );
 
   const progress =
     totalItems > 0
-      ? Math.round((countedItems / totalItems) * 100)
+      ? Math.round(
+          (countedItems / totalItems) * 100,
+        )
       : 0;
 
   const canComplete =
     Boolean(selectedCountId) &&
+    Boolean(branchId) &&
     totalItems > 0 &&
     pendingItems === 0 &&
     !completeMutation.isPending;
@@ -331,15 +425,21 @@ export function SharedPhysicalInventoryPanel() {
               </CardTitle>
 
               <p className="mt-1 text-sm text-muted-foreground">
-                Cuenta las existencias reales de las dos sucursales
-                sobre un único inventario central.
+                Cuenta las existencias reales sobre un único
+                inventario central compartido por las dos
+                sucursales.
               </p>
             </div>
 
             {!activeCount && (
               <Button
-                disabled={startMutation.isPending}
-                onClick={() => startMutation.mutate()}
+                disabled={
+                  startMutation.isPending ||
+                  !branchId
+                }
+                onClick={() =>
+                  startMutation.mutate()
+                }
               >
                 {startMutation.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -420,7 +520,10 @@ export function SharedPhysicalInventoryPanel() {
 
               <div className="space-y-2">
                 <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Progreso del inventario</span>
+                  <span>
+                    Progreso del inventario
+                  </span>
+
                   <span>{progress}%</span>
                 </div>
 
@@ -439,7 +542,10 @@ export function SharedPhysicalInventoryPanel() {
 
                 <Button
                   variant="outline"
-                  disabled={cancelMutation.isPending}
+                  disabled={
+                    cancelMutation.isPending ||
+                    completeMutation.isPending
+                  }
                   onClick={() =>
                     cancelMutation.mutate()
                   }
@@ -464,11 +570,20 @@ export function SharedPhysicalInventoryPanel() {
                 </Button>
               </div>
 
+              {!branchId && (
+                <div className="flex items-center gap-2 rounded-lg border p-3 text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4" />
+                  Selecciona una sucursal antes de iniciar
+                  un inventario físico.
+                </div>
+              )}
+
               {pendingItems > 0 && (
                 <div className="flex items-center gap-2 rounded-lg border p-3 text-sm text-muted-foreground">
                   <AlertTriangle className="h-4 w-4" />
-                  Debes contar todos los productos antes de
-                  completar el inventario.
+
+                  Debes contar todos los productos antes
+                  de completar el inventario.
                 </div>
               )}
             </>
@@ -489,16 +604,21 @@ export function SharedPhysicalInventoryPanel() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Producto</TableHead>
+
                   <TableHead>SKU</TableHead>
+
                   <TableHead className="text-right">
                     Sistema
                   </TableHead>
+
                   <TableHead className="text-right">
                     Físico
                   </TableHead>
+
                   <TableHead className="text-right">
                     Diferencia
                   </TableHead>
+
                   <TableHead>Estado</TableHead>
                 </TableRow>
               </TableHeader>
@@ -508,13 +628,19 @@ export function SharedPhysicalInventoryPanel() {
                   const difference =
                     item.physical_stock === null
                       ? null
-                      : Number(item.physical_stock) -
-                        Number(item.system_stock);
+                      : Number(
+                          item.physical_stock,
+                        ) -
+                        Number(
+                          item.system_stock,
+                        );
 
                   return (
                     <TableRow key={item.id}>
                       <TableCell className="font-medium">
-                        {item.products?.name ?? "Producto"}
+                        {item.products?.name ??
+                          "Producto"}
+
                         {item.variant_id && (
                           <Badge
                             variant="outline"
@@ -530,7 +656,9 @@ export function SharedPhysicalInventoryPanel() {
                       </TableCell>
 
                       <TableCell className="text-right font-semibold">
-                        {Number(item.system_stock)}
+                        {Number(
+                          item.system_stock,
+                        )}
                       </TableCell>
 
                       <TableCell className="text-right">
@@ -540,11 +668,13 @@ export function SharedPhysicalInventoryPanel() {
                           step="0.01"
                           className="ml-auto w-28 text-right"
                           disabled={
-                            activeCount?.status !== "open" ||
+                            activeCount?.status !==
+                              "open" ||
                             updateMutation.isPending
                           }
                           value={
-                            item.physical_stock === null
+                            item.physical_stock ===
+                            null
                               ? ""
                               : item.physical_stock
                           }
@@ -552,11 +682,25 @@ export function SharedPhysicalInventoryPanel() {
                             const value =
                               event.target.value;
 
-                            if (value === "") return;
+                            if (value === "") {
+                              return;
+                            }
+
+                            const numericValue =
+                              Number(value);
+
+                            if (
+                              !Number.isFinite(
+                                numericValue,
+                              ) ||
+                              numericValue < 0
+                            ) {
+                              return;
+                            }
 
                             updateMutation.mutate({
                               item,
-                              value: Number(value),
+                              value: numericValue,
                             });
                           }}
                         />
@@ -581,7 +725,8 @@ export function SharedPhysicalInventoryPanel() {
                       </TableCell>
 
                       <TableCell>
-                        {item.physical_stock === null ? (
+                        {item.physical_stock ===
+                        null ? (
                           <Badge variant="outline">
                             Pendiente
                           </Badge>
@@ -628,13 +773,15 @@ export function SharedPhysicalInventoryPanel() {
               </div>
 
               <div className="mt-1 text-xl font-bold text-destructive">
-                {Number(summary.shortage_items ?? 0)}
+                {Number(
+                  summary.shortage_units ?? 0,
+                )}
               </div>
 
               <div className="text-xs text-muted-foreground">
                 $
                 {Number(
-                  summary.total_shortage_value ?? 0,
+                  summary.shortage_value ?? 0,
                 ).toFixed(2)}
               </div>
             </CardContent>
@@ -647,13 +794,15 @@ export function SharedPhysicalInventoryPanel() {
               </div>
 
               <div className="mt-1 text-xl font-bold text-emerald-600">
-                {Number(summary.surplus_items ?? 0)}
+                {Number(
+                  summary.surplus_units ?? 0,
+                )}
               </div>
 
               <div className="text-xs text-muted-foreground">
                 $
                 {Number(
-                  summary.total_surplus_value ?? 0,
+                  summary.surplus_value ?? 0,
                 ).toFixed(2)}
               </div>
             </CardContent>
@@ -668,7 +817,8 @@ export function SharedPhysicalInventoryPanel() {
               <div className="mt-1 text-xl font-bold">
                 $
                 {Number(
-                  summary.net_difference_value ?? 0,
+                  summary.net_difference_value ??
+                    0,
                 ).toFixed(2)}
               </div>
             </CardContent>
