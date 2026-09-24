@@ -922,15 +922,7 @@ export function ImportExportPanel() {
                     row.minimo,
                   ) || 0,
 
-                _max_stock:
-                  row.maximo ===
-                    null ||
-                  row.maximo ===
-                    undefined
-                    ? undefined
-                    : Number(
-                        row.maximo,
-                      ),
+                ...(row.maximo === null || row.maximo === undefined ? {} : { _max_stock: Number(row.maximo) }),
               },
             );
 
@@ -1089,15 +1081,7 @@ export function ImportExportPanel() {
                     row.minimo,
                   ) || 0,
 
-                _max_stock:
-                  row.maximo ===
-                    null ||
-                  row.maximo ===
-                    undefined
-                    ? undefined
-                    : Number(
-                        row.maximo,
-                      ),
+                ...(row.maximo === null || row.maximo === undefined ? {} : { _max_stock: Number(row.maximo) }),
               },
             );
 
