@@ -927,7 +927,7 @@ export function ImportExportPanel() {
                     null ||
                   row.maximo ===
                     undefined
-                    ? null
+                    ? undefined
                     : Number(
                         row.maximo,
                       ),
@@ -1094,7 +1094,7 @@ export function ImportExportPanel() {
                     null ||
                   row.maximo ===
                     undefined
-                    ? null
+                    ? undefined
                     : Number(
                         row.maximo,
                       ),
