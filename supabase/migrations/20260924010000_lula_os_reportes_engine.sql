@@ -15,11 +15,10 @@
 -- 9. Comparación contra periodo anterior
 -- 10. Ventas por día
 -- 11. Métodos de pago reales
--- 12. Productos más vendidos
--- 13. Productos menos vendidos
--- 14. Valor del inventario a costo
--- 15. Valor del inventario a precio de venta
--- 16. Productos con bajo inventario
+-- 12. Productos más / menos vendidos
+-- 13. Valor del inventario a costo
+-- 14. Valor del inventario a precio de venta
+-- 15. Productos con bajo inventario
 --
 -- IMPORTANTE:
 -- shared_inventory sigue siendo GLOBAL.
@@ -155,7 +154,7 @@ BEGIN
   -- ----------------------------------------------------------
 
   IF _branch_id IS NOT NULL
-     AND NOT public.is_manager(uid)
+     AND NOT public.is_manager()
   THEN
 
     IF NOT EXISTS (
@@ -182,6 +181,7 @@ BEGIN
     (_to - _from) + 1;
 
   v_previous_to := _from - 1;
+
   v_previous_from :=
     v_previous_to - v_period_days + 1;
 
@@ -199,15 +199,19 @@ BEGIN
   INTO
     v_sales_total,
     v_tickets
+
   FROM public.sales s
+
   WHERE s.status IN (
     'completed'::public.sale_status,
     'partially_refunded'::public.sale_status
   )
+
   AND (
     _branch_id IS NULL
     OR s.branch_id = _branch_id
   )
+
   AND (
     timezone(
       _timezone,
@@ -1113,16 +1117,7 @@ AS $$
         p.sku
     END::text AS sku,
 
-    CASE
-      WHEN si.variant_id IS NOT NULL
-      THEN
-        COALESCE(
-          pv.barcode,
-          p.barcode
-        )
-      ELSE
-        p.barcode
-    END::text AS barcode,
+    p.barcode::text AS barcode,
 
     COALESCE(
       si.stock,
