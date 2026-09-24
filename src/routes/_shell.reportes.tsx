@@ -11,7 +11,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { subDays, parseISO, format } from "date-fns";
+import {
+  subDays,
+  format,
+  parseISO,
+  startOfDay,
+} from "date-fns";
 import {
   TrendingDown,
   TrendingUp,
@@ -26,13 +31,9 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
+import { getSharedInventory } from "@/lib/sharedInventory";
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import {
   Table,
@@ -64,7 +65,7 @@ export const Route = createFileRoute("/_shell/reportes")({
       {
         name: "description",
         content:
-          "Reportes ejecutivos de ventas, utilidad, costos históricos e inventario compartido.",
+          "Reportes de ventas, utilidad, costos históricos, inventario compartido y productos.",
       },
     ],
   }),
@@ -75,12 +76,6 @@ export const Route = createFileRoute("/_shell/reportes")({
     </RequireNavAccess>
   ),
 });
-
-/*
- * ============================================================
- * CONFIGURACIÓN
- * ============================================================
- */
 
 const RANGES = [
   {
@@ -95,132 +90,49 @@ const RANGES = [
     value: "90",
     label: "Últimos 90 días",
   },
-] as const;
+];
 
-const REPORT_TIMEZONE = "America/Mexico_City";
-
-/*
- * ============================================================
- * TIPOS
- * ============================================================
- */
-
-type ReportSummary = {
-  sales_total: number;
-  tickets: number;
-  average_ticket: number;
-
-  historical_cost: number;
-  gross_profit: number;
-  gross_margin: number;
-
-  expenses_total: number;
-  net_profit: number;
-
-  previous_sales_total: number;
-  previous_tickets: number;
-  previous_average_ticket: number;
-
-  previous_historical_cost: number;
-  previous_gross_profit: number;
-  previous_gross_margin: number;
-
-  previous_expenses_total: number;
-  previous_net_profit: number;
-
-  sales_change_percent: number;
-  profit_change_percent: number;
-};
-
-type DailySales = {
-  day: string;
-  sales_total: number;
-  tickets: number;
-  average_ticket: number;
-};
-
-type PaymentMethodRow = {
-  payment_method: string;
+type SaleRow = {
+  id: string;
   total: number;
-  transactions: number;
+  subtotal: number;
+  tax: number;
+  discount: number;
+  created_at: string;
+  status: string;
+  payment_method: string;
+  cashier_id: string;
 };
 
-type ProductPerformance = {
+type SaleItemRow = {
+  sale_id: string;
+  name_snapshot: string;
+  quantity: number;
+  unit_price: number;
+  discount: number;
+  total: number;
   product_id: string | null;
   variant_id: string | null;
-  product_name: string;
-  quantity: number;
-  revenue: number;
-  historical_cost: number;
-  gross_profit: number;
-  gross_margin: number;
+  unit_cost: number | null;
+  cost_total: number | null;
 };
 
-type InventoryReportRow = {
+type InventoryRow = {
+  id: string;
   product_id: string;
   variant_id: string | null;
   product_name: string;
   sku: string | null;
   barcode: string | null;
-
+  price: number;
+  cost: number;
   stock: number;
   reserved_stock: number;
   available_stock: number;
-
   min_stock: number;
   max_stock: number | null;
-
-  unit_cost: number;
-  unit_price: number;
-
-  inventory_cost: number;
-  inventory_retail: number;
-
   stock_status: string;
 };
-
-/*
- * ============================================================
- * HELPERS
- * ============================================================
- */
-
-/**
- * Supabase ya tiene las RPC nuevas en la base de datos.
- *
- * El archivo types.ts generado todavía no contiene esas RPC,
- * por lo que aquí aislamos temporalmente el cast.
- *
- * Después podremos regenerar types.ts desde Supabase.
- */
-const rpc = supabase.rpc as any;
-
-function getMexicoDate(): string {
-  return new Intl.DateTimeFormat("en-CA", {
-    timeZone: REPORT_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-}
-
-function roundMoney(value: number): number {
-  return Math.round(Number(value || 0) * 100) / 100;
-}
-
-const paymentLabels: Record<string, string> = {
-  cash: "Efectivo",
-  card: "Tarjeta",
-  transfer: "Transferencia",
-  credit: "Crédito",
-  mixed: "Mixto",
-};
-
-/*
- * ============================================================
- * PÁGINA
- * ============================================================
- */
 
 function ReportesPage() {
   const { branchId } = useBranch();
@@ -229,567 +141,815 @@ function ReportesPage() {
 
   const days = Number(rangeDays);
 
-  /*
-   * ----------------------------------------------------------
-   * FECHAS
-   * ----------------------------------------------------------
-   *
-   * Usamos fechas locales de México.
-   *
-   * Ejemplo:
-   * Últimos 30 días =
-   * hoy + 29 días anteriores.
-   */
-
-  const toDate = useMemo(
-    () => getMexicoDate(),
-    [],
+  const since = useMemo(
+    () =>
+      startOfDay(
+        subDays(new Date(), days),
+      ).toISOString(),
+    [days],
   );
 
-  const fromDate = useMemo(() => {
-    const date = parseISO(toDate);
+  const prevSince = useMemo(
+    () =>
+      startOfDay(
+        subDays(new Date(), days * 2),
+      ).toISOString(),
+    [days],
+  );
 
-    return format(
-      subDays(date, days - 1),
-      "yyyy-MM-dd",
-    );
-  }, [toDate, days]);
+  const prevUntil = since;
 
   /*
-   * ----------------------------------------------------------
-   * RESUMEN EJECUTIVO
-   * ----------------------------------------------------------
+   * ============================================================
+   * VENTAS ACTUALES
+   * ============================================================
    */
 
   const {
-    data: summary,
-    isLoading: loadingSummary,
-    error: summaryError,
-  } = useQuery<ReportSummary>({
+    data: sales = [],
+    isLoading: loadingSales,
+    error: salesError,
+  } = useQuery({
     queryKey: [
-      "reports",
-      "summary",
+      "report-sales",
       branchId,
-      fromDate,
-      toDate,
+      rangeDays,
     ],
 
     enabled: !!branchId,
 
     queryFn: async () => {
-      const { data, error } = await rpc(
-        "get_reports_summary",
-        {
-          _from: fromDate,
-          _to: toDate,
-          _branch_id: branchId,
-          _timezone: REPORT_TIMEZONE,
-        },
-      );
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("sales")
+        .select(
+          `
+          id,
+          total,
+          subtotal,
+          tax,
+          discount,
+          created_at,
+          status,
+          payment_method,
+          cashier_id
+        `,
+        )
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte("created_at", since)
+        .order("created_at", {
+          ascending: true,
+        });
 
       if (error) {
         throw error;
       }
 
-      const row = Array.isArray(data)
-        ? data[0]
-        : data;
+      return (data ?? []) as SaleRow[];
+    },
+  });
 
-      if (!row) {
-        throw new Error(
-          "El reporte no devolvió información.",
+  /*
+   * ============================================================
+   * PERIODO ANTERIOR
+   * ============================================================
+   */
+
+  const {
+    data: previousSales = [],
+  } = useQuery({
+    queryKey: [
+      "report-sales-previous",
+      branchId,
+      rangeDays,
+    ],
+
+    enabled: !!branchId,
+
+    queryFn: async () => {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("sales")
+        .select(
+          "id, total, created_at",
+        )
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte(
+          "created_at",
+          prevSince,
+        )
+        .lt(
+          "created_at",
+          prevUntil,
         );
-      }
-
-      return {
-        sales_total: Number(row.sales_total ?? 0),
-        tickets: Number(row.tickets ?? 0),
-        average_ticket: Number(
-          row.average_ticket ?? 0,
-        ),
-
-        historical_cost: Number(
-          row.historical_cost ?? 0,
-        ),
-        gross_profit: Number(
-          row.gross_profit ?? 0,
-        ),
-        gross_margin: Number(
-          row.gross_margin ?? 0,
-        ),
-
-        expenses_total: Number(
-          row.expenses_total ?? 0,
-        ),
-        net_profit: Number(
-          row.net_profit ?? 0,
-        ),
-
-        previous_sales_total: Number(
-          row.previous_sales_total ?? 0,
-        ),
-        previous_tickets: Number(
-          row.previous_tickets ?? 0,
-        ),
-        previous_average_ticket: Number(
-          row.previous_average_ticket ?? 0,
-        ),
-
-        previous_historical_cost: Number(
-          row.previous_historical_cost ?? 0,
-        ),
-        previous_gross_profit: Number(
-          row.previous_gross_profit ?? 0,
-        ),
-        previous_gross_margin: Number(
-          row.previous_gross_margin ?? 0,
-        ),
-
-        previous_expenses_total: Number(
-          row.previous_expenses_total ?? 0,
-        ),
-        previous_net_profit: Number(
-          row.previous_net_profit ?? 0,
-        ),
-
-        sales_change_percent: Number(
-          row.sales_change_percent ?? 0,
-        ),
-        profit_change_percent: Number(
-          row.profit_change_percent ?? 0,
-        ),
-      };
-    },
-  });
-
-  /*
-   * ----------------------------------------------------------
-   * VENTAS POR DÍA
-   * ----------------------------------------------------------
-   */
-
-  const {
-    data: dailySales = [],
-    isLoading: loadingDaily,
-  } = useQuery<DailySales[]>({
-    queryKey: [
-      "reports",
-      "daily-sales",
-      branchId,
-      fromDate,
-      toDate,
-    ],
-
-    enabled: !!branchId,
-
-    queryFn: async () => {
-      const { data, error } = await rpc(
-        "get_reports_daily_sales",
-        {
-          _from: fromDate,
-          _to: toDate,
-          _branch_id: branchId,
-          _timezone: REPORT_TIMEZONE,
-        },
-      );
 
       if (error) {
         throw error;
       }
 
-      return (data ?? []).map(
-        (row: any) => ({
-          day: String(row.day),
-          sales_total: Number(
-            row.sales_total ?? 0,
-          ),
-          tickets: Number(
-            row.tickets ?? 0,
-          ),
-          average_ticket: Number(
-            row.average_ticket ?? 0,
-          ),
-        }),
-      );
+      return data ?? [];
     },
   });
 
   /*
-   * ----------------------------------------------------------
-   * MÉTODOS DE PAGO
-   * ----------------------------------------------------------
-   */
-
-  const {
-    data: paymentMethods = [],
-    isLoading: loadingPayments,
-  } = useQuery<PaymentMethodRow[]>({
-    queryKey: [
-      "reports",
-      "payments",
-      branchId,
-      fromDate,
-      toDate,
-    ],
-
-    enabled: !!branchId,
-
-    queryFn: async () => {
-      const { data, error } = await rpc(
-        "get_reports_payment_methods",
-        {
-          _from: fromDate,
-          _to: toDate,
-          _branch_id: branchId,
-          _timezone: REPORT_TIMEZONE,
-        },
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      return (data ?? []).map(
-        (row: any) => ({
-          payment_method:
-            String(
-              row.payment_method ??
-                "cash",
-            ),
-          total: Number(
-            row.total ?? 0,
-          ),
-          transactions: Number(
-            row.transactions ?? 0,
-          ),
-        }),
-      );
-    },
-  });
-
-  /*
-   * ----------------------------------------------------------
-   * PRODUCTOS
-   * ----------------------------------------------------------
-   */
-
-  const {
-    data: products = [],
-    isLoading: loadingProducts,
-  } = useQuery<ProductPerformance[]>({
-    queryKey: [
-      "reports",
-      "products",
-      branchId,
-      fromDate,
-      toDate,
-    ],
-
-    enabled: !!branchId,
-
-    queryFn: async () => {
-      const { data, error } = await rpc(
-        "get_reports_product_performance",
-        {
-          _from: fromDate,
-          _to: toDate,
-          _branch_id: branchId,
-          _limit: 50,
-          _timezone: REPORT_TIMEZONE,
-        },
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      return (data ?? []).map(
-        (row: any) => ({
-          product_id:
-            row.product_id ?? null,
-
-          variant_id:
-            row.variant_id ?? null,
-
-          product_name:
-            String(
-              row.product_name ??
-                "Producto sin nombre",
-            ),
-
-          quantity: Number(
-            row.quantity ?? 0,
-          ),
-
-          revenue: Number(
-            row.revenue ?? 0,
-          ),
-
-          historical_cost: Number(
-            row.historical_cost ?? 0,
-          ),
-
-          gross_profit: Number(
-            row.gross_profit ?? 0,
-          ),
-
-          gross_margin: Number(
-            row.gross_margin ?? 0,
-          ),
-        }),
-      );
-    },
-  });
-
-  /*
-   * ----------------------------------------------------------
-   * INVENTARIO GLOBAL
-   * ----------------------------------------------------------
-   *
-   * IMPORTANTE:
-   *
-   * NO usamos branch_id.
-   *
-   * El inventario de Lula Shop es compartido
-   * entre las dos tiendas.
+   * ============================================================
+   * INVENTARIO CENTRAL
+   * ============================================================
    */
 
   const {
     data: inventory = [],
     isLoading: loadingInventory,
-  } = useQuery<InventoryReportRow[]>({
+  } = useQuery({
     queryKey: [
-      "reports",
-      "inventory",
+      "report-shared-inventory",
     ],
 
     queryFn: async () => {
-      const { data, error } = await rpc(
-        "get_reports_inventory",
-      );
-
-      if (error) {
-        throw error;
-      }
-
-      return (data ?? []).map(
-        (row: any) => ({
-          product_id:
-            String(row.product_id),
-
-          variant_id:
-            row.variant_id ?? null,
-
-          product_name:
-            String(
-              row.product_name ??
-                "Producto sin nombre",
-            ),
-
-          sku:
-            row.sku ?? null,
-
-          barcode:
-            row.barcode ?? null,
-
-          stock: Number(
-            row.stock ?? 0,
-          ),
-
-          reserved_stock: Number(
-            row.reserved_stock ?? 0,
-          ),
-
-          available_stock: Number(
-            row.available_stock ?? 0,
-          ),
-
-          min_stock: Number(
-            row.min_stock ?? 0,
-          ),
-
-          max_stock:
-            row.max_stock === null ||
-            row.max_stock === undefined
-              ? null
-              : Number(
-                  row.max_stock,
-                ),
-
-          unit_cost: Number(
-            row.unit_cost ?? 0,
-          ),
-
-          unit_price: Number(
-            row.unit_price ?? 0,
-          ),
-
-          inventory_cost: Number(
-            row.inventory_cost ?? 0,
-          ),
-
-          inventory_retail: Number(
-            row.inventory_retail ?? 0,
-          ),
-
-          stock_status:
-            String(
-              row.stock_status ??
-                "ok",
-            ),
-        }),
+      return (
+        (await getSharedInventory()) as InventoryRow[]
       );
     },
   });
 
   /*
    * ============================================================
-   * DATOS CALCULADOS DE PRESENTACIÓN
+   * GASTOS
    * ============================================================
    */
 
-  const salesChart = useMemo(
-    () =>
-      dailySales.map(
-        (row) => ({
-          day: row.day,
-          label: format(
-            parseISO(row.day),
-            "dd/MM",
-          ),
-          total: roundMoney(
-            row.sales_total,
-          ),
-        }),
-      ),
-    [dailySales],
-  );
+  const {
+    data: expensesTotal = 0,
+  } = useQuery({
+    queryKey: [
+      "report-expenses",
+      branchId,
+      rangeDays,
+    ],
 
-  const lowStock = useMemo(
-    () =>
-      inventory
-        .filter(
-          (item) =>
-            item.stock_status ===
-              "low_stock" ||
-            item.stock_status ===
-              "out_of_stock",
+    enabled: !!branchId,
+
+    queryFn: async () => {
+      const sinceDate =
+        since.slice(0, 10);
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("expenses")
+        .select("amount")
+        .eq(
+          "branch_id",
+          branchId!,
         )
-        .sort(
-          (a, b) =>
-            a.available_stock -
-            b.available_stock,
-        )
-        .slice(0, 30),
-    [inventory],
-  );
+        .gte(
+          "expense_date",
+          sinceDate,
+        );
 
-  const inventoryUnits = useMemo(
-    () =>
-      inventory.reduce(
-        (total, item) =>
+      if (error) {
+        if (
+          error.message?.includes(
+            "does not exist",
+          ) ||
+          error.code === "42P01"
+        ) {
+          return 0;
+        }
+
+        throw error;
+      }
+
+      return (data ?? []).reduce(
+        (
+          total,
+          expense,
+        ) =>
           total +
-          item.stock,
+          Number(
+            expense.amount ?? 0,
+          ),
         0,
-      ),
-    [inventory],
-  );
-
-  const inventoryReserved = useMemo(
-    () =>
-      inventory.reduce(
-        (total, item) =>
-          total +
-          item.reserved_stock,
-        0,
-      ),
-    [inventory],
-  );
-
-  const inventoryAvailable = useMemo(
-    () =>
-      inventory.reduce(
-        (total, item) =>
-          total +
-          item.available_stock,
-        0,
-      ),
-    [inventory],
-  );
-
-  const inventoryCost = useMemo(
-    () =>
-      inventory.reduce(
-        (total, item) =>
-          total +
-          item.inventory_cost,
-        0,
-      ),
-    [inventory],
-  );
-
-  const inventoryRetail = useMemo(
-    () =>
-      inventory.reduce(
-        (total, item) =>
-          total +
-          item.inventory_retail,
-        0,
-      ),
-    [inventory],
-  );
-
-  const inventoryPotentialProfit =
-    inventoryRetail -
-    inventoryCost;
+      );
+    },
+  });
 
   /*
    * ============================================================
-   * ERRORES
+   * ITEMS DE LAS VENTAS
+   *
+   * IMPORTANTE:
+   *
+   * Se utiliza cost_total almacenado
+   * en el momento de la venta.
+   *
+   * Ya NO se toma products.cost actual.
    * ============================================================
    */
 
-  if (summaryError) {
+  const saleIds = useMemo(
+    () => sales.map((sale) => sale.id),
+    [sales],
+  );
+
+  const {
+    data: saleItems = [],
+  } = useQuery({
+    queryKey: [
+      "report-sale-items-historical",
+      saleIds.join(","),
+    ],
+
+    enabled:
+      saleIds.length > 0,
+
+    queryFn: async () => {
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("sale_items")
+        .select(
+          `
+          sale_id,
+          name_snapshot,
+          quantity,
+          unit_price,
+          discount,
+          total,
+          product_id,
+          variant_id,
+          unit_cost,
+          cost_total
+        `,
+        )
+        .in(
+          "sale_id",
+          saleIds,
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      return (data ??
+        []) as SaleItemRow[];
+    },
+  });
+
+  /*
+   * ============================================================
+   * KPIs PRINCIPALES
+   * ============================================================
+   */
+
+  const totalSales = useMemo(
+    () =>
+      sales.reduce(
+        (total, sale) =>
+          total +
+          Number(
+            sale.total ?? 0,
+          ),
+        0,
+      ),
+    [sales],
+  );
+
+  const totalPreviousSales =
+    useMemo(
+      () =>
+        previousSales.reduce(
+          (
+            total,
+            sale,
+          ) =>
+            total +
+            Number(
+              sale.total ?? 0,
+            ),
+          0,
+        ),
+      [previousSales],
+    );
+
+  const ticketCount =
+    sales.length;
+
+  const averageTicket =
+    ticketCount > 0
+      ? totalSales /
+        ticketCount
+      : 0;
+
+  const salesChange =
+    totalPreviousSales > 0
+      ? ((totalSales -
+          totalPreviousSales) /
+          totalPreviousSales) *
+        100
+      : totalSales > 0
+        ? 100
+        : 0;
+
+  /*
+   * ============================================================
+   * COSTO HISTÓRICO
+   * ============================================================
+   */
+
+  const historicalCost =
+    useMemo(
+      () =>
+        saleItems.reduce(
+          (
+            total,
+            item,
+          ) => {
+            if (
+              item.cost_total !==
+              null &&
+              item.cost_total !==
+                undefined
+            ) {
+              return (
+                total +
+                Number(
+                  item.cost_total,
+                )
+              );
+            }
+
+            return (
+              total +
+              Number(
+                item.unit_cost ??
+                  0,
+              ) *
+                Number(
+                  item.quantity ??
+                    0,
+                )
+            );
+          },
+          0,
+        ),
+      [saleItems],
+    );
+
+  const itemRevenue =
+    useMemo(
+      () =>
+        saleItems.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.total ?? 0,
+            ),
+          0,
+        ),
+      [saleItems],
+    );
+
+  const grossProfit =
+    itemRevenue -
+    historicalCost;
+
+  const marginPercent =
+    itemRevenue > 0
+      ? (grossProfit /
+          itemRevenue) *
+        100
+      : 0;
+
+  const netProfit =
+    grossProfit -
+    Number(
+      expensesTotal,
+    );
+
+  /*
+   * ============================================================
+   * INVENTARIO
+   * ============================================================
+   */
+
+  const inventoryUnits =
+    useMemo(
+      () =>
+        inventory.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.stock ?? 0,
+            ),
+          0,
+        ),
+      [inventory],
+    );
+
+  const inventoryReserved =
+    useMemo(
+      () =>
+        inventory.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.reserved_stock ??
+                0,
+            ),
+          0,
+        ),
+      [inventory],
+    );
+
+  const inventoryAvailable =
+    useMemo(
+      () =>
+        inventory.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.available_stock ??
+                0,
+            ),
+          0,
+        ),
+      [inventory],
+    );
+
+  const inventoryCost =
+    useMemo(
+      () =>
+        inventory.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.stock ?? 0,
+            ) *
+              Number(
+                item.cost ?? 0,
+              ),
+          0,
+        ),
+      [inventory],
+    );
+
+  const inventoryRetail =
+    useMemo(
+      () =>
+        inventory.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.stock ?? 0,
+            ) *
+              Number(
+                item.price ?? 0,
+              ),
+          0,
+        ),
+      [inventory],
+    );
+
+  const lowStock =
+    useMemo(
+      () =>
+        inventory
+          .filter(
+            (item) =>
+              Number(
+                item.available_stock,
+              ) <=
+              Number(
+                item.min_stock,
+              ),
+          )
+          .sort(
+            (
+              a,
+              b,
+            ) =>
+              Number(
+                a.available_stock,
+              ) -
+              Number(
+                b.available_stock,
+              ),
+          )
+          .slice(
+            0,
+            20,
+          ),
+      [inventory],
+    );
+
+  /*
+   * ============================================================
+   * VENTAS POR MÉTODO DE PAGO
+   * ============================================================
+   */
+
+  const paymentLabels: Record<
+    string,
+    string
+  > = {
+    cash: "Efectivo",
+    card: "Tarjeta",
+    transfer:
+      "Transferencia",
+    credit: "Crédito",
+    mixed: "Mixto",
+  };
+
+  const byPayment =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          number
+        >();
+
+      for (const sale of sales) {
+        const method =
+          sale.payment_method ??
+          "cash";
+
+        map.set(
+          method,
+          (map.get(
+            method,
+          ) ?? 0) +
+            Number(
+              sale.total ?? 0,
+            ),
+        );
+      }
+
+      return Array.from(
+        map.entries(),
+      )
+        .map(
+          ([
+            method,
+            total,
+          ]) => ({
+            method,
+            label:
+              paymentLabels[
+                method
+              ] ??
+              method,
+            total,
+          }),
+        )
+        .sort(
+          (a, b) =>
+            b.total -
+            a.total,
+        );
+    }, [sales]);
+
+  /*
+   * ============================================================
+   * VENTAS POR DÍA
+   * ============================================================
+   */
+
+  const byDay =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          number
+        >();
+
+      for (const sale of sales) {
+        const day =
+          format(
+            parseISO(
+              sale.created_at,
+            ),
+            "yyyy-MM-dd",
+          );
+
+        map.set(
+          day,
+          (map.get(day) ??
+            0) +
+            Number(
+              sale.total ?? 0,
+            ),
+        );
+      }
+
+      return Array.from(
+        map.entries(),
+      )
+        .sort(
+          ([
+            a,
+          ], [
+            b,
+          ]) =>
+            a.localeCompare(
+              b,
+            ),
+        )
+        .map(
+          ([
+            day,
+            total,
+          ]) => ({
+            day,
+            label:
+              format(
+                parseISO(day),
+                "dd/MM",
+              ),
+            total:
+              Math.round(
+                total * 100,
+              ) / 100,
+          }),
+        );
+    }, [sales]);
+
+  /*
+   * ============================================================
+   * TOP PRODUCTOS
+   *
+   * Agrupa por product_id cuando existe.
+   * ============================================================
+   */
+
+  const topProducts =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          {
+            key: string;
+            name: string;
+            quantity: number;
+            revenue: number;
+            cost: number;
+          }
+        >();
+
+      for (const item of saleItems) {
+        const key =
+          item.product_id ??
+          `snapshot:${item.name_snapshot}`;
+
+        const current =
+          map.get(key) ?? {
+            key,
+            name:
+              item.name_snapshot,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+          };
+
+        current.quantity +=
+          Number(
+            item.quantity ?? 0,
+          );
+
+        current.revenue +=
+          Number(
+            item.total ?? 0,
+          );
+
+        if (
+          item.cost_total !==
+          null &&
+          item.cost_total !==
+            undefined
+        ) {
+          current.cost +=
+            Number(
+              item.cost_total,
+            );
+        } else {
+          current.cost +=
+            Number(
+              item.unit_cost ??
+                0,
+            ) *
+            Number(
+              item.quantity ?? 0,
+            );
+        }
+
+        map.set(
+          key,
+          current,
+        );
+      }
+
+      return Array.from(
+        map.values(),
+      )
+        .map(
+          (product) => {
+            const profit =
+              product.revenue -
+              product.cost;
+
+            return {
+              ...product,
+              profit,
+              marginPercent:
+                product.revenue >
+                0
+                  ? (profit /
+                      product.revenue) *
+                    100
+                  : 0,
+            };
+          },
+        )
+        .sort(
+          (a, b) =>
+            b.revenue -
+            a.revenue,
+        )
+        .slice(
+          0,
+          15,
+        );
+    }, [saleItems]);
+
+  /*
+   * ============================================================
+   * INVENTARIO POR VALOR
+   * ============================================================
+   */
+
+  const inventoryCoverage =
+    totalSales > 0
+      ? inventoryRetail /
+        totalSales
+      : 0;
+
+  /*
+   * ============================================================
+   * ERROR
+   * ============================================================
+   */
+
+  if (
+    salesError
+  ) {
     return (
       <PageShell>
         <PageHeader
           icon={BarChart3}
           title="Reportes"
-          description="Ventas, utilidad, costos históricos e inventario compartido."
+          description="Ventas, utilidad, costos históricos e inventario central."
         />
 
         <Card className="border-destructive/30">
-          <CardContent className="pt-6">
-            <div className="space-y-2">
-              <p className="font-semibold text-destructive">
-                No se pudieron cargar
-                los reportes.
-              </p>
-
-              <p className="text-sm text-muted-foreground">
-                {summaryError instanceof
-                Error
-                  ? summaryError.message
-                  : "Error desconocido"}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                Revisa que la migración
-                20260924010000_lula_os_reportes_engine.sql
-                esté aplicada en Supabase.
-              </p>
-            </div>
+          <CardContent className="pt-6 text-sm text-destructive">
+            No se pudieron cargar
+            los reportes:{" "}
+            {
+              (
+                salesError as Error
+              ).message
+            }
           </CardContent>
         </Card>
       </PageShell>
     );
   }
-
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
 
   return (
     <PageShell className="space-y-5">
@@ -800,7 +960,9 @@ function ReportesPage() {
         action={
           <Select
             value={rangeDays}
-            onValueChange={setRangeDays}
+            onValueChange={
+              setRangeDays
+            }
           >
             <SelectTrigger className="w-[180px] rounded-xl">
               <SelectValue />
@@ -810,10 +972,16 @@ function ReportesPage() {
               {RANGES.map(
                 (range) => (
                   <SelectItem
-                    key={range.value}
-                    value={range.value}
+                    key={
+                      range.value
+                    }
+                    value={
+                      range.value
+                    }
                   >
-                    {range.label}
+                    {
+                      range.label
+                    }
                   </SelectItem>
                 ),
               )}
@@ -823,117 +991,78 @@ function ReportesPage() {
       />
 
       {/* ======================================================
-          PERIODO
-      ======================================================= */}
-
-      <div className="rounded-xl border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
-        Periodo:
-        <span className="ml-1 font-medium text-foreground">
-          {fromDate}
-        </span>
-        <span className="mx-1">
-          →
-        </span>
-        <span className="font-medium text-foreground">
-          {toDate}
-        </span>
-      </div>
-
-      {/* ======================================================
-          KPIs FINANCIEROS
+          KPI PRINCIPALES
       ======================================================= */}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
           title="Ventas"
           value={money(
-            summary?.sales_total ?? 0,
+            totalSales,
           )}
           icon={DollarSign}
           delta={
-            summary?.sales_change_percent
+            salesChange
           }
           loading={
-            loadingSummary
-          }
-          subtitle={
-            summary
-              ? `${summary.tickets.toLocaleString(
-                  "es-MX",
-                )} ventas`
-              : undefined
+            loadingSales
           }
         />
 
         <KpiCard
           title="Ticket promedio"
           value={money(
-            summary?.average_ticket ??
-              0,
+            averageTicket,
           )}
           icon={Receipt}
+          subtitle={`${ticketCount} ventas`}
           loading={
-            loadingSummary
-          }
-          subtitle={
-            summary
-              ? `Anterior ${money(
-                  summary.previous_average_ticket,
-                )}`
-              : undefined
+            loadingSales
           }
         />
 
         <KpiCard
           title="Utilidad bruta"
           value={money(
-            summary?.gross_profit ??
-              0,
+            grossProfit,
           )}
           icon={TrendingUp}
+          subtitle={`Margen ${marginPercent.toFixed(
+            1,
+          )}%`}
           loading={
-            loadingSummary
-          }
-          subtitle={
-            summary
-              ? `Margen ${summary.gross_margin.toFixed(
-                  1,
-                )}%`
-              : undefined
+            loadingSales
           }
         />
 
         <KpiCard
           title="Utilidad neta"
           value={money(
-            summary?.net_profit ?? 0,
+            netProfit,
           )}
           icon={
-            (summary?.net_profit ?? 0) >=
-            0
+            netProfit >= 0
               ? TrendingUp
               : TrendingDown
           }
+          subtitle={`Gastos ${money(
+            Number(
+              expensesTotal,
+            ),
+          )}`}
           loading={
-            loadingSummary
-          }
-          subtitle={
-            summary
-              ? `Gastos ${money(
-                  summary.expenses_total,
-                )}`
-              : undefined
+            loadingSales
           }
         />
       </div>
 
       {/* ======================================================
-          KPIs INVENTARIO
+          KPI INVENTARIO
       ======================================================= */}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard
-          title="Unidades"
+          title="Unidades en inventario"
           value={inventoryUnits.toLocaleString(
             "es-MX",
           )}
@@ -949,16 +1078,16 @@ function ReportesPage() {
             "es-MX",
           )}
           icon={Package}
-          loading={
-            loadingInventory
-          }
           subtitle={`${inventoryReserved.toLocaleString(
             "es-MX",
           )} reservadas`}
+          loading={
+            loadingInventory
+          }
         />
 
         <KpiCard
-          title="Inventario a costo"
+          title="Valor a costo"
           value={money(
             inventoryCost,
           )}
@@ -969,22 +1098,26 @@ function ReportesPage() {
         />
 
         <KpiCard
-          title="Inventario a venta"
+          title="Valor de venta"
           value={money(
             inventoryRetail,
           )}
           icon={TrendingUp}
+          subtitle={
+            inventoryCoverage > 0
+              ? `≈ ${inventoryCoverage.toFixed(
+                  1,
+                )} periodos`
+              : undefined
+          }
           loading={
             loadingInventory
           }
-          subtitle={`Utilidad potencial ${money(
-            inventoryPotentialProfit,
-          )}`}
         />
       </div>
 
       {/* ======================================================
-          GRÁFICA DE VENTAS
+          GRÁFICA
       ======================================================= */}
 
       <Card>
@@ -995,14 +1128,11 @@ function ReportesPage() {
         </CardHeader>
 
         <CardContent>
-          {loadingDaily ? (
-            <div className="flex h-64 items-center justify-center text-sm text-muted-foreground">
-              Cargando ventas...
-            </div>
-          ) : salesChart.length ===
-            0 ? (
+          {byDay.length ===
+          0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">
-              Sin ventas en el periodo.
+              Sin ventas en
+              el periodo.
             </p>
           ) : (
             <div className="h-64 w-full">
@@ -1011,7 +1141,7 @@ function ReportesPage() {
                 height="100%"
               >
                 <BarChart
-                  data={salesChart}
+                  data={byDay}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1029,7 +1159,7 @@ function ReportesPage() {
                     tick={{
                       fontSize: 11,
                     }}
-                    width={65}
+                    width={60}
                   />
 
                   <Tooltip
@@ -1037,7 +1167,9 @@ function ReportesPage() {
                       value: number,
                     ) => [
                       money(
-                        Number(value),
+                        Number(
+                          value,
+                        ),
                       ),
                       "Ventas",
                     ]}
@@ -1079,41 +1211,38 @@ function ReportesPage() {
             <SummaryRow
               label="Ventas"
               value={money(
-                summary?.sales_total ??
-                  0,
+                totalSales,
               )}
             />
 
             <SummaryRow
-              label="Costo histórico de mercancía"
+              label="Costo de mercancía"
               value={money(
-                summary?.historical_cost ??
-                  0,
+                historicalCost,
               )}
             />
 
             <SummaryRow
               label="Utilidad bruta"
               value={money(
-                summary?.gross_profit ??
-                  0,
+                grossProfit,
               )}
               strong
             />
 
             <SummaryRow
               label="Margen bruto"
-              value={`${(
-                summary?.gross_margin ??
-                0
-              ).toFixed(2)}%`}
+              value={`${marginPercent.toFixed(
+                2,
+              )}%`}
             />
 
             <SummaryRow
               label="Gastos"
               value={money(
-                summary?.expenses_total ??
-                  0,
+                Number(
+                  expensesTotal,
+                ),
               )}
             />
 
@@ -1121,8 +1250,7 @@ function ReportesPage() {
               <SummaryRow
                 label="Utilidad neta"
                 value={money(
-                  summary?.net_profit ??
-                    0,
+                  netProfit,
                 )}
                 strong
               />
@@ -1130,274 +1258,175 @@ function ReportesPage() {
           </CardContent>
         </Card>
 
-        {/* ====================================================
-            COMPARATIVO
-        ===================================================== */}
-
         <Card>
           <CardHeader>
             <CardTitle className="text-base">
-              Comparación contra periodo anterior
+              Métodos de pago
             </CardTitle>
           </CardHeader>
 
-          <CardContent className="space-y-3">
-            <ComparisonRow
-              label="Ventas"
-              current={
-                summary?.sales_total ??
-                0
-              }
-              previous={
-                summary?.previous_sales_total ??
-                0
-              }
-              percent={
-                summary?.sales_change_percent ??
-                0
-            }
-            />
-
-            <ComparisonRow
-              label="Utilidad neta"
-              current={
-                summary?.net_profit ??
-                0
-              }
-              previous={
-                summary?.previous_net_profit ??
-                0
-              }
-              percent={
-                summary?.profit_change_percent ??
-                0
-              }
-            />
-
-            <ComparisonRow
-              label="Ticket promedio"
-              current={
-                summary?.average_ticket ??
-                0
-              }
-              previous={
-                summary?.previous_average_ticket ??
-                0
-              }
-            />
-
-            <ComparisonRow
-              label="Gastos"
-              current={
-                summary?.expenses_total ??
-                0
-              }
-              previous={
-                summary?.previous_expenses_total ??
-                0
-              }
-            />
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ======================================================
-          MÉTODOS DE PAGO
-      ======================================================= */}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">
-            Métodos de pago
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent>
-          {loadingPayments ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Cargando pagos...
-            </p>
-          ) : paymentMethods.length ===
+          <CardContent>
+            {byPayment.length ===
             0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">
-              Sin pagos en el periodo.
-            </p>
-          ) : (
-            <div className="space-y-3">
-              {paymentMethods.map(
-                (payment) => {
-                  const label =
-                    paymentLabels[
-                      payment.payment_method
-                    ] ??
-                    payment.payment_method;
-
-                  return (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Sin ventas.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {byPayment.map(
+                  (payment) => (
                     <div
                       key={
-                        payment.payment_method
+                        payment.method
                       }
-                      className="flex items-center justify-between gap-3"
+                      className="flex items-center justify-between"
                     >
-                      <div>
-                        <p className="text-sm font-medium">
-                          {label}
-                        </p>
+                      <span className="text-sm">
+                        {
+                          payment.label
+                        }
+                      </span>
 
-                        <p className="text-xs text-muted-foreground">
-                          {payment.transactions.toLocaleString(
-                            "es-MX",
-                          )}{" "}
-                          operaciones
-                        </p>
-                      </div>
-
-                      <span className="font-semibold">
+                      <span className="font-medium">
                         {money(
                           payment.total,
                         )}
                       </span>
                     </div>
-                  );
-                },
-              )}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  ),
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       {/* ======================================================
-          PRODUCTOS
+          PRODUCTOS MÁS VENDIDOS
       ======================================================= */}
 
       <Card>
-        <CardHeader>
+        <CardHeader className="pb-2">
           <CardTitle className="text-base">
             Productos más vendidos
           </CardTitle>
         </CardHeader>
 
         <CardContent className="overflow-x-auto">
-          {loadingProducts ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Cargando productos...
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    #
-                  </TableHead>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  #
+                </TableHead>
 
-                  <TableHead>
-                    Producto
-                  </TableHead>
+                <TableHead>
+                  Producto
+                </TableHead>
 
-                  <TableHead className="text-right">
-                    Cantidad
-                  </TableHead>
+                <TableHead className="text-right">
+                  Cantidad
+                </TableHead>
 
-                  <TableHead className="text-right">
-                    Ventas
-                  </TableHead>
+                <TableHead className="text-right">
+                  Ingresos
+                </TableHead>
 
-                  <TableHead className="text-right">
-                    Costo
-                  </TableHead>
+                <TableHead className="text-right">
+                  Costo
+                </TableHead>
 
-                  <TableHead className="text-right">
-                    Utilidad
-                  </TableHead>
+                <TableHead className="text-right">
+                  Utilidad
+                </TableHead>
 
-                  <TableHead className="text-right">
-                    Margen
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+                <TableHead className="text-right">
+                  Margen
+                </TableHead>
+              </TableRow>
+            </TableHeader>
 
-              <TableBody>
-                {products
-                  .slice(0, 15)
-                  .map(
-                    (
-                      product,
-                      index,
-                    ) => (
-                      <TableRow
-                        key={`${product.product_id ?? "snapshot"}-${product.variant_id ?? "base"}-${index}`}
-                      >
-                        <TableCell className="text-muted-foreground">
-                          {index + 1}
-                        </TableCell>
+            <TableBody>
+              {topProducts.map(
+                (
+                  product,
+                  index,
+                ) => (
+                  <TableRow
+                    key={
+                      product.key
+                    }
+                  >
+                    <TableCell className="text-muted-foreground">
+                      {index + 1}
+                    </TableCell>
 
-                        <TableCell className="font-medium">
-                          {
-                            product.product_name
-                          }
-                        </TableCell>
+                    <TableCell className="font-medium">
+                      {
+                        product.name
+                      }
+                    </TableCell>
 
-                        <TableCell className="text-right">
-                          {product.quantity.toLocaleString(
-                            "es-MX",
-                          )}
-                        </TableCell>
+                    <TableCell className="text-right">
+                      {
+                        product.quantity
+                      }
+                    </TableCell>
 
-                        <TableCell className="text-right">
-                          {money(
-                            product.revenue,
-                          )}
-                        </TableCell>
+                    <TableCell className="text-right">
+                      {money(
+                        product.revenue,
+                      )}
+                    </TableCell>
 
-                        <TableCell className="text-right text-muted-foreground">
-                          {money(
-                            product.historical_cost,
-                          )}
-                        </TableCell>
+                    <TableCell className="text-right text-muted-foreground">
+                      {money(
+                        product.cost,
+                      )}
+                    </TableCell>
 
-                        <TableCell
-                          className={cn(
-                            "text-right font-medium",
-                            product.gross_profit >=
-                              0
-                              ? "text-emerald-600"
-                              : "text-destructive",
-                          )}
-                        >
-                          {money(
-                            product.gross_profit,
-                          )}
-                        </TableCell>
-
-                        <TableCell className="text-right">
-                          {product.gross_margin.toFixed(
-                            1,
-                          )}
-                          %
-                        </TableCell>
-                      </TableRow>
-                    ),
-                  )}
-
-                {!products.length && (
-                  <TableRow>
                     <TableCell
-                      colSpan={7}
-                      className="py-10 text-center text-muted-foreground"
+                      className={cn(
+                        "text-right font-medium",
+                        product.profit >=
+                          0
+                          ? "text-emerald-600"
+                          : "text-destructive",
+                      )}
                     >
-                      Sin datos de
-                      productos.
+                      {money(
+                        product.profit,
+                      )}
+                    </TableCell>
+
+                    <TableCell className="text-right">
+                      {product.marginPercent.toFixed(
+                        1,
+                      )}
+                      %
                     </TableCell>
                   </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          )}
+                ),
+              )}
+
+              {!topProducts.length && (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-10 text-center text-muted-foreground"
+                  >
+                    Sin datos de
+                    productos.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
       {/* ======================================================
-          INVENTARIO BAJO
+          STOCK BAJO
       ======================================================= */}
 
       <Card>
@@ -1409,14 +1438,11 @@ function ReportesPage() {
         </CardHeader>
 
         <CardContent className="overflow-x-auto">
-          {loadingInventory ? (
+          {lowStock.length ===
+          0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
-              Cargando inventario...
-            </p>
-          ) : lowStock.length ===
-            0 ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              No hay productos bajo mínimo.
+              No hay productos
+              bajo mínimo.
             </p>
           ) : (
             <Table>
@@ -1439,14 +1465,6 @@ function ReportesPage() {
                   </TableHead>
 
                   <TableHead className="text-right">
-                    Costo
-                  </TableHead>
-
-                  <TableHead className="text-right">
-                    Valor venta
-                  </TableHead>
-
-                  <TableHead className="text-right">
                     Estado
                   </TableHead>
                 </TableRow>
@@ -1465,37 +1483,28 @@ function ReportesPage() {
                       </TableCell>
 
                       <TableCell className="font-mono text-xs text-muted-foreground">
-                        {item.sku ??
-                          "—"}
+                        {
+                          item.sku ??
+                          "—"
+                        }
                       </TableCell>
 
                       <TableCell className="text-right font-semibold">
-                        {item.available_stock.toLocaleString(
-                          "es-MX",
-                        )}
+                        {
+                          item.available_stock
+                        }
                       </TableCell>
 
                       <TableCell className="text-right">
-                        {item.min_stock.toLocaleString(
-                          "es-MX",
-                        )}
+                        {
+                          item.min_stock
+                        }
                       </TableCell>
 
                       <TableCell className="text-right">
-                        {money(
-                          item.inventory_cost,
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        {money(
-                          item.inventory_retail,
-                        )}
-                      </TableCell>
-
-                      <TableCell className="text-right">
-                        {item.stock_status ===
-                        "out_of_stock" ? (
+                        {Number(
+                          item.available_stock,
+                        ) <= 0 ? (
                           <Badge variant="destructive">
                             Agotado
                           </Badge>
@@ -1517,11 +1526,29 @@ function ReportesPage() {
   );
 }
 
-/*
- * ============================================================
- * COMPONENTE KPI
- * ============================================================
- */
+function SummaryRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between",
+        strong &&
+          "font-semibold",
+      )}
+    >
+      <span>{label}</span>
+
+      <span>{value}</span>
+    </div>
+  );
+}
 
 function KpiCard({
   title,
@@ -1535,17 +1562,14 @@ function KpiCard({
   value: string;
   icon: typeof DollarSign;
   delta?: number;
-  subtitle?: string;
+  subtitle?: string | undefined;
   loading?: boolean;
 }) {
-  const safeDelta =
-    Number(delta ?? 0);
-
   return (
     <Card>
       <CardContent className="pt-4">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
+          <div>
             <p className="text-xs font-medium text-muted-foreground">
               {title}
             </p>
@@ -1562,24 +1586,24 @@ function KpiCard({
                 <p
                   className={cn(
                     "mt-1 flex items-center gap-1 text-xs font-medium",
-                    safeDelta >=
+                    delta >=
                       0
                       ? "text-emerald-600"
                       : "text-destructive",
                   )}
                 >
-                  {safeDelta >=
+                  {delta >=
                   0 ? (
                     <TrendingUp className="h-3 w-3" />
                   ) : (
                     <TrendingDown className="h-3 w-3" />
                   )}
 
-                  {safeDelta >=
+                  {delta >=
                   0
                     ? "+"
                     : ""}
-                  {safeDelta.toFixed(
+                  {delta.toFixed(
                     1,
                   )}
                   % vs periodo anterior
@@ -1589,12 +1613,14 @@ function KpiCard({
             {subtitle &&
               !loading && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  {subtitle}
+                  {
+                    subtitle
+                  }
                 </p>
               )}
           </div>
 
-          <div className="shrink-0 rounded-lg bg-primary/10 p-2">
+          <div className="rounded-lg bg-primary/10 p-2">
             <Icon className="h-5 w-5 text-primary" />
           </div>
         </div>
@@ -1602,104 +1628,3 @@ function KpiCard({
     </Card>
   );
 }
-
-/*
- * ============================================================
- * FILA DE RESUMEN
- * ============================================================
- */
-
-function SummaryRow({
-  label,
-  value,
-  strong = false,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-4",
-        strong &&
-          "font-semibold",
-      )}
-    >
-      <span>{label}</span>
-
-      <span className="text-right">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-/*
- * ============================================================
- * FILA DE COMPARACIÓN
- * ============================================================
- */
-
-function ComparisonRow({
-  label,
-  current,
-  previous,
-  percent,
-}: {
-  label: string;
-  current: number;
-  previous: number;
-  percent?: number;
-}) {
-  const difference =
-    current - previous;
-
-  const change =
-    percent !== undefined
-      ? percent
-      : previous !== 0
-        ? (difference /
-            Math.abs(
-              previous,
-            )) *
-          100
-        : current !== 0
-          ? 100
-          : 0;
-
-  return (
-    <div className="flex items-center justify-between gap-4 border-b last:border-0 pb-3 last:pb-0">
-      <div>
-        <p className="text-sm font-medium">
-          {label}
-        </p>
-
-        <p className="text-xs text-muted-foreground">
-          Anterior:{" "}
-          {money(previous)}
-        </p>
-      </div>
-
-      <div className="text-right">
-        <p className="font-semibold">
-          {money(current)}
-        </p>
-
-        <p
-          className={cn(
-            "text-xs font-medium",
-            change >= 0
-              ? "text-emerald-600"
-              : "text-destructive",
-          )}
-        >
-          {change >= 0
-            ? "+"
-            : ""}
-          {change.toFixed(1)}%
-        </p>
-      </div>
-    </div>
-  );
-} 
