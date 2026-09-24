@@ -26,6 +26,7 @@ import {
   BarChart3,
   Boxes,
   AlertTriangle,
+  Users,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -73,7 +74,7 @@ export const Route = createFileRoute("/_shell/reportes")({
       {
         name: "description",
         content:
-          "Reportes de ventas, utilidad, costos históricos, inventario compartido y productos.",
+          "Reportes de ventas, utilidad, costos históricos, inventario compartido, clientes y productos.",
       },
     ],
   }),
@@ -110,6 +111,7 @@ type SaleRow = {
   status: string;
   payment_method: string;
   cashier_id: string;
+  customer_id: string | null;
 };
 
 type SaleItemRow = {
@@ -153,19 +155,6 @@ function ReportesPage() {
    * ============================================================
    * PERIODOS
    * ============================================================
-   *
-   * Antes:
-   *
-   * 30 días = desde hoy - 30 días
-   *
-   * Eso realmente incluía 31 fechas de calendario.
-   *
-   * Ahora:
-   *
-   * 30 días = hoy + 29 días anteriores.
-   *
-   * El periodo anterior tiene exactamente la misma cantidad
-   * de días.
    */
 
   const since = useMemo(
@@ -236,7 +225,8 @@ function ReportesPage() {
           created_at,
           status,
           payment_method,
-          cashier_id
+          cashier_id,
+          customer_id
         `,
         )
         .eq(
@@ -344,19 +334,6 @@ function ReportesPage() {
    * ============================================================
    * GASTOS
    * ============================================================
-   *
-   * El periodo ahora tiene límite superior.
-   *
-   * Antes:
-   *
-   *   >= fecha inicial
-   *
-   * Eso podía incluir gastos capturados con fecha futura.
-   *
-   * Ahora:
-   *
-   *   >= inicio
-   *   <= hoy
    */
 
   const {
@@ -427,9 +404,9 @@ function ReportesPage() {
    * ITEMS DE LAS VENTAS
    * ============================================================
    *
-   * Se utiliza cost_total almacenado en el momento de la venta.
-   *
-   * NO se utiliza products.cost actual.
+   * Se utiliza cost_total histórico.
+   * Nunca se utiliza el costo actual del producto
+   * para calcular utilidad histórica.
    */
 
   const saleIds = useMemo(
@@ -442,6 +419,7 @@ function ReportesPage() {
 
   const {
     data: saleItems = [],
+    isLoading: loadingSaleItems,
   } = useQuery({
     queryKey: [
       "report-sale-items-historical",
@@ -544,6 +522,79 @@ function ReportesPage() {
       : totalSales > 0
         ? 100
         : 0;
+
+  /*
+   * ============================================================
+   * CLIENTES
+   * ============================================================
+   *
+   * Solo contamos clientes vinculados a las ventas.
+   *
+   * Las ventas sin customer_id no se inventan como clientes.
+   */
+
+  const customerCount =
+    useMemo(() => {
+      const ids =
+        new Set<string>();
+
+      for (const sale of sales) {
+        if (
+          sale.customer_id
+        ) {
+          ids.add(
+            sale.customer_id,
+          );
+        }
+      }
+
+      return ids.size;
+    }, [sales]);
+
+  const salesWithoutCustomer =
+    useMemo(
+      () =>
+        sales.filter(
+          (sale) =>
+            !sale.customer_id,
+        ).length,
+      [sales],
+    );
+
+  const customerAverageSpend =
+    customerCount > 0
+      ? totalSales /
+        customerCount
+      : 0;
+
+  /*
+   * ============================================================
+   * UNIDADES VENDIDAS
+   * ============================================================
+   */
+
+  const unitsSold =
+    useMemo(
+      () =>
+        saleItems.reduce(
+          (
+            total,
+            item,
+          ) =>
+            total +
+            Number(
+              item.quantity ?? 0,
+            ),
+          0,
+        ),
+      [saleItems],
+    );
+
+  const averageUnitsPerSale =
+    ticketCount > 0
+      ? unitsSold /
+        ticketCount
+      : 0;
 
   /*
    * ============================================================
@@ -759,11 +810,6 @@ function ReportesPage() {
    * ============================================================
    * COBERTURA DEL INVENTARIO
    * ============================================================
-   *
-   * No se etiqueta como "periodos", porque el valor de inventario
-   * dividido entre ventas no representa realmente meses o semanas.
-   *
-   * Se muestra como multiplicador del valor de ventas del periodo.
    */
 
   const inventorySalesMultiple =
@@ -1042,7 +1088,7 @@ function ReportesPage() {
       <PageHeader
         icon={BarChart3}
         title="Reportes"
-        description="Ventas, utilidad real, costos históricos e inventario compartido."
+        description="Ventas, utilidad real, clientes, costos históricos e inventario compartido."
         action={
           <Select
             value={rangeDays}
@@ -1108,6 +1154,48 @@ function ReportesPage() {
         />
 
         <KpiCard
+          title="Unidades vendidas"
+          value={unitsSold.toLocaleString(
+            "es-MX",
+          )}
+          icon={Package}
+          subtitle={`${averageUnitsPerSale.toFixed(
+            1,
+          )} por venta`}
+          loading={
+            loadingSaleItems ||
+            loadingSales
+          }
+        />
+
+        <KpiCard
+          title="Clientes"
+          value={customerCount.toLocaleString(
+            "es-MX",
+          )}
+          icon={Users}
+          subtitle={
+            customerCount > 0
+              ? `${money(
+                  customerAverageSpend,
+                )} por cliente`
+              : salesWithoutCustomer >
+                0
+                ? `${salesWithoutCustomer} ventas sin cliente`
+                : undefined
+          }
+          loading={
+            loadingSales
+          }
+        />
+      </div>
+
+      {/* ======================================================
+          UTILIDAD
+      ======================================================= */}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard
           title="Utilidad bruta"
           value={money(
             grossProfit,
@@ -1117,6 +1205,7 @@ function ReportesPage() {
             1,
           )}%`}
           loading={
+            loadingSaleItems ||
             loadingSales
           }
         />
@@ -1137,6 +1226,32 @@ function ReportesPage() {
             ),
           )}`}
           loading={
+            loadingSaleItems ||
+            loadingSales
+          }
+        />
+
+        <KpiCard
+          title="Costo de mercancía"
+          value={money(
+            historicalCost,
+          )}
+          icon={Package}
+          loading={
+            loadingSaleItems ||
+            loadingSales
+          }
+        />
+
+        <KpiCard
+          title="Margen bruto"
+          value={`${marginPercent.toFixed(
+            1,
+          )}%`}
+          icon={TrendingUp}
+          subtitle="Sobre ventas"
+          loading={
+            loadingSaleItems ||
             loadingSales
           }
         />
@@ -1282,7 +1397,7 @@ function ReportesPage() {
       </Card>
 
       {/* ======================================================
-          RESUMEN FINANCIERO
+          RESUMEN FINANCIERO + CLIENTES
       ======================================================= */}
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -1346,46 +1461,109 @@ function ReportesPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">
-              Métodos de pago
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4" />
+              Clientes y ventas
             </CardTitle>
           </CardHeader>
 
-          <CardContent>
-            {byPayment.length ===
-            0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Sin ventas.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {byPayment.map(
-                  (payment) => (
-                    <div
-                      key={
-                        payment.method
-                      }
-                      className="flex items-center justify-between"
-                    >
-                      <span className="text-sm">
-                        {
-                          payment.label
-                        }
-                      </span>
+          <CardContent className="space-y-3">
+            <SummaryRow
+              label="Clientes con compra"
+              value={customerCount.toLocaleString(
+                "es-MX",
+              )}
+              strong
+            />
 
-                      <span className="font-medium">
-                        {money(
-                          payment.total,
-                        )}
-                      </span>
-                    </div>
-                  ),
-                )}
+            <SummaryRow
+              label="Ventas"
+              value={ticketCount.toLocaleString(
+                "es-MX",
+              )}
+            />
+
+            <SummaryRow
+              label="Unidades vendidas"
+              value={unitsSold.toLocaleString(
+                "es-MX",
+              )}
+            />
+
+            <SummaryRow
+              label="Unidades por venta"
+              value={averageUnitsPerSale.toFixed(
+                1,
+              )}
+            />
+
+            <SummaryRow
+              label="Venta promedio por cliente"
+              value={money(
+                customerAverageSpend,
+              )}
+            />
+
+            {salesWithoutCustomer >
+              0 && (
+              <div className="border-t pt-3">
+                <SummaryRow
+                  label="Ventas sin cliente"
+                  value={salesWithoutCustomer.toLocaleString(
+                    "es-MX",
+                  )}
+                />
               </div>
             )}
           </CardContent>
         </Card>
       </div>
+
+      {/* ======================================================
+          MÉTODOS DE PAGO
+      ======================================================= */}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">
+            Métodos de pago
+          </CardTitle>
+        </CardHeader>
+
+        <CardContent>
+          {byPayment.length ===
+          0 ? (
+            <p className="py-6 text-center text-sm text-muted-foreground">
+              Sin ventas.
+            </p>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {byPayment.map(
+                (payment) => (
+                  <div
+                    key={
+                      payment.method
+                    }
+                    className="rounded-xl border p-4"
+                  >
+                    <p className="text-sm text-muted-foreground">
+                      {
+                        payment.label
+                      }
+                    </p>
+
+                    <p className="mt-1 text-lg font-semibold">
+                      {money(
+                        payment.total,
+                      )}
+                    </p>
+                  </div>
+                ),
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ======================================================
           PRODUCTOS MÁS VENDIDOS
@@ -1713,4 +1891,4 @@ function KpiCard({
       </CardContent>
     </Card>
   );
-} 
+}
