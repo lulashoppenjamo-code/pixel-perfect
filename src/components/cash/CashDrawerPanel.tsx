@@ -490,7 +490,7 @@ export function CashDrawerPanel({ className }: { className?: string }) {
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: string; hint?: string | undefined }) {
+function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
     <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
       <p className="text-[11px] font-bold uppercase tracking-wide text-[#9aa3b8]">{label}</p>
