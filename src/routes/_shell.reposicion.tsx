@@ -1009,13 +1009,10 @@ function ReposicionPage() {
   return (
     <PageShell>
       <PageHeader
-        title="Reposición"
-        description="Lista de productos que hacen falta comprar. No modifica el inventario real."
-        icon={
-          <ShoppingCart className="h-5 w-5" />
-        }
-      />
-
+  title="Reposición"
+  description="Lista de productos que hacen falta comprar. No modifica el inventario real."
+  icon={ShoppingCart}
+/>
       {/* ======================================================
           RESUMEN
       ======================================================= */}
