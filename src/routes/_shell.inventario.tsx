@@ -142,27 +142,18 @@ function InventarioPage() {
 
   const branchId = profile?.branch_id ?? null;
 
-  const [adjustProduct, setAdjustProduct] =
-    useState("");
-  const [adjustQuantity, setAdjustQuantity] =
-    useState("");
-  const [adjustNotes, setAdjustNotes] =
-    useState("");
+  const [adjustProduct, setAdjustProduct] = useState("");
+  const [adjustQuantity, setAdjustQuantity] = useState("");
+  const [adjustNotes, setAdjustNotes] = useState("");
   const [adjustDirection, setAdjustDirection] =
     useState<"in" | "out">("in");
 
-  const [limitProduct, setLimitProduct] =
-    useState("");
-  const [limitMin, setLimitMin] =
-    useState("0");
-  const [limitMax, setLimitMax] =
-    useState("");
+  const [limitProduct, setLimitProduct] = useState("");
+  const [limitMin, setLimitMin] = useState("0");
+  const [limitMax, setLimitMax] = useState("");
 
-  const [countFilter, setCountFilter] =
-    useState("");
-
-  const [countNotes, setCountNotes] =
-    useState("");
+  const [countFilter, setCountFilter] = useState("");
+  const [countNotes, setCountNotes] = useState("");
 
   const [physicalCount, setPhysicalCount] =
     useState<Record<string, string>>({});
@@ -193,12 +184,6 @@ function InventarioPage() {
     });
   };
 
-  /*
-   * ============================================================
-   * INVENTARIO CENTRAL
-   * ============================================================
-   */
-
   const {
     data: inventory = [],
     isLoading: inventoryLoading,
@@ -208,94 +193,56 @@ function InventarioPage() {
     queryFn: getSharedInventory,
   });
 
-  /*
-   * ============================================================
-   * PRODUCTOS
-   * ============================================================
-   */
+  const { data: products = [] } = useQuery({
+    queryKey: ["inv-products-shared"],
 
-  const { data: products = [] } =
-    useQuery({
-      queryKey: ["inv-products-shared"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id,name,sku,barcode")
+        .eq("is_active", true)
+        .order("name");
 
-      queryFn: async () => {
-        const { data, error } =
-          await supabase
-            .from("products")
-            .select(
-              "id,name,sku,barcode",
-            )
-            .eq(
-              "is_active",
-              true,
-            )
-            .order("name");
+      if (error) {
+        throw error;
+      }
 
-        if (error) {
-          throw error;
-        }
+      return data ?? [];
+    },
+  });
 
-        return data ?? [];
-      },
-    });
+  const { data: movements = [] } = useQuery({
+    queryKey: ["inventory-movements"],
 
-  /*
-   * ============================================================
-   * MOVIMIENTOS
-   * ============================================================
-   */
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory_movements")
+        .select(
+          "id,type,quantity,notes,created_at,products(name)",
+        )
+        .order("created_at", {
+          ascending: false,
+        })
+        .limit(100);
 
-  const { data: movements = [] } =
-    useQuery({
-      queryKey: [
-        "inventory-movements",
-      ],
+      if (error) {
+        throw error;
+      }
 
-      queryFn: async () => {
-        const { data, error } =
-          await supabase
-            .from(
-              "inventory_movements",
-            )
-            .select(
-              "id,type,quantity,notes,created_at,products(name)",
-            )
-            .order(
-              "created_at",
-              {
-                ascending: false,
-              },
-            )
-            .limit(100);
-
-        if (error) {
-          throw error;
-        }
-
-        return data ?? [];
-      },
-    });
-
-  /*
-   * ============================================================
-   * SESIONES DE INVENTARIO FÍSICO
-   * ============================================================
-   */
+      return data ?? [];
+    },
+  });
 
   const {
     data: inventoryCounts = [],
     isLoading: countsLoading,
   } = useQuery({
-    queryKey: [
-      "inventory-counts",
-      branchId,
-    ],
-
+    queryKey: ["inventory-counts", branchId],
     enabled: !!branchId,
 
     queryFn: async () => {
       const { data, error } =
-        await supabase
+        await (supabase as any)
           .from("inventory_counts")
           .select(
             `
@@ -309,59 +256,40 @@ function InventarioPage() {
             completed_at
           `,
           )
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .order(
-            "started_at",
-            {
-              ascending: false,
-            },
-          )
+          .eq("branch_id", branchId!)
+          .order("started_at", {
+            ascending: false,
+          })
           .limit(30);
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CountRow[];
+      return (data ?? []) as CountRow[];
     },
   });
 
   const activeCount =
     inventoryCounts.find(
-      (count) =>
-        count.status ===
-        "counting",
+      (count) => count.status === "counting",
     ) ?? null;
-
-  /*
-   * ============================================================
-   * DETALLE DEL CONTEO ACTIVO
-   * ============================================================
-   */
 
   const {
     data: activeCountItems = [],
-    isLoading:
-      activeCountItemsLoading,
+    isLoading: activeCountItemsLoading,
   } = useQuery({
     queryKey: [
       "inventory-count-items",
       activeCount?.id,
     ],
 
-    enabled:
-      !!activeCount?.id,
+    enabled: !!activeCount?.id,
 
     queryFn: async () => {
       const { data, error } =
-        await supabase
-          .from(
-            "inventory_count_items",
-          )
+        await (supabase as any)
+          .from("inventory_count_items")
           .select(
             `
             id,
@@ -377,618 +305,416 @@ function InventarioPage() {
             products(name,sku)
           `,
           )
-          .eq(
-            "count_id",
-            activeCount!.id,
-          )
-          .order(
-            "product_id",
-          );
+          .eq("count_id", activeCount!.id)
+          .order("product_id");
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CountItemRow[];
+      return (data ?? []) as CountItemRow[];
     },
   });
 
-  /*
-   * ============================================================
-   * BAJO MÍNIMO
-   * ============================================================
-   */
+  const lowStock = useMemo(
+    () =>
+      inventory.filter(
+        (row) =>
+          Number(row.available_stock) <=
+          Number(row.min_stock),
+      ),
+    [inventory],
+  );
 
-  const lowStock =
-    useMemo(
-      () =>
-        inventory.filter(
-          (row) =>
-            Number(
-              row.available_stock,
-            ) <=
-            Number(
-              row.min_stock,
-            ),
-        ),
-      [inventory],
-    );
+  const filteredCountItems = useMemo(() => {
+    const query = countFilter.trim().toLowerCase();
 
-  /*
-   * ============================================================
-   * FILTRO DEL CONTEO
-   * ============================================================
-   */
+    if (!query) {
+      return activeCountItems;
+    }
 
-  const filteredCountItems =
-    useMemo(() => {
-      const query =
-        countFilter
-          .trim()
-          .toLowerCase();
+    return activeCountItems.filter((item) => {
+      const name = item.products?.name ?? "";
+      const sku = item.products?.sku ?? "";
 
-      if (!query) {
-        return activeCountItems;
+      return (
+        name.toLowerCase().includes(query) ||
+        sku.toLowerCase().includes(query)
+      );
+    });
+  }, [activeCountItems, countFilter]);
+
+  const countSummary = useMemo(() => {
+    const total = activeCountItems.length;
+
+    const counted = activeCountItems.filter(
+      (item) => item.counted_stock !== null,
+    ).length;
+
+    const pending = total - counted;
+
+    const shortageUnits =
+      activeCountItems.reduce((sum, item) => {
+        const diff = Number(item.difference ?? 0);
+
+        return (
+          sum +
+          (diff < 0 ? Math.abs(diff) : 0)
+        );
+      }, 0);
+
+    const surplusUnits =
+      activeCountItems.reduce((sum, item) => {
+        const diff = Number(item.difference ?? 0);
+
+        return sum + (diff > 0 ? diff : 0);
+      }, 0);
+
+    const shortageValue =
+      activeCountItems.reduce((sum, item) => {
+        const value = Number(
+          item.difference_value ?? 0,
+        );
+
+        return (
+          sum +
+          (value < 0 ? Math.abs(value) : 0)
+        );
+      }, 0);
+
+    const surplusValue =
+      activeCountItems.reduce((sum, item) => {
+        const value = Number(
+          item.difference_value ?? 0,
+        );
+
+        return sum + (value > 0 ? value : 0);
+      }, 0);
+
+    return {
+      total,
+      counted,
+      pending,
+      shortageUnits,
+      surplusUnits,
+      shortageValue,
+      surplusValue,
+    };
+  }, [activeCountItems]);
+
+  const startCount = useMutation({
+    mutationFn: async () => {
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para iniciar un inventario físico.",
+        );
       }
 
-      return activeCountItems.filter(
-        (item) => {
-          const name =
-            item.products?.name ??
-            "";
+      if (!branchId) {
+        throw new Error(
+          "Tu usuario no tiene una sucursal asignada.",
+        );
+      }
 
-          const sku =
-            item.products?.sku ??
-            "";
+      if (activeCount) {
+        throw new Error(
+          "Ya existe un inventario físico abierto.",
+        );
+      }
 
-          return (
-            name
-              .toLowerCase()
-              .includes(query) ||
-            sku
-              .toLowerCase()
-              .includes(query)
-          );
+      const { data, error } =
+        await (supabase as any).rpc(
+          "start_inventory_count",
+          {
+            _branch_id: branchId,
+            _notes: countNotes || null,
+          },
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      return data as string;
+    },
+
+    onSuccess: () => {
+      toast.success(
+        "Inventario físico iniciado.",
+      );
+
+      setCountNotes("");
+      invalidateInventory();
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const setCountItem = useMutation({
+    mutationFn: async ({
+      itemId,
+      value,
+    }: {
+      itemId: string;
+      value: number;
+    }) => {
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para capturar inventario físico.",
+        );
+      }
+
+      if (!activeCount) {
+        throw new Error(
+          "No existe un inventario físico activo.",
+        );
+      }
+
+      if (
+        !Number.isFinite(value) ||
+        value < 0
+      ) {
+        throw new Error(
+          "La cantidad física no es válida.",
+        );
+      }
+
+      const { error } =
+        await (supabase as any).rpc(
+          "set_inventory_count_item",
+          {
+            _count_id: activeCount.id,
+            _item_id: itemId,
+            _counted_stock: value,
+          },
+        );
+
+      if (error) {
+        throw error;
+      }
+    },
+
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: [
+          "inventory-count-items",
+          activeCount?.id,
+        ],
+      });
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const completeCount = useMutation({
+    mutationFn: async () => {
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para cerrar el inventario físico.",
+        );
+      }
+
+      if (!activeCount) {
+        throw new Error(
+          "No existe un inventario físico activo.",
+        );
+      }
+
+      if (countSummary.pending > 0) {
+        throw new Error(
+          `Faltan ${countSummary.pending} productos por contar.`,
+        );
+      }
+
+      const { error } =
+        await (supabase as any).rpc(
+          "complete_inventory_count",
+          {
+            _count_id: activeCount.id,
+          },
+        );
+
+      if (error) {
+        throw error;
+      }
+    },
+
+    onSuccess: () => {
+      toast.success(
+        "Inventario físico cerrado y diferencias aplicadas.",
+      );
+
+      setPhysicalCount({});
+      setCountFilter("");
+
+      invalidateInventory();
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
+
+  const adjustInventory = useMutation({
+    mutationFn: async () => {
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para ajustar inventario.",
+        );
+      }
+
+      if (!branchId) {
+        throw new Error(
+          "Tu usuario no tiene una sucursal asignada.",
+        );
+      }
+
+      if (!adjustProduct) {
+        throw new Error(
+          "Selecciona un producto.",
+        );
+      }
+
+      const quantity = Math.abs(
+        Number(adjustQuantity),
+      );
+
+      if (
+        !Number.isFinite(quantity) ||
+        quantity <= 0
+      ) {
+        throw new Error(
+          "La cantidad debe ser mayor que cero.",
+        );
+      }
+
+      const signedQuantity =
+        adjustDirection === "in"
+          ? quantity
+          : -quantity;
+
+      const { error } = await supabase.rpc(
+        "adjust_stock",
+        {
+          _branch_id: branchId,
+          _product_id: adjustProduct,
+          _quantity: signedQuantity,
+          _notes:
+            adjustNotes ||
+            (adjustDirection === "in"
+              ? "Ajuste de entrada"
+              : "Ajuste de salida"),
         },
       );
-    }, [
-      activeCountItems,
-      countFilter,
-    ]);
 
-  /*
-   * ============================================================
-   * RESUMEN DEL CONTEO
-   * ============================================================
-   */
+      if (error) {
+        throw error;
+      }
+    },
 
-  const countSummary =
-    useMemo(() => {
-      const total =
-        activeCountItems.length;
+    onSuccess: () => {
+      toast.success(
+        "Inventario compartido ajustado correctamente.",
+      );
 
-      const counted =
-        activeCountItems.filter(
-          (item) =>
-            item.counted_stock !==
-            null,
-        ).length;
+      setAdjustQuantity("");
+      setAdjustNotes("");
 
-      const pending =
-        total - counted;
+      invalidateInventory();
+    },
 
-      const shortageUnits =
-        activeCountItems.reduce(
-          (sum, item) => {
-            const diff =
-              Number(
-                item.difference ??
-                  0,
-              );
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
 
-            return (
-              sum +
-              (diff < 0
-                ? Math.abs(diff)
-                : 0)
-            );
-          },
-          0,
+  const updateLimits = useMutation({
+    mutationFn: async () => {
+      if (!isManager) {
+        throw new Error(
+          "No tienes permisos para modificar límites.",
         );
+      }
 
-      const surplusUnits =
-        activeCountItems.reduce(
-          (sum, item) => {
-            const diff =
-              Number(
-                item.difference ??
-                  0,
-              );
-
-            return (
-              sum +
-              (diff > 0
-                ? diff
-                : 0)
-            );
-          },
-          0,
+      if (!limitProduct) {
+        throw new Error(
+          "Selecciona un producto.",
         );
+      }
 
-      const shortageValue =
-        activeCountItems.reduce(
-          (sum, item) => {
-            const value =
-              Number(
-                item.difference_value ??
-                  0,
-              );
+      const min = Number(limitMin);
 
-            return (
-              sum +
-              (value < 0
-                ? Math.abs(value)
-                : 0)
-            );
-          },
-          0,
+      if (
+        !Number.isFinite(min) ||
+        min < 0
+      ) {
+        throw new Error(
+          "El mínimo no es válido.",
         );
+      }
 
-      const surplusValue =
-        activeCountItems.reduce(
-          (sum, item) => {
-            const value =
-              Number(
-                item.difference_value ??
-                  0,
-              );
+      const max =
+        limitMax.trim() === ""
+          ? null
+          : Number(limitMax);
 
-            return (
-              sum +
-              (value > 0
-                ? value
-                : 0)
-            );
-          },
-          0,
+      if (
+        max !== null &&
+        (!Number.isFinite(max) ||
+          max < 0)
+      ) {
+        throw new Error(
+          "El máximo no es válido.",
         );
+      }
 
-      return {
-        total,
-        counted,
-        pending,
-        shortageUnits,
-        surplusUnits,
-        shortageValue,
-        surplusValue,
-      };
-    }, [
-      activeCountItems,
-    ]);
-
-  /*
-   * ============================================================
-   * INICIAR CONTEO FÍSICO
-   * ============================================================
-   */
-
-  const startCount =
-    useMutation({
-      mutationFn:
-        async () => {
-          if (!isManager) {
-            throw new Error(
-              "No tienes permisos para iniciar un inventario físico.",
-            );
-          }
-
-          if (!branchId) {
-            throw new Error(
-              "Tu usuario no tiene una sucursal asignada.",
-            );
-          }
-
-          if (activeCount) {
-            throw new Error(
-              "Ya existe un inventario físico abierto.",
-            );
-          }
-
-          const { data, error } =
-            await supabase.rpc(
-              "start_inventory_count",
-              {
-                _branch_id:
-                  branchId,
-                _notes:
-                  countNotes ||
-                  null,
-              },
-            );
-
-          if (error) {
-            throw error;
-          }
-
-          return data as string;
-        },
-
-      onSuccess: () => {
-        toast.success(
-          "Inventario físico iniciado.",
+      if (
+        max !== null &&
+        max < min
+      ) {
+        throw new Error(
+          "El máximo no puede ser menor que el mínimo.",
         );
+      }
 
-        setCountNotes("");
+      await setSharedInventoryLimits(
+        limitProduct,
+        null,
+        min,
+        max,
+      );
+    },
 
-        invalidateInventory();
-      },
+    onSuccess: () => {
+      toast.success(
+        "Límites actualizados.",
+      );
 
-      onError: (
-        error: Error,
-      ) => {
-        toast.error(
-          error.message,
-        );
-      },
-    });
+      invalidateInventory();
+    },
 
-  /*
-   * ============================================================
-   * REGISTRAR CONTEO
-   * ============================================================
-   */
+    onError: (error: Error) => {
+      toast.error(error.message);
+    },
+  });
 
-  const setCountItem =
-    useMutation({
-      mutationFn:
-        async ({
-          itemId,
-          value,
-        }: {
-          itemId: string;
-          value: number;
-        }) => {
-          if (!isManager) {
-            throw new Error(
-              "No tienes permisos para capturar inventario físico.",
-            );
-          }
-
-          if (!activeCount) {
-            throw new Error(
-              "No existe un inventario físico activo.",
-            );
-          }
-
-          if (
-            !Number.isFinite(
-              value,
-            ) ||
-            value < 0
-          ) {
-            throw new Error(
-              "La cantidad física no es válida.",
-            );
-          }
-
-          /*
-           * Firma oficial de la migración:
-           *
-           * set_inventory_count_item(
-           *   _count_id,
-           *   _item_id,
-           *   _counted_stock
-           * )
-           */
-
-          const { error } =
-            await supabase.rpc(
-              "set_inventory_count_item",
-              {
-                _count_id:
-                  activeCount.id,
-                _item_id:
-                  itemId,
-                _counted_stock:
-                  value,
-              },
-            );
-
-          if (error) {
-            throw error;
-          }
-        },
-
-      onSuccess: () => {
-        void queryClient.invalidateQueries(
-          {
-            queryKey: [
-              "inventory-count-items",
-              activeCount?.id,
-            ],
-          },
-        );
-      },
-
-      onError: (
-        error: Error,
-      ) => {
-        toast.error(
-          error.message,
-        );
-      },
-    });
-
-  /*
-   * ============================================================
-   * COMPLETAR CONTEO
-   * ============================================================
-   */
-
-  const completeCount =
-    useMutation({
-      mutationFn:
-        async () => {
-          if (!isManager) {
-            throw new Error(
-              "No tienes permisos para cerrar el inventario físico.",
-            );
-          }
-
-          if (!activeCount) {
-            throw new Error(
-              "No existe un inventario físico activo.",
-            );
-          }
-
-          if (
-            countSummary.pending >
-            0
-          ) {
-            throw new Error(
-              `Faltan ${countSummary.pending} productos por contar.`,
-            );
-          }
-
-          const { error } =
-            await supabase.rpc(
-              "complete_inventory_count",
-              {
-                _count_id:
-                  activeCount.id,
-              },
-            );
-
-          if (error) {
-            throw error;
-          }
-        },
-
-      onSuccess: () => {
-        toast.success(
-          "Inventario físico cerrado y diferencias aplicadas.",
-        );
-
-        setPhysicalCount({});
-        setCountFilter("");
-
-        invalidateInventory();
-      },
-
-      onError: (
-        error: Error,
-      ) => {
-        toast.error(
-          error.message,
-        );
-      },
-    });
-
-  /*
-   * ============================================================
-   * AJUSTE DIRECTO
-   * ============================================================
-   */
-
-  const adjustInventory =
-    useMutation({
-      mutationFn:
-        async () => {
-          if (!isManager) {
-            throw new Error(
-              "No tienes permisos para ajustar inventario.",
-            );
-          }
-
-          if (!branchId) {
-            throw new Error(
-              "Tu usuario no tiene una sucursal asignada.",
-            );
-          }
-
-          if (!adjustProduct) {
-            throw new Error(
-              "Selecciona un producto.",
-            );
-          }
-
-          const quantity =
-            Math.abs(
-              Number(
-                adjustQuantity,
-              ),
-            );
-
-          if (
-            !Number.isFinite(
-              quantity,
-            ) ||
-            quantity <= 0
-          ) {
-            throw new Error(
-              "La cantidad debe ser mayor que cero.",
-            );
-          }
-
-          const signedQuantity =
-            adjustDirection ===
-            "in"
-              ? quantity
-              : -quantity;
-
-          const { error } =
-            await supabase.rpc(
-              "adjust_stock",
-              {
-                _branch_id:
-                  branchId,
-                _product_id:
-                  adjustProduct,
-                _quantity:
-                  signedQuantity,
-                _notes:
-                  adjustNotes ||
-                  (adjustDirection ===
-                  "in"
-                    ? "Ajuste de entrada"
-                    : "Ajuste de salida"),
-              },
-            );
-
-          if (error) {
-            throw error;
-          }
-        },
-
-      onSuccess: () => {
-        toast.success(
-          "Inventario compartido ajustado correctamente.",
-        );
-
-        setAdjustQuantity("");
-        setAdjustNotes("");
-
-        invalidateInventory();
-      },
-
-      onError: (
-        error: Error,
-      ) => {
-        toast.error(
-          error.message,
-        );
-      },
-    });
-
-  /*
-   * ============================================================
-   * MÍNIMOS Y MÁXIMOS
-   * ============================================================
-   */
-
-  const updateLimits =
-    useMutation({
-      mutationFn:
-        async () => {
-          if (!isManager) {
-            throw new Error(
-              "No tienes permisos para modificar límites.",
-            );
-          }
-
-          if (!limitProduct) {
-            throw new Error(
-              "Selecciona un producto.",
-            );
-          }
-
-          const min =
-            Number(limitMin);
-
-          if (
-            !Number.isFinite(
-              min,
-            ) ||
-            min < 0
-          ) {
-            throw new Error(
-              "El mínimo no es válido.",
-            );
-          }
-
-          const max =
-            limitMax.trim() ===
-            ""
-              ? null
-              : Number(limitMax);
-
-          if (
-            max !== null &&
-            (!Number.isFinite(
-              max,
-            ) ||
-              max < 0)
-          ) {
-            throw new Error(
-              "El máximo no es válido.",
-            );
-          }
-
-          if (
-            max !== null &&
-            max < min
-          ) {
-            throw new Error(
-              "El máximo no puede ser menor que el mínimo.",
-            );
-          }
-
-          await setSharedInventoryLimits(
-            limitProduct,
-            null,
-            min,
-            max,
-          );
-        },
-
-      onSuccess: () => {
-        toast.success(
-          "Límites actualizados.",
-        );
-
-        invalidateInventory();
-      },
-
-      onError: (
-        error: Error,
-      ) => {
-        toast.error(
-          error.message,
-        );
-      },
-    });
-
-  const productOptions =
-    products.map(
-      (product) => (
-        <SelectItem
-          key={product.id}
-          value={product.id}
-        >
-          {product.name}
-          {product.sku
-            ? ` (${product.sku})`
-            : ""}
-        </SelectItem>
-      ),
-    );
-
-  /*
-   * ============================================================
-   * RENDER
-   * ============================================================
-   */
+  const productOptions = products.map(
+    (product) => (
+      <SelectItem
+        key={product.id}
+        value={product.id}
+      >
+        {product.name}
+        {product.sku
+          ? ` (${product.sku})`
+          : ""}
+      </SelectItem>
+    ),
+  );
 
   return (
     <PageShell>
@@ -997,8 +723,7 @@ function InventarioPage() {
         title="Inventario"
         description="Inventario único compartido entre las sucursales."
         action={
-          lowStock.length >
-          0 ? (
+          lowStock.length > 0 ? (
             <Badge
               variant="destructive"
               className="gap-1"
@@ -1014,11 +739,7 @@ function InventarioPage() {
         <Card className="border-destructive/30">
           <CardContent className="pt-6 text-sm text-destructive">
             Error al cargar inventario:{" "}
-            {
-              (
-                inventoryError as Error
-              ).message
-            }
+            {(inventoryError as Error).message}
           </CardContent>
         </Card>
       )}
@@ -1056,10 +777,6 @@ function InventarioPage() {
             Importar / Exportar
           </TabsTrigger>
         </TabsList>
-
-        {/* ================================================== */}
-        {/* EXISTENCIAS */}
-        {/* ================================================== */}
 
         <TabsContent
           value="existencias"
@@ -1123,8 +840,7 @@ function InventarioPage() {
                   )}
 
                   {!inventoryLoading &&
-                    inventory.length ===
-                      0 && (
+                    inventory.length === 0 && (
                       <TableRow>
                         <TableCell
                           colSpan={7}
@@ -1137,9 +853,7 @@ function InventarioPage() {
                     )}
 
                   {inventory.map(
-                    (
-                      row: InventoryRow,
-                    ) => {
+                    (row: InventoryRow) => {
                       const available =
                         Number(
                           row.available_stock,
@@ -1151,12 +865,10 @@ function InventarioPage() {
                         );
 
                       const isOut =
-                        available <=
-                        0;
+                        available <= 0;
 
                       const isLow =
-                        available <=
-                        minimum;
+                        available <= minimum;
 
                       return (
                         <TableRow
@@ -1167,11 +879,8 @@ function InventarioPage() {
                           )}
                         >
                           <TableCell className="font-medium">
-                            {row.emoji ??
-                              "📦"}{" "}
-                            {
-                              row.product_name
-                            }
+                            {row.emoji ?? "📦"}{" "}
+                            {row.product_name}
 
                             {row.variant_id && (
                               <Badge
@@ -1184,14 +893,11 @@ function InventarioPage() {
                           </TableCell>
 
                           <TableCell className="hidden font-mono text-xs text-muted-foreground sm:table-cell">
-                            {row.sku ??
-                              "—"}
+                            {row.sku ?? "—"}
                           </TableCell>
 
                           <TableCell className="text-right font-semibold">
-                            {Number(
-                              row.stock,
-                            )}
+                            {Number(row.stock)}
                           </TableCell>
 
                           <TableCell className="text-right">
@@ -1233,10 +939,6 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        {/* ================================================== */}
-        {/* AJUSTE */}
-        {/* ================================================== */}
-
         <TabsContent
           value="ajuste"
           className="mt-4"
@@ -1255,9 +957,7 @@ function InventarioPage() {
                 </Label>
 
                 <Select
-                  value={
-                    adjustProduct
-                  }
+                  value={adjustProduct}
                   onValueChange={
                     setAdjustProduct
                   }
@@ -1267,9 +967,7 @@ function InventarioPage() {
                   </SelectTrigger>
 
                   <SelectContent>
-                    {
-                      productOptions
-                    }
+                    {productOptions}
                   </SelectContent>
                 </Select>
               </div>
@@ -1281,12 +979,8 @@ function InventarioPage() {
                   </Label>
 
                   <Select
-                    value={
-                      adjustDirection
-                    }
-                    onValueChange={(
-                      value,
-                    ) =>
+                    value={adjustDirection}
+                    onValueChange={(value) =>
                       setAdjustDirection(
                         value as
                           | "in"
@@ -1319,15 +1013,10 @@ function InventarioPage() {
                     type="number"
                     min="0"
                     step="0.01"
-                    value={
-                      adjustQuantity
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={adjustQuantity}
+                    onChange={(event) =>
                       setAdjustQuantity(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                   />
@@ -1340,15 +1029,10 @@ function InventarioPage() {
                 </Label>
 
                 <Input
-                  value={
-                    adjustNotes
-                  }
-                  onChange={(
-                    event,
-                  ) =>
+                  value={adjustNotes}
+                  onChange={(event) =>
                     setAdjustNotes(
-                      event.target
-                        .value,
+                      event.target.value,
                     )
                   }
                   placeholder="Merma, daño, corrección..."
@@ -1376,10 +1060,6 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        {/* ================================================== */}
-        {/* LIMITES */}
-        {/* ================================================== */}
-
         <TabsContent
           value="limites"
           className="mt-4"
@@ -1398,9 +1078,7 @@ function InventarioPage() {
                 </Label>
 
                 <Select
-                  value={
-                    limitProduct
-                  }
+                  value={limitProduct}
                   onValueChange={
                     setLimitProduct
                   }
@@ -1410,9 +1088,7 @@ function InventarioPage() {
                   </SelectTrigger>
 
                   <SelectContent>
-                    {
-                      productOptions
-                    }
+                    {productOptions}
                   </SelectContent>
                 </Select>
               </div>
@@ -1426,15 +1102,10 @@ function InventarioPage() {
                   <Input
                     type="number"
                     min="0"
-                    value={
-                      limitMin
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={limitMin}
+                    onChange={(event) =>
                       setLimitMin(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                   />
@@ -1448,15 +1119,10 @@ function InventarioPage() {
                   <Input
                     type="number"
                     min="0"
-                    value={
-                      limitMax
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={limitMax}
+                    onChange={(event) =>
                       setLimitMax(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="Sin límite"
@@ -1482,10 +1148,6 @@ function InventarioPage() {
             </CardContent>
           </Card>
         </TabsContent>
-
-        {/* ================================================== */}
-        {/* INVENTARIO FÍSICO PROFESIONAL                     */}
-        {/* ================================================== */}
 
         <TabsContent
           value="conteo"
@@ -1527,15 +1189,10 @@ function InventarioPage() {
                   </Label>
 
                   <Input
-                    value={
-                      countNotes
-                    }
-                    onChange={(
-                      event,
-                    ) =>
+                    value={countNotes}
+                    onChange={(event) =>
                       setCountNotes(
-                        event.target
-                          .value,
+                        event.target.value,
                       )
                     }
                     placeholder="Ej. Inventario mensual septiembre"
@@ -1630,8 +1287,7 @@ function InventarioPage() {
                         countSummary.pending,
                       )}
                       danger={
-                        countSummary.pending >
-                        0
+                        countSummary.pending > 0
                       }
                     />
 
@@ -1706,15 +1362,10 @@ function InventarioPage() {
                     </div>
 
                     <Input
-                      value={
-                        countFilter
-                      }
-                      onChange={(
-                        event,
-                      ) =>
+                      value={countFilter}
+                      onChange={(event) =>
                         setCountFilter(
-                          event.target
-                            .value,
+                          event.target.value,
                         )
                       }
                       placeholder="Buscar producto o SKU..."
@@ -1760,9 +1411,7 @@ function InventarioPage() {
 
                       <TableBody>
                         {filteredCountItems.map(
-                          (
-                            item,
-                          ) => {
+                          (item) => {
                             const counted =
                               item.counted_stock;
 
@@ -1780,9 +1429,7 @@ function InventarioPage() {
 
                             return (
                               <TableRow
-                                key={
-                                  item.id
-                                }
+                                key={item.id}
                               >
                                 <TableCell className="font-medium">
                                   {item.products
@@ -1793,8 +1440,7 @@ function InventarioPage() {
                                     ?.sku && (
                                     <span className="ml-2 font-mono text-xs text-muted-foreground">
                                       {
-                                        item
-                                          .products
+                                        item.products
                                           .sku
                                       }
                                     </span>
@@ -1837,8 +1483,7 @@ function InventarioPage() {
                                       event,
                                     ) => {
                                       const value =
-                                        event
-                                          .target
+                                        event.target
                                           .value;
 
                                       setPhysicalCount(
@@ -1856,14 +1501,12 @@ function InventarioPage() {
                                     ) => {
                                       const value =
                                         Number(
-                                          event
-                                            .target
+                                          event.target
                                             .value,
                                         );
 
                                       if (
-                                        event
-                                          .target
+                                        event.target
                                           .value ===
                                         ""
                                       ) {
@@ -1966,10 +1609,6 @@ function InventarioPage() {
           )}
         </TabsContent>
 
-        {/* ================================================== */}
-        {/* HISTORIAL FÍSICO                                  */}
-        {/* ================================================== */}
-
         <TabsContent
           value="historial"
           className="mt-4"
@@ -2013,9 +1652,7 @@ function InventarioPage() {
                     {inventoryCounts.map(
                       (count) => (
                         <TableRow
-                          key={
-                            count.id
-                          }
+                          key={count.id}
                         >
                           <TableCell className="whitespace-nowrap">
                             {shortDate(
@@ -2076,10 +1713,6 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        {/* ================================================== */}
-        {/* MOVIMIENTOS                                       */}
-        {/* ================================================== */}
-
         <TabsContent
           value="movimientos"
           className="mt-4"
@@ -2121,9 +1754,7 @@ function InventarioPage() {
                   {movements.map(
                     (movement) => (
                       <TableRow
-                        key={
-                          movement.id
-                        }
+                        key={movement.id}
                       >
                         <TableCell className="whitespace-nowrap text-xs">
                           {shortDate(
@@ -2138,8 +1769,7 @@ function InventarioPage() {
                                   name?: string;
                                 }
                               | null
-                          )?.name ??
-                            "—"}
+                          )?.name ?? "—"}
                         </TableCell>
 
                         <TableCell>
@@ -2184,10 +1814,6 @@ function InventarioPage() {
           </Card>
         </TabsContent>
 
-        {/* ================================================== */}
-        {/* IMPORTAR / EXPORTAR                               */}
-        {/* ================================================== */}
-
         <TabsContent
           value="importar"
           className="mt-4"
@@ -2223,8 +1849,7 @@ function CountKpi({
       <p
         className={cn(
           "text-lg font-bold",
-          danger &&
-            "text-destructive",
+          danger && "text-destructive",
         )}
       >
         {value}
