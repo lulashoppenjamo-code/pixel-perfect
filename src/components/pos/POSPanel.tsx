@@ -2044,7 +2044,7 @@ export function POSPanel({
       reason,
     }: {
       saleId: string;
-      reason?: string;
+      reason?: string | undefined;
     }) => {
       const { data, error } = await supabase.rpc(
         "cancel_sale",

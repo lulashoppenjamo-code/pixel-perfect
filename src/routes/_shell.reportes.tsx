@@ -1562,7 +1562,7 @@ function KpiCard({
   value: string;
   icon: typeof DollarSign;
   delta?: number;
-  subtitle?: string;
+  subtitle?: string | undefined;
   loading?: boolean;
 }) {
   return (
