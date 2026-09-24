@@ -312,7 +312,6 @@ function InventarioPage() {
            */
           _branch_id: branchId,
           _product_id: adjustProduct,
-          _variant_id: null,
           _quantity: signedQuantity,
           _notes:
             adjustNotes ||
@@ -520,7 +519,6 @@ function InventarioPage() {
               _branch_id: branchId,
               _product_id:
                 difference.productId,
-              _variant_id: null,
               _quantity:
                 difference.difference,
               _notes:

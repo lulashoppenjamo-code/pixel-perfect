@@ -697,22 +697,22 @@ export function ImportExportPanel() {
                 action ===
                   "update_data"
               ) {
-                patch.name =
+                patch["name"] =
                   row.nombre;
 
-                patch.sku =
+                patch["sku"] =
                   row.sku ||
                   null;
 
-                patch.barcode =
+                patch["barcode"] =
                   row.codigo_barras ||
                   null;
 
-                patch.description =
+                patch["description"] =
                   row.descripcion ||
                   null;
 
-                patch.category_id =
+                patch["category_id"] =
                   categoryIdFor(
                     row,
                   );
@@ -724,10 +724,10 @@ export function ImportExportPanel() {
                 action ===
                   "update_price_cost"
               ) {
-                patch.price =
+                patch["price"] =
                   row.precio_venta;
 
-                patch.cost =
+                patch["cost"] =
                   row.costo;
               }
 
@@ -885,9 +885,6 @@ export function ImportExportPanel() {
                   _product_id:
                     productId,
 
-                  _variant_id:
-                    null,
-
                   _quantity:
                     Number(
                       row.stock,
@@ -919,9 +916,6 @@ export function ImportExportPanel() {
               {
                 _product_id:
                   productId,
-
-                _variant_id:
-                  null,
 
                 _min_stock:
                   Number(
@@ -1007,9 +1001,6 @@ export function ImportExportPanel() {
               {
                 _product_id:
                   row.existingId,
-
-                _variant_id:
-                  null,
               },
             );
 
@@ -1061,9 +1052,6 @@ export function ImportExportPanel() {
                   _product_id:
                     row.existingId,
 
-                  _variant_id:
-                    null,
-
                   _quantity:
                     delta,
 
@@ -1095,9 +1083,6 @@ export function ImportExportPanel() {
               {
                 _product_id:
                   row.existingId,
-
-                _variant_id:
-                  null,
 
                 _min_stock:
                   Number(

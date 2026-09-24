@@ -94,8 +94,8 @@ function VentasPage() {
       // Los días se interpretan en la zona horaria del dispositivo.
       if (from) q = q.gte("created_at", new Date(`${from}T00:00:00`).toISOString());
       if (to) q = q.lte("created_at", new Date(`${to}T23:59:59.999`).toISOString());
-      if (method !== ALL) q = q.eq("payment_method", method);
-      if (status !== ALL) q = q.eq("status", status);
+      if (method !== ALL) q = q.eq("payment_method", method as "cash" | "card" | "transfer" | "credit" | "mixed");
+      if (status !== ALL) q = q.eq("status", status as "completed" | "cancelled" | "refunded" | "partially_refunded");
 
       const { data, error } = await q;
       if (error) throw error;
