@@ -1,22 +1,37 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useQuery } from "@tanstack/react-query";
 import {
-  Bot,
-  Send,
-  Sparkles,
-  TrendingUp,
-  Package,
-  ShoppingCart,
   AlertTriangle,
-  DollarSign,
+  Bot,
   Boxes,
+  DollarSign,
+  Package,
+  Send,
+  ShoppingCart,
+  Sparkles,
+  TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 import {
   subDays,
   startOfDay,
+  startOfMonth,
 } from "date-fns";
+
+import { RequireNavAccess } from "@/components/RequireNavAccess";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/lib/branch";
@@ -26,24 +41,14 @@ import {
   type SharedInventoryRow,
 } from "@/lib/sharedInventory";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { PageHeader } from "@/components/PageHeader";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-
 export const Route = createFileRoute("/_shell/ceo")({
   head: () => ({
     meta: [
+      { title: "CEO IA — Lula OS" },
       {
-        title: "CEO IA — Lula OS",
+        name: "description",
+        content:
+          "Centro ejecutivo de ventas, utilidad e inventario de Lula OS.",
       },
     ],
   }),
@@ -55,18 +60,18 @@ export const Route = createFileRoute("/_shell/ceo")({
   ),
 });
 
-type Msg = {
+type Message = {
   role: "user" | "assistant";
   text: string;
 };
 
-type SaleRow = {
+type Sale = {
   id: string;
   total: number;
   created_at: string;
 };
 
-type SaleItemRow = {
+type SaleItem = {
   sale_id: string;
   name_snapshot: string;
   quantity: number;
@@ -77,1502 +82,987 @@ type SaleItemRow = {
   cost_total: number | null;
 };
 
-type ProductRow = {
+type Product = {
   id: string;
   name: string;
   cost: number;
   price: number;
 };
 
+type Expense = {
+  amount: number;
+};
+
 const SUGGESTIONS = [
   "¿Cómo están las ventas hoy?",
   "¿Cómo vamos este mes?",
-  "¿Qué productos se están vendiendo más?",
+  "¿Cuál es la utilidad real?",
+  "¿Qué productos venden más?",
   "¿Qué productos están por agotarse?",
   "¿Qué debo comprar?",
   "¿Cuál es el ticket promedio?",
-  "¿Cuál es la utilidad real?",
   "¿Qué productos tienen mayor margen?",
   "¿Qué productos están estancados?",
   "¿Cómo vamos contra el periodo anterior?",
 ];
 
 function CeoPage() {
-  const { branchId, branches } =
-    useBranch();
+  const { branchId, branches } = useBranch();
 
   const branchName =
-    branches.find(
-      (branch) =>
-        branch.id === branchId,
-    )?.name ??
+    branches.find((branch) => branch.id === branchId)?.name ??
     "Sucursal";
 
-  const [
-    input,
-    setInput,
-  ] = useState("");
+  const [input, setInput] = useState("");
+  const [thinking, setThinking] = useState(false);
 
-  const [
-    messages,
-    setMessages,
-  ] = useState<Msg[]>([
+  const [messages, setMessages] = useState<Message[]>([
     {
       role: "assistant",
       text:
         `Hola. Soy el CEO IA de LULA OS.\n\n` +
-        `Estoy conectado a las ventas, costos históricos e inventario compartido de ${branchName}.\n\n` +
-        `Puedes preguntarme qué vender, qué comprar, qué está bajo de stock, cuánto estás ganando o cómo va el negocio.`,
+        `Estoy conectado a las ventas, costos históricos, gastos e inventario compartido.\n\n` +
+        `Puedes preguntarme por ventas, utilidad, inventario, productos, compras o tendencias.`,
     },
   ]);
 
-  const [
-    thinking,
-    setThinking,
-  ] = useState(false);
+  const now = new Date();
 
-  const since30 =
-    startOfDay(
-      subDays(
-        new Date(),
-        30,
-      ),
-    ).toISOString();
+  const todayStart = startOfDay(now).toISOString();
+  const monthStart = startOfMonth(now).toISOString();
+  const previousMonthStart = startOfMonth(
+    subDays(monthStart ? new Date(monthStart) : now, 1),
+  ).toISOString();
 
-  const since60 =
-    startOfDay(
-      subDays(
-        new Date(),
-        60,
-      ),
-    ).toISOString();
+  const since30 = startOfDay(subDays(now, 30)).toISOString();
+  const since60 = startOfDay(subDays(now, 60)).toISOString();
 
-  const todayStart =
-    startOfDay(
-      new Date(),
-    ).toISOString();
+  const { data: salesToday = [] } = useQuery({
+    queryKey: ["ceo", "sales-today", branchId, todayStart],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id,total,created_at")
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte("created_at", todayStart)
+        .order("created_at", { ascending: true });
 
-  /*
-   * ============================================================
-   * VENTAS 30 DÍAS
-   * ============================================================
-   */
-
-  const {
-    data: sales30 = [],
-  } = useQuery({
-    queryKey: [
-      "ceo-sales-30",
-      branchId,
-    ],
-
-    enabled:
-      !!branchId,
-
-    queryFn:
-      async () => {
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "sales",
-            )
-            .select(
-              "id, total, created_at",
-            )
-            .eq(
-              "branch_id",
-              branchId!,
-            )
-            .eq(
-              "status",
-              "completed",
-            )
-            .gte(
-              "created_at",
-              since30,
-            );
-
-        if (error) {
-          throw error;
-        }
-
-        return (
-          data ??
-          []
-        ) as SaleRow[];
-      },
+      if (error) throw error;
+      return (data ?? []) as Sale[];
+    },
   });
 
-  /*
-   * ============================================================
-   * VENTAS HOY
-   * ============================================================
-   */
+  const { data: sales30 = [] } = useQuery({
+    queryKey: ["ceo", "sales-30", branchId, since30],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id,total,created_at")
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte("created_at", since30)
+        .order("created_at", { ascending: true });
 
-  const {
-    data: salesToday = [],
-  } = useQuery({
-    queryKey: [
-      "ceo-sales-today",
-      branchId,
-    ],
-
-    enabled:
-      !!branchId,
-
-    queryFn:
-      async () => {
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "sales",
-            )
-            .select(
-              "id, total, created_at",
-            )
-            .eq(
-              "branch_id",
-              branchId!,
-            )
-            .eq(
-              "status",
-              "completed",
-            )
-            .gte(
-              "created_at",
-              todayStart,
-            );
-
-        if (error) {
-          throw error;
-        }
-
-        return (
-          data ??
-          []
-        ) as SaleRow[];
-      },
+      if (error) throw error;
+      return (data ?? []) as Sale[];
+    },
   });
 
-  /*
-   * ============================================================
-   * PERIODO ANTERIOR
-   * ============================================================
-   */
+  const { data: salesPrevious = [] } = useQuery({
+    queryKey: ["ceo", "sales-previous", branchId, since60, since30],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id,total,created_at")
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte("created_at", since60)
+        .lt("created_at", since30)
+        .order("created_at", { ascending: true });
 
-  const {
-    data: salesPrevious = [],
-  } = useQuery({
-    queryKey: [
-      "ceo-sales-previous",
-      branchId,
-    ],
-
-    enabled:
-      !!branchId,
-
-    queryFn:
-      async () => {
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "sales",
-            )
-            .select(
-              "id, total, created_at",
-            )
-            .eq(
-              "branch_id",
-              branchId!,
-            )
-            .eq(
-              "status",
-              "completed",
-            )
-            .gte(
-              "created_at",
-              since60,
-            )
-            .lt(
-              "created_at",
-              since30,
-            );
-
-        if (error) {
-          throw error;
-        }
-
-        return (
-          data ??
-          []
-        ) as SaleRow[];
-      },
+      if (error) throw error;
+      return (data ?? []) as Sale[];
+    },
   });
 
-  /*
-   * ============================================================
-   * ITEMS DE VENTA
-   * ============================================================
-   */
+  const { data: salesMonth = [] } = useQuery({
+    queryKey: ["ceo", "sales-month", branchId, monthStart],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sales")
+        .select("id,total,created_at")
+        .eq("branch_id", branchId!)
+        .eq("status", "completed")
+        .gte("created_at", monthStart)
+        .order("created_at", { ascending: true });
 
-  const saleIds =
-    sales30.map(
-      (sale) =>
-        sale.id,
+      if (error) throw error;
+      return (data ?? []) as Sale[];
+    },
+  });
+
+  const saleIds = useMemo(
+    () => sales30.map((sale) => sale.id),
+    [sales30],
+  );
+
+  const { data: saleItems = [] } = useQuery({
+    queryKey: ["ceo", "sale-items", saleIds.join(",")],
+    enabled: saleIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sale_items")
+        .select(
+          `
+          sale_id,
+          name_snapshot,
+          quantity,
+          total,
+          product_id,
+          variant_id,
+          unit_cost,
+          cost_total
+        `,
+        )
+        .in("sale_id", saleIds);
+
+      if (error) throw error;
+      return (data ?? []) as SaleItem[];
+    },
+  });
+
+  const { data: inventory = [] } = useQuery({
+    queryKey: ["ceo", "shared-inventory"],
+    queryFn: async () => getSharedInventory(),
+  });
+
+  const { data: products = [] } = useQuery({
+    queryKey: ["ceo", "products"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id,name,cost,price")
+        .eq("is_active", true);
+
+      if (error) throw error;
+      return (data ?? []) as Product[];
+    },
+  });
+
+  const { data: expenses = [] } = useQuery({
+    queryKey: ["ceo", "expenses", branchId, monthStart],
+    enabled: !!branchId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("expenses")
+        .select("amount")
+        .eq("branch_id", branchId!)
+        .gte("expense_date", monthStart.slice(0, 10))
+        .lte(
+          "expense_date",
+          new Date().toISOString().slice(0, 10),
+        );
+
+      if (error) {
+        if (
+          error.code === "42P01" ||
+          error.message?.includes("does not exist")
+        ) {
+          return [] as Expense[];
+        }
+
+        throw error;
+      }
+
+      return (data ?? []) as Expense[];
+    },
+  });
+
+  const analysis = useMemo(() => {
+    const sum = (rows: Sale[]) =>
+      rows.reduce(
+        (total, sale) => total + Number(sale.total ?? 0),
+        0,
+      );
+
+    const todaySales = sum(salesToday);
+    const last30Sales = sum(sales30);
+    const previousSales = sum(salesPrevious);
+    const monthSales = sum(salesMonth);
+
+    const change =
+      previousSales > 0
+        ? ((last30Sales - previousSales) / previousSales) * 100
+        : last30Sales > 0
+          ? 100
+          : 0;
+
+    let revenue = 0;
+    let historicalCost = 0;
+
+    const productMap = new Map<
+      string,
+      {
+        name: string;
+        quantity: number;
+        revenue: number;
+        cost: number;
+      }
+    >();
+
+    const soldIds = new Set<string>();
+
+    for (const item of saleItems) {
+      const quantity = Number(item.quantity ?? 0);
+      const revenueValue = Number(item.total ?? 0);
+
+      revenue += revenueValue;
+
+      const cost =
+        item.cost_total !== null &&
+        item.cost_total !== undefined
+          ? Number(item.cost_total)
+          : Number(item.unit_cost ?? 0) * quantity;
+
+      historicalCost += cost;
+
+      if (item.product_id) {
+        soldIds.add(item.product_id);
+      }
+
+      const key =
+        item.product_id ??
+        `snapshot:${item.name_snapshot}`;
+
+      const current = productMap.get(key) ?? {
+        name: item.name_snapshot,
+        quantity: 0,
+        revenue: 0,
+        cost: 0,
+      };
+
+      current.quantity += quantity;
+      current.revenue += revenueValue;
+      current.cost += cost;
+
+      productMap.set(key, current);
+    }
+
+    const grossProfit = revenue - historicalCost;
+
+    const margin =
+      revenue > 0 ? (grossProfit / revenue) * 100 : 0;
+
+    const expensesTotal = expenses.reduce(
+      (total, expense) =>
+        total + Number(expense.amount ?? 0),
+      0,
     );
 
-  const {
-    data: items = [],
-  } = useQuery({
-    queryKey: [
-      "ceo-sale-items",
-      saleIds.join(","),
-    ],
+    const netProfit = grossProfit - expensesTotal;
 
-    enabled:
-      saleIds.length >
+    const shared = inventory as SharedInventoryRow[];
+
+    const lowStock = [...shared]
+      .filter(
+        (item) =>
+          Number(item.available_stock ?? 0) <=
+          Number(item.min_stock ?? 0),
+      )
+      .sort(
+        (a, b) =>
+          Number(a.available_stock ?? 0) -
+          Number(b.available_stock ?? 0),
+      );
+
+    const outOfStock = shared.filter(
+      (item) => Number(item.available_stock ?? 0) <= 0,
+    );
+
+    const stagnant = shared
+      .filter(
+        (item) =>
+          Number(item.available_stock ?? 0) > 0 &&
+          !!item.product_id &&
+          !soldIds.has(item.product_id),
+      )
+      .slice(0, 20);
+
+    const topProducts = Array.from(productMap.values())
+      .map((product) => ({
+        ...product,
+        profit: product.revenue - product.cost,
+        margin:
+          product.revenue > 0
+            ? ((product.revenue - product.cost) /
+                product.revenue) *
+              100
+            : 0,
+      }))
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 15);
+
+    const catalogMargins = products
+      .map((product) => {
+        const price = Number(product.price ?? 0);
+        const cost = Number(product.cost ?? 0);
+
+        return {
+          name: product.name,
+          price,
+          cost,
+          margin:
+            price > 0 ? ((price - cost) / price) * 100 : 0,
+        };
+      })
+      .filter((product) => product.price > 0)
+      .sort((a, b) => b.margin - a.margin);
+
+    const inventoryUnits = shared.reduce(
+      (total, item) =>
+        total + Number(item.stock ?? 0),
       0,
+    );
 
-    queryFn:
-      async () => {
-        const {
-          data,
-          error,
-        } =
-          await supabase
-            .from(
-              "sale_items",
-            )
-            .select(
-              `
-              sale_id,
-              name_snapshot,
-              quantity,
-              total,
-              product_id,
-              variant_id,
-              unit_cost,
-              cost_total
-            `,
-            )
-            .in(
-              "sale_id",
-              saleIds,
-            );
+    const inventoryAvailable = shared.reduce(
+      (total, item) =>
+        total + Number(item.available_stock ?? 0),
+      0,
+    );
 
-        if (error) {
-          throw error;
-        }
+    const inventoryReserved = shared.reduce(
+      (total, item) =>
+        total + Number(item.reserved_stock ?? 0),
+      0,
+    );
 
-        return (
-          data ??
-          []
-        ) as SaleItemRow[];
-      },
-  });
+    const inventoryCost = shared.reduce(
+      (total, item) =>
+        total +
+        Number(item.stock ?? 0) *
+          Number(item.cost ?? 0),
+      0,
+    );
 
-  /*
-   * ============================================================
-   * INVENTARIO CENTRAL
-   * ============================================================
-   */
+    const inventoryRetail = shared.reduce(
+      (total, item) =>
+        total +
+        Number(item.stock ?? 0) *
+          Number(item.price ?? 0),
+      0,
+    );
 
-  const {
-    data: inventory = [],
-  } =
-    useQuery({
-      queryKey: [
-        "ceo-shared-inventory",
-      ],
-
-      queryFn:
-        async () => {
-          return await getSharedInventory();
-        },
-    });
-
-  /*
-   * ============================================================
-   * CATÁLOGO
-   * ============================================================
-   */
-
-  const {
-    data: products = [],
-  } =
-    useQuery({
-      queryKey: [
-        "ceo-products",
-      ],
-
-      queryFn:
-        async () => {
-          const {
-            data,
-            error,
-          } =
-            await supabase
-              .from(
-                "products",
-              )
-              .select(
-                "id, name, cost, price",
-              )
-              .eq(
-                "is_active",
-                true,
-              );
-
-          if (error) {
-            throw error;
-          }
-
-          return (
-            data ??
-            []
-          ) as ProductRow[];
-        },
-    });
-
-  /*
-   * ============================================================
-   * MOTOR DE ANÁLISIS
-   * ============================================================
-   */
-
-  const buildAnalysis =
-    () => {
-      const totalToday =
-        salesToday.reduce(
-          (
-            total,
-            sale,
-          ) =>
-            total +
-            Number(
-              sale.total ??
-                0,
-            ),
-          0,
-        );
-
-      const total30 =
-        sales30.reduce(
-          (
-            total,
-            sale,
-          ) =>
-            total +
-            Number(
-              sale.total ??
-                0,
-            ),
-          0,
-        );
-
-      const totalPrevious =
-        salesPrevious.reduce(
-          (
-            total,
-            sale,
-          ) =>
-            total +
-            Number(
-              sale.total ??
-                0,
-            ),
-          0,
-        );
-
-      const tickets30 =
-        sales30.length;
-
-      const averageTicket =
-        tickets30 >
-        0
-          ? total30 /
-            tickets30
-          : 0;
-
-      const change =
-        totalPrevious >
-        0
-          ? ((total30 -
-              totalPrevious) /
-              totalPrevious) *
-            100
-          : total30 > 0
-            ? 100
-            : 0;
-
-      /*
-       * --------------------------------------------------------
-       * UTILIDAD HISTÓRICA
-       * --------------------------------------------------------
-       */
-
-      let revenue =
-        0;
-
-      let historicalCost =
-        0;
-
-      for (const item of items) {
-        revenue +=
-          Number(
-            item.total ??
-              0,
-          );
-
-        if (
-          item.cost_total !==
-            null &&
-          item.cost_total !==
-            undefined
-        ) {
-          historicalCost +=
-            Number(
-              item.cost_total,
-            );
-        } else {
-          historicalCost +=
-            Number(
-              item.unit_cost ??
-                0,
-            ) *
-            Number(
-              item.quantity ??
-                0,
-            );
-        }
-      }
-
-      const grossProfit =
-        revenue -
-        historicalCost;
-
-      const marginPercent =
-        revenue >
-        0
-          ? (grossProfit /
-              revenue) *
-            100
-          : 0;
-
-      /*
-       * --------------------------------------------------------
-       * PRODUCTOS MÁS VENDIDOS
-       * --------------------------------------------------------
-       */
-
-      const topMap =
-        new Map<
-          string,
-          {
-            name: string;
-            quantity: number;
-            revenue: number;
-            cost: number;
-          }
-        >();
-
-      for (const item of items) {
-        const key =
-          item.product_id ??
-          `name:${item.name_snapshot}`;
-
-        const current =
-          topMap.get(
-            key,
-          ) ?? {
-            name:
-              item.name_snapshot,
-            quantity: 0,
-            revenue: 0,
-            cost: 0,
-          };
-
-        current.quantity +=
-          Number(
-            item.quantity ??
-              0,
-          );
-
-        current.revenue +=
-          Number(
-            item.total ??
-              0,
-          );
-
-        current.cost +=
-          item.cost_total !==
-          null &&
-          item.cost_total !==
-            undefined
-            ? Number(
-                item.cost_total,
-              )
-            : Number(
-                item.unit_cost ??
-                  0,
-              ) *
-              Number(
-                item.quantity ??
-                  0,
-              );
-
-        topMap.set(
-          key,
-          current,
-        );
-      }
-
-      const topProducts =
-        Array.from(
-          topMap.values(),
-        )
-          .map(
-            (
-              product,
-            ) => ({
-              ...product,
-              profit:
-                product.revenue -
-                product.cost,
-            }),
-          )
-          .sort(
-            (
-              a,
-              b,
-            ) =>
-              b.quantity -
-              a.quantity,
-          );
-
-      /*
-       * --------------------------------------------------------
-       * STOCK BAJO
-       * --------------------------------------------------------
-       */
-
-      const shared =
-        inventory as SharedInventoryRow[];
-
-      const lowStock =
-        shared
-          .filter(
-            (item) =>
-              Number(
-                item.available_stock,
-              ) <=
-              Number(
-                item.min_stock,
-              ),
-          )
-          .sort(
-            (
-              a,
-              b,
-            ) =>
-              Number(
-                a.available_stock,
-              ) -
-              Number(
-                b.available_stock,
-              ),
-          );
-
-      /*
-       * --------------------------------------------------------
-       * AGOTADOS
-       * --------------------------------------------------------
-       */
-
-      const outOfStock =
-        shared.filter(
-          (item) =>
-            Number(
-              item.available_stock,
-            ) <= 0,
-        );
-
-      /*
-       * --------------------------------------------------------
-       * PRODUCTOS ESTANCADOS
-       * --------------------------------------------------------
-       */
-
-      const soldProductIds =
-        new Set(
-          items
-            .map(
-              (item) =>
-                item.product_id,
-            )
-            .filter(
-              Boolean,
-            ),
-        );
-
-      const stagnant =
-        shared
-          .filter(
-            (item) =>
-              Number(
-                item.available_stock,
-              ) > 0 &&
-              item.product_id &&
-              !soldProductIds.has(
-                item.product_id,
-              ),
-          )
-          .slice(
-            0,
-            15,
-          );
-
-      /*
-       * --------------------------------------------------------
-       * MÁRGENES DE CATÁLOGO
-       * --------------------------------------------------------
-       */
-
-      const marginProducts =
-        products
-          .map(
-            (
-              product,
-            ) => {
-              const price =
-                Number(
-                  product.price,
-                );
-
-              const cost =
-                Number(
-                  product.cost,
-                );
-
-              const margin =
-                price > 0
-                  ? ((price -
-                      cost) /
-                      price) *
-                    100
-                  : 0;
-
-              return {
-                name:
-                  product.name,
-                price,
-                cost,
-                margin,
-              };
-            },
-          )
-          .filter(
-            (product) =>
-              product.price >
-              0,
-          )
-          .sort(
-            (
-              a,
-              b,
-            ) =>
-              b.margin -
-              a.margin,
-          );
-
-      return {
-        totalToday,
-        total30,
-        totalPrevious,
-        tickets30,
-        averageTicket,
-        change,
-        revenue,
-        historicalCost,
-        grossProfit,
-        marginPercent,
-        topProducts,
-        lowStock,
-        outOfStock,
-        stagnant,
-        marginProducts,
-        inventoryUnits:
-          shared.reduce(
-            (
-              total,
-              item,
-            ) =>
-              total +
-              Number(
-                item.stock ??
-                  0,
-              ),
-            0,
-          ),
-        inventoryAvailable:
-          shared.reduce(
-            (
-              total,
-              item,
-            ) =>
-              total +
-              Number(
-                item.available_stock ??
-                  0,
-              ),
-            0,
-          ),
-        inventoryReserved:
-          shared.reduce(
-            (
-              total,
-              item,
-            ) =>
-              total +
-              Number(
-                item.reserved_stock ??
-                  0,
-              ),
-            0,
-          ),
-      };
+    return {
+      todaySales,
+      last30Sales,
+      previousSales,
+      monthSales,
+      todayTickets: salesToday.length,
+      tickets30: sales30.length,
+      averageTicket:
+        sales30.length > 0
+          ? last30Sales / sales30.length
+          : 0,
+      change,
+      revenue,
+      historicalCost,
+      grossProfit,
+      margin,
+      expensesTotal,
+      netProfit,
+      lowStock,
+      outOfStock,
+      stagnant,
+      topProducts,
+      catalogMargins,
+      inventoryUnits,
+      inventoryAvailable,
+      inventoryReserved,
+      inventoryCost,
+      inventoryRetail,
     };
+  }, [
+    salesToday,
+    sales30,
+    salesPrevious,
+    salesMonth,
+    saleItems,
+    inventory,
+    products,
+    expenses,
+  ]);
 
-  /*
-   * ============================================================
-   * RESPUESTAS
-   * ============================================================
-   */
+  const answer = (question: string) => {
+    const text = question
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "");
 
-  const answer =
-    (
-      question: string,
-    ): string => {
-      const text =
-        question
-          .toLowerCase()
-          .normalize(
-            "NFD",
-          )
-          .replace(
-            /\p{Diacritic}/gu,
-            "",
-          );
+    if (
+      text.includes("hoy") &&
+      (text.includes("venta") ||
+        text.includes("vend") ||
+        text.includes("como"))
+    ) {
+      return (
+        `VENTAS DE HOY — ${branchName}\n\n` +
+        `Ventas: ${analysis.todayTickets}\n` +
+        `Ingresos: ${money(analysis.todaySales)}\n` +
+        `Ticket promedio: ${money(
+          analysis.todayTickets > 0
+            ? analysis.todaySales / analysis.todayTickets
+            : 0,
+        )}`
+      );
+    }
 
-      const analysis =
-        buildAnalysis();
+    if (
+      text.includes("mes") &&
+      !text.includes("anterior")
+    ) {
+      return (
+        `VENTAS DEL MES\n\n` +
+        `Ingresos: ${money(analysis.monthSales)}\n` +
+        `Tickets: ${salesMonth.length}\n` +
+        `Ticket promedio: ${money(
+          salesMonth.length > 0
+            ? analysis.monthSales / salesMonth.length
+            : 0,
+        )}`
+      );
+    }
 
-      /*
-       * HOY
-       */
+    if (
+      text.includes("resumen") ||
+      text.includes("como vamos") ||
+      text.includes("como van")
+    ) {
+      return (
+        `RESUMEN EJECUTIVO — ${branchName}\n\n` +
+        `Ventas 30 días: ${money(analysis.last30Sales)}\n` +
+        `Tickets: ${analysis.tickets30}\n` +
+        `Ticket promedio: ${money(analysis.averageTicket)}\n` +
+        `Variación: ${
+          analysis.change >= 0 ? "+" : ""
+        }${analysis.change.toFixed(1)}%\n\n` +
+        `Utilidad bruta: ${money(analysis.grossProfit)}\n` +
+        `Margen: ${analysis.margin.toFixed(1)}%\n` +
+        `Gastos: ${money(analysis.expensesTotal)}\n` +
+        `Utilidad neta: ${money(analysis.netProfit)}\n\n` +
+        `Inventario: ${analysis.inventoryUnits.toLocaleString("es-MX")} uds\n` +
+        `Bajo mínimo: ${analysis.lowStock.length}\n` +
+        `Agotados: ${analysis.outOfStock.length}`
+      );
+    }
 
-      if (
-        text.includes(
-          "hoy",
-        ) &&
-        (
-          text.includes(
-            "venta",
-          ) ||
-          text.includes(
-            "vend",
-          ) ||
-          text.includes(
-            "como",
-          )
-        )
-      ) {
-        return (
-          `VENTAS DE HOY — ${branchName}\n\n` +
-          `• Ventas: ${salesToday.length}\n` +
-          `• Ingresos: ${money(analysis.totalToday)}\n` +
-          `• Ticket promedio: ${money(
-            salesToday.length
-              ? analysis.totalToday /
-                  salesToday.length
-              : 0,
-          )}`
-        );
+    if (text.includes("ticket")) {
+      return (
+        `TICKET PROMEDIO\n\n` +
+        `Últimos 30 días: ${money(analysis.averageTicket)}\n` +
+        `Tickets analizados: ${analysis.tickets30}`
+      );
+    }
+
+    if (
+      text.includes("mas vendidos") ||
+      text.includes("vendiendo mas") ||
+      text.includes("que se vende") ||
+      text.includes("productos")
+    ) {
+      if (!analysis.topProducts.length) {
+        return "No hay ventas suficientes para analizar productos.";
       }
 
-      /*
-       * RESUMEN
-       */
+      return (
+        `PRODUCTOS MÁS VENDIDOS — 30 DÍAS\n\n` +
+        analysis.topProducts
+          .slice(0, 10)
+          .map(
+            (product, index) =>
+              `${index + 1}. ${product.name} — ${
+                product.quantity
+              } uds — ${money(product.revenue)}`,
+          )
+          .join("\n")
+      );
+    }
 
-      if (
-        text.includes(
-          "resumen",
-        ) ||
-        text.includes(
-          "como vamos",
-        ) ||
-        text.includes(
-          "como van",
-        )
-      ) {
+    if (
+      text.includes("agot") ||
+      text.includes("stock") ||
+      text.includes("minimo") ||
+      text.includes("inventario")
+    ) {
+      if (text.includes("inventario") && !text.includes("agot")) {
         return (
-          `RESUMEN EJECUTIVO — ${branchName}\n\n` +
-          `Ventas 30 días: ${money(
-            analysis.total30,
-          )}\n` +
-          `Tickets: ${analysis.tickets30}\n` +
-          `Ticket promedio: ${money(
-            analysis.averageTicket,
-          )}\n` +
-          `Ventas hoy: ${money(
-            analysis.totalToday,
-          )}\n` +
-          `Variación vs periodo anterior: ${
-            analysis.change >=
-            0
-              ? "+"
-              : ""
-          }${analysis.change.toFixed(
-            1,
-          )}%\n\n` +
-          `Utilidad bruta: ${money(
-            analysis.grossProfit,
-          )}\n` +
-          `Margen bruto: ${analysis.marginPercent.toFixed(
-            1,
-          )}%\n\n` +
-          `Inventario: ${analysis.inventoryUnits} unidades\n` +
-          `Disponibles: ${analysis.inventoryAvailable}\n` +
-          `Reservadas: ${analysis.inventoryReserved}\n` +
+          `INVENTARIO CENTRAL\n\n` +
+          `Existencia: ${analysis.inventoryUnits.toLocaleString(
+            "es-MX",
+          )} uds\n` +
+          `Disponible: ${analysis.inventoryAvailable.toLocaleString(
+            "es-MX",
+          )} uds\n` +
+          `Reservado: ${analysis.inventoryReserved.toLocaleString(
+            "es-MX",
+          )} uds\n` +
+          `Valor a costo: ${money(analysis.inventoryCost)}\n` +
+          `Valor de venta: ${money(analysis.inventoryRetail)}\n` +
           `Bajo mínimo: ${analysis.lowStock.length}\n` +
           `Agotados: ${analysis.outOfStock.length}`
         );
       }
 
-      /*
-       * TICKET
-       */
+      const rows = analysis.lowStock.slice(0, 15);
 
-      if (
-        text.includes(
-          "ticket",
-        )
-      ) {
-        return (
-          `TICKET PROMEDIO\n\n` +
-          `Últimos 30 días: ${money(
-            analysis.averageTicket,
-          )}\n` +
-          `Tickets analizados: ${analysis.tickets30}`
-        );
+      if (!rows.length) {
+        return "No hay productos bajo el mínimo configurado.";
       }
-
-      /*
-       * PRODUCTOS MÁS VENDIDOS
-       */
-
-      if (
-        text.includes(
-          "mas vendidos",
-        ) ||
-        text.includes(
-          "vendiendo mas",
-        ) ||
-        text.includes(
-          "que se vende",
-        ) ||
-        text.includes(
-          "top",
-        )
-      ) {
-        if (
-          !analysis.topProducts
-            .length
-        ) {
-          return "No hay ventas suficientes en los últimos 30 días para analizar productos.";
-        }
-
-        const lines =
-          analysis.topProducts
-            .slice(
-              0,
-              10,
-            )
-            .map(
-              (
-                product,
-                index,
-              ) =>
-                `${index + 1}. ${product.name} — ${product.quantity} uds — ${money(
-                  product.revenue,
-                )}`,
-            )
-            .join(
-              "\n",
-            );
-
-        return (
-          `PRODUCTOS MÁS VENDIDOS — 30 DÍAS\n\n` +
-          lines
-        );
-      }
-
-      /*
-       * STOCK
-       */
-
-      if (
-        text.includes(
-          "agot",
-        ) ||
-        text.includes(
-          "stock bajo",
-        ) ||
-        text.includes(
-          "bajo minimo",
-        ) ||
-        text.includes(
-          "por agotar",
-        )
-      ) {
-        if (
-          !analysis.lowStock
-            .length
-        ) {
-          return "No hay productos bajo el mínimo configurado.";
-        }
-
-        const lines =
-          analysis.lowStock
-            .slice(
-              0,
-              15,
-            )
-            .map(
-              (
-                product,
-              ) =>
-                `• ${product.product_name}: disponible ${product.available_stock} / mínimo ${product.min_stock}`,
-            )
-            .join(
-              "\n",
-            );
-
-        return (
-          `ALERTAS DE INVENTARIO\n\n` +
-          `Agotados: ${analysis.outOfStock.length}\n` +
-          `Bajo mínimo: ${analysis.lowStock.length}\n\n` +
-          lines
-        );
-      }
-
-      /*
-       * QUÉ COMPRAR
-       */
-
-      if (
-        text.includes(
-          "comprar",
-        ) ||
-        text.includes(
-          "reponer",
-        ) ||
-        text.includes(
-          "pedido",
-        ) ||
-        text.includes(
-          "pedir",
-        )
-      ) {
-        if (
-          !analysis.lowStock
-            .length
-        ) {
-          return "No hay alertas de reposición basadas en los mínimos configurados.";
-        }
-
-        const lines =
-          analysis.lowStock
-            .slice(
-              0,
-              12,
-            )
-            .map(
-              (
-                product,
-              ) => {
-                const missing =
-                  Math.max(
-                    Number(
-                      product.min_stock,
-                    ) -
-                      Number(
-                        product.available_stock,
-                      ),
-                    1,
-                  );
-
-                return (
-                  `• ${product.product_name}: ` +
-                  `stock ${product.available_stock}, ` +
-                  `mínimo ${product.min_stock}, ` +
-                  `sugerido ≥ ${missing} uds`
-                );
-              },
-            )
-            .join(
-              "\n",
-            );
-
-        return (
-          `LISTA DE REPOSICIÓN\n\n` +
-          lines
-        );
-      }
-
-      /*
-       * UTILIDAD
-       */
-
-      if (
-        text.includes(
-          "utilidad",
-        ) ||
-        text.includes(
-          "ganancia",
-        ) ||
-        text.includes(
-          "margen",
-        )
-      ) {
-        if (
-          text.includes(
-            "mayor margen",
-          ) ||
-          text.includes(
-            "mejor margen",
-          )
-        ) {
-          const lines =
-            analysis.marginProducts
-              .slice(
-                0,
-                10,
-              )
-              .map(
-                (
-                  product,
-                  index,
-                ) =>
-                  `${index + 1}. ${product.name} — ${product.margin.toFixed(
-                    1,
-                  )}%`,
-              )
-              .join(
-                "\n",
-              );
-
-          return (
-            `MAYORES MÁRGENES DEL CATÁLOGO\n\n` +
-            lines
-          );
-        }
-
-        return (
-          `UTILIDAD REAL — 30 DÍAS\n\n` +
-          `Ingresos: ${money(
-            analysis.revenue,
-          )}\n` +
-          `Costo histórico: ${money(
-            analysis.historicalCost,
-          )}\n` +
-          `Utilidad bruta: ${money(
-            analysis.grossProfit,
-          )}\n` +
-          `Margen bruto: ${analysis.marginPercent.toFixed(
-            1,
-          )}%\n\n` +
-          `El costo se toma de cost_total/unit_cost guardado en cada venta, por lo que no depende del costo actual del catálogo.`
-        );
-      }
-
-      /*
-       * COMPARACIÓN
-       */
-
-      if (
-        text.includes(
-          "anterior",
-        ) ||
-        text.includes(
-          "compar",
-        ) ||
-        text.includes(
-          "periodo",
-        ) ||
-        text.includes(
-          "vs",
-        )
-      ) {
-        return (
-          `COMPARACIÓN\n\n` +
-          `Periodo actual: ${money(
-            analysis.total30,
-          )}\n` +
-          `Periodo anterior: ${money(
-            analysis.totalPrevious,
-          )}\n` +
-          `Variación: ${
-            analysis.change >=
-            0
-              ? "+"
-              : ""
-          }${analysis.change.toFixed(
-            1,
-          )}%`
-        );
-      }
-
-      /*
-       * ESTANCADOS
-       */
-
-      if (
-        text.includes(
-          "estanc",
-        ) ||
-        text.includes(
-          "no se vende",
-        ) ||
-        text.includes(
-          "parados",
-        )
-      ) {
-        if (
-          !analysis.stagnant
-            .length
-        ) {
-          return "No detecté productos con existencia disponible que no hayan aparecido en las ventas del periodo analizado.";
-        }
-
-        return (
-          `PRODUCTOS ESTANCADOS\n\n` +
-          analysis.stagnant
-            .map(
-              (
-                product,
-              ) =>
-                `• ${product.product_name} — disponible ${product.available_stock}`,
-            )
-            .join(
-              "\n",
-            )
-        );
-      }
-
-      /*
-       * INVENTARIO
-       */
-
-      if (
-        text.includes(
-          "inventario",
-        ) ||
-        text.includes(
-          "existencia",
-        ) ||
-        text.includes(
-          "cuanto tengo",
-        )
-      ) {
-        return (
-          `INVENTARIO CENTRAL\n\n` +
-          `Existencia total: ${analysis.inventoryUnits} unidades\n` +
-          `Disponible para venta: ${analysis.inventoryAvailable}\n` +
-          `Reservado: ${analysis.inventoryReserved}\n` +
-          `Bajo mínimo: ${analysis.lowStock.length}\n` +
-          `Agotados: ${analysis.outOfStock.length}\n\n` +
-          `Las dos sucursales utilizan el mismo inventario central.`
-        );
-      }
-
-      /*
-       * SUCURSAL
-       */
-
-      if (
-        text.includes(
-          "sucursal",
-        )
-      ) {
-        return (
-          `Actualmente estás consultando: ${branchName}.\n\n` +
-          `Las ventas conservan su sucursal de origen, pero la existencia de mercancía se administra mediante el inventario central compartido.`
-        );
-      }
-
-      /*
-       * AYUDA
-       */
 
       return (
-        `Puedo analizar:\n\n` +
-        `• Ventas de hoy\n` +
-        `• Ventas de 30 días\n` +
-        `• Ticket promedio\n` +
-        `• Productos más vendidos\n` +
-        `• Productos bajo mínimo\n` +
-        `• Qué comprar o reponer\n` +
-        `• Utilidad real con costo histórico\n` +
-        `• Márgenes\n` +
-        `• Comparación contra el periodo anterior\n` +
-        `• Productos estancados\n` +
-        `• Inventario disponible\n\n` +
-        `Ejemplo: "¿Qué debería comprar esta semana?"`
+        `ALERTAS DE INVENTARIO\n\n` +
+        `Agotados: ${analysis.outOfStock.length}\n` +
+        `Bajo mínimo: ${analysis.lowStock.length}\n\n` +
+        rows
+          .map(
+            (item) =>
+              `• ${item.product_name}: ${
+                item.available_stock
+              } disponibles / mínimo ${item.min_stock}`,
+          )
+          .join("\n")
       );
-    };
+    }
 
-  /*
-   * ============================================================
-   * CHAT
-   * ============================================================
-   */
-
-  const ask =
-    (
-      question: string,
-    ) => {
-      const q =
-        question.trim();
-
-      if (!q) {
-        return;
+    if (
+      text.includes("comprar") ||
+      text.includes("reponer") ||
+      text.includes("pedir") ||
+      text.includes("pedido")
+    ) {
+      if (!analysis.lowStock.length) {
+        return "No hay alertas de reposición basadas en los mínimos configurados.";
       }
 
-      setMessages(
-        (
-          current,
-        ) => [
-          ...current,
-          {
-            role: "user",
-            text: q,
-          },
-        ],
+      return (
+        `SUGERENCIA DE REPOSICIÓN\n\n` +
+        analysis.lowStock
+          .slice(0, 15)
+          .map((item) => {
+            const available = Number(
+              item.available_stock ?? 0,
+            );
+            const minimum = Number(item.min_stock ?? 0);
+            const suggested = Math.max(minimum - available, 1);
+
+            return (
+              `• ${item.product_name}: ` +
+              `stock ${available}, mínimo ${minimum}, ` +
+              `sugerido ${suggested} uds`
+            );
+          })
+          .join("\n")
       );
+    }
 
-      setInput("");
-      setThinking(true);
+    if (
+      text.includes("utilidad") ||
+      text.includes("ganancia") ||
+      text.includes("margen")
+    ) {
+      if (
+        text.includes("mayor margen") ||
+        text.includes("mejor margen")
+      ) {
+        return (
+          `MAYORES MÁRGENES DEL CATÁLOGO\n\n` +
+          analysis.catalogMargins
+            .slice(0, 10)
+            .map(
+              (product, index) =>
+                `${index + 1}. ${product.name} — ${product.margin.toFixed(
+                  1,
+                )}%`,
+            )
+            .join("\n")
+        );
+      }
 
-      setTimeout(
-        () => {
-          const reply =
-            answer(q);
+      return (
+        `UTILIDAD REAL — 30 DÍAS\n\n` +
+        `Ingresos: ${money(analysis.revenue)}\n` +
+        `Costo histórico: ${money(analysis.historicalCost)}\n` +
+        `Utilidad bruta: ${money(analysis.grossProfit)}\n` +
+        `Margen bruto: ${analysis.margin.toFixed(1)}%\n` +
+        `Gastos: ${money(analysis.expensesTotal)}\n` +
+        `Utilidad neta: ${money(analysis.netProfit)}\n\n` +
+        `El costo utiliza el costo histórico guardado en cada venta.`
+      );
+    }
 
-          setMessages(
-            (
-              current,
-            ) => [
-              ...current,
-              {
-                role: "assistant",
-                text: reply,
-              },
-            ],
-          );
+    if (
+      text.includes("anterior") ||
+      text.includes("compar") ||
+      text.includes("periodo") ||
+      text.includes("vs")
+    ) {
+      return (
+        `COMPARACIÓN — ÚLTIMOS 30 DÍAS\n\n` +
+        `Periodo actual: ${money(analysis.last30Sales)}\n` +
+        `Periodo anterior: ${money(analysis.previousSales)}\n` +
+        `Variación: ${
+          analysis.change >= 0 ? "+" : ""
+        }${analysis.change.toFixed(1)}%`
+      );
+    }
 
-          setThinking(
-            false,
-          );
+    if (
+      text.includes("estanc") ||
+      text.includes("no se vende") ||
+      text.includes("parado")
+    ) {
+      if (!analysis.stagnant.length) {
+        return "No detecté productos con existencia disponible que no hayan aparecido en las ventas de los últimos 30 días.";
+      }
+
+      return (
+        `PRODUCTOS SIN MOVIMIENTO — 30 DÍAS\n\n` +
+        analysis.stagnant
+          .map(
+            (item) =>
+              `• ${item.product_name} — disponible ${item.available_stock}`,
+          )
+          .join("\n")
+      );
+    }
+
+    return (
+      `Puedo analizar:\n\n` +
+      `• Ventas de hoy y del mes\n` +
+      `• Ventas de los últimos 30 días\n` +
+      `• Comparación contra el periodo anterior\n` +
+      `• Ticket promedio\n` +
+      `• Utilidad bruta y neta\n` +
+      `• Gastos\n` +
+      `• Márgenes\n` +
+      `• Productos más vendidos\n` +
+      `• Productos bajo mínimo\n` +
+      `• Qué comprar o reponer\n` +
+      `• Inventario central\n` +
+      `• Productos sin movimiento`
+    );
+  };
+
+  const ask = (question: string) => {
+    const value = question.trim();
+
+    if (!value || thinking) return;
+
+    setMessages((current) => [
+      ...current,
+      {
+        role: "user",
+        text: value,
+      },
+    ]);
+
+    setInput("");
+    setThinking(true);
+
+    window.setTimeout(() => {
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          text: answer(value),
         },
-        250,
-      );
-    };
+      ]);
 
-  const analysis =
-    buildAnalysis();
+      setThinking(false);
+    }, 200);
+  };
 
   return (
-    <div className="flex h-[calc(100dvh-5rem)] flex-col p-4 md:h-[calc(100vh-1rem)] md:p-6">
+    <div className="flex h-[calc(100dvh-5rem)] min-h-0 flex-col p-3 sm:p-4 md:h-[calc(100vh-1rem)] md:p-6">
       <PageHeader
         icon={Bot}
         title="CEO IA"
         description={`Centro de inteligencia de LULA OS — ${branchName}`}
-        className="mb-4"
+        className="mb-4 shrink-0"
       />
 
-      {/* ======================================================
-          RESUMEN RÁPIDO
-      ======================================================= */}
-
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-4 grid shrink-0 gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MiniKpi
           icon={DollarSign}
-          label="Ventas 30 días"
-          value={money(
-            analysis.total30,
-          )}
+          label="Ventas hoy"
+          value={money(analysis.todaySales)}
         />
 
         <MiniKpi
           icon={TrendingUp}
-          label="Utilidad bruta"
-          value={money(
-            analysis.grossProfit,
-          )}
+          label="Ventas 30 días"
+          value={money(analysis.last30Sales)}
         />
 
         <MiniKpi
           icon={ShoppingCart}
           label="Ticket promedio"
-          value={money(
-            analysis.averageTicket,
-          )}
+          value={money(analysis.averageTicket)}
         />
 
         <MiniKpi
           icon={
-            analysis.lowStock
-              .length >
-            0
+            analysis.netProfit >= 0
+              ? TrendingUp
+              : TrendingDown
+          }
+          label="Utilidad neta"
+          value={money(analysis.netProfit)}
+        />
+
+        <MiniKpi
+          icon={
+            analysis.lowStock.length > 0
               ? AlertTriangle
               : Boxes
           }
-          label="Alertas stock"
-          value={`${analysis.lowStock.length}`}
+          label="Alertas"
+          value={String(analysis.lowStock.length)}
         />
       </div>
 
-      {/* ======================================================
-          SUGERENCIAS
-      ======================================================= */}
-
-      <div className="mb-3 flex flex-wrap gap-2">
-        {SUGGESTIONS.map(
-          (
-            suggestion,
-          ) => (
-            <button
-              key={
-                suggestion
-              }
-              type="button"
-              onClick={() =>
-                ask(
-                  suggestion,
-                )
-              }
-              className="rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
-            >
-              <Sparkles className="mr-1 inline h-3 w-3" />
-              {
-                suggestion
-              }
-            </button>
-          ),
-        )}
+      <div className="mb-3 flex shrink-0 gap-2 overflow-x-auto pb-1">
+        {SUGGESTIONS.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            onClick={() => ask(suggestion)}
+            className="whitespace-nowrap rounded-full border bg-card px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-foreground"
+          >
+            <Sparkles className="mr-1 inline h-3 w-3" />
+            {suggestion}
+          </button>
+        ))}
       </div>
 
-      {/* ======================================================
-          CHAT
-      ======================================================= */}
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_320px]">
+        <Card className="flex min-h-0 flex-col">
+          <CardHeader className="shrink-0 border-b py-3">
+            <CardTitle className="flex items-center gap-2 text-sm">
+              <Bot className="h-4 w-4" />
+              Inteligencia de negocio
+              <Badge
+                variant="secondary"
+                className="ml-auto"
+              >
+                Datos reales
+              </Badge>
+            </CardTitle>
+          </CardHeader>
 
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader className="shrink-0 border-b py-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Bot className="h-4 w-4" />
-            Inteligencia de negocio
-            <Badge
-              variant="secondary"
-              className="ml-auto"
-            >
-              Datos reales
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-
-        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          <ScrollArea className="flex-1 px-4 py-3">
-            <div className="space-y-3">
-              {messages.map(
-                (
-                  message,
-                  index,
-                ) => (
+          <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+            <ScrollArea className="min-h-0 flex-1 px-4 py-3">
+              <div className="space-y-3">
+                {messages.map((message, index) => (
                   <div
-                    key={
-                      index
-                    }
+                    key={index}
                     className={cn(
-                      "max-w-[92%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm",
-                      message.role ===
-                        "user"
+                      "max-w-[94%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm",
+                      message.role === "user"
                         ? "ml-auto bg-primary text-primary-foreground"
                         : "bg-muted",
                     )}
                   >
-                    {
-                      message.text
-                    }
+                    {message.text}
                   </div>
-                ),
-              )}
+                ))}
 
-              {thinking && (
-                <div className="w-fit rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
-                  Analizando ventas,
-                  costos e
-                  inventario…
-                </div>
-              )}
-            </div>
-          </ScrollArea>
+                {thinking && (
+                  <div className="w-fit rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
+                    Analizando datos…
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
 
-          <form
-            className="flex gap-2 border-t p-3"
-            onSubmit={(
-              event,
-            ) => {
-              event.preventDefault();
-              ask(input);
-            }}
-          >
-            <Input
-              value={input}
-              onChange={(
-                event,
-              ) =>
-                setInput(
-                  event.target
-                    .value,
-                )
-              }
-              placeholder="Pregúntame cualquier cosa sobre el negocio…"
-              className="flex-1"
-            />
-
-            <Button
-              type="submit"
-              size="icon"
-              disabled={
-                thinking ||
-                !input.trim()
-              }
+            <form
+              className="flex shrink-0 gap-2 border-t p-3"
+              onSubmit={(event) => {
+                event.preventDefault();
+                ask(input);
+              }}
             >
-              <Send className="h-4 w-4" />
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+              <Input
+                value={input}
+                onChange={(event) =>
+                  setInput(event.target.value)
+                }
+                placeholder="Pregúntame sobre tu negocio…"
+                className="min-w-0 flex-1"
+              />
+
+              <Button
+                type="submit"
+                size="icon"
+                disabled={thinking || !input.trim()}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <div className="hidden min-h-0 space-y-4 overflow-auto lg:block">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">
+                Resumen financiero
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-3 text-sm">
+              <SummaryRow
+                label="Ventas 30 días"
+                value={money(analysis.last30Sales)}
+              />
+
+              <SummaryRow
+                label="Costo mercancía"
+                value={money(analysis.historicalCost)}
+              />
+
+              <SummaryRow
+                label="Utilidad bruta"
+                value={money(analysis.grossProfit)}
+              />
+
+              <SummaryRow
+                label="Margen bruto"
+                value={`${analysis.margin.toFixed(1)}%`}
+              />
+
+              <SummaryRow
+                label="Gastos"
+                value={money(analysis.expensesTotal)}
+              />
+
+              <div className="border-t pt-3">
+                <SummaryRow
+                  label="Utilidad neta"
+                  value={money(analysis.netProfit)}
+                  strong
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">
+                Inventario central
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-3 text-sm">
+              <SummaryRow
+                label="Existencia"
+                value={`${analysis.inventoryUnits.toLocaleString(
+                  "es-MX",
+                )} uds`}
+              />
+
+              <SummaryRow
+                label="Disponible"
+                value={`${analysis.inventoryAvailable.toLocaleString(
+                  "es-MX",
+                )} uds`}
+              />
+
+              <SummaryRow
+                label="Reservado"
+                value={`${analysis.inventoryReserved.toLocaleString(
+                  "es-MX",
+                )} uds`}
+              />
+
+              <SummaryRow
+                label="Valor a costo"
+                value={money(analysis.inventoryCost)}
+              />
+
+              <SummaryRow
+                label="Valor de venta"
+                value={money(analysis.inventoryRetail)}
+              />
+
+              <SummaryRow
+                label="Agotados"
+                value={String(analysis.outOfStock.length)}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                <Package className="h-4 w-4" />
+                Sin movimiento
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-2">
+              {analysis.stagnant.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No hay productos detectados.
+                </p>
+              ) : (
+                analysis.stagnant
+                  .slice(0, 8)
+                  .map((item) => (
+                    <div
+                      key={`${item.product_id}-${item.variant_id ?? "base"}`}
+                      className="flex items-center justify-between gap-2 text-sm"
+                    >
+                      <span className="truncate">
+                        {item.product_name}
+                      </span>
+
+                      <Badge variant="outline">
+                        {item.available_stock}
+                      </Badge>
+                    </div>
+                  ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3",
+        strong && "font-semibold",
+      )}
+    >
+      <span>{label}</span>
+      <span className="text-right">{value}</span>
     </div>
   );
 }
@@ -1588,13 +1078,13 @@ function MiniKpi({
 }) {
   return (
     <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className="rounded-lg bg-primary/10 p-2">
+      <CardContent className="flex items-center gap-3 p-3.5">
+        <div className="shrink-0 rounded-lg bg-primary/10 p-2">
           <Icon className="h-5 w-5 text-primary" />
         </div>
 
         <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">
+          <p className="truncate text-xs text-muted-foreground">
             {label}
           </p>
 
