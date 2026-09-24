@@ -70,6 +70,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
+import { RestockList } from "@/components/inventory/RestockList";
 
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
@@ -770,6 +771,11 @@ function InventarioPage() {
 
           <TabsTrigger value="movimientos">
             Movimientos
+          </TabsTrigger>
+
+          <TabsTrigger value="reposicion">
+            <ClipboardList className="mr-1 h-3.5 w-3.5" />
+            Reposición
           </TabsTrigger>
 
           <TabsTrigger value="importar">
@@ -1812,6 +1818,13 @@ function InventarioPage() {
               </Table>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent
+          value="reposicion"
+          className="mt-4"
+        >
+          <RestockList />
         </TabsContent>
 
         <TabsContent
