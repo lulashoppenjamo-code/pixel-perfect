@@ -33,7 +33,12 @@ import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
 import { getSharedInventory } from "@/lib/sharedInventory";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 import {
   Table,
@@ -53,7 +58,10 @@ import {
 } from "@/components/ui/select";
 
 import { Badge } from "@/components/ui/badge";
-import { PageHeader, PageShell } from "@/components/PageHeader";
+import {
+  PageHeader,
+  PageShell,
+} from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_shell/reportes")({
@@ -141,10 +149,32 @@ function ReportesPage() {
 
   const days = Number(rangeDays);
 
+  /*
+   * ============================================================
+   * PERIODOS
+   * ============================================================
+   *
+   * Antes:
+   *
+   * 30 días = desde hoy - 30 días
+   *
+   * Eso realmente incluía 31 fechas de calendario.
+   *
+   * Ahora:
+   *
+   * 30 días = hoy + 29 días anteriores.
+   *
+   * El periodo anterior tiene exactamente la misma cantidad
+   * de días.
+   */
+
   const since = useMemo(
     () =>
       startOfDay(
-        subDays(new Date(), days),
+        subDays(
+          new Date(),
+          Math.max(days - 1, 0),
+        ),
       ).toISOString(),
     [days],
   );
@@ -152,12 +182,24 @@ function ReportesPage() {
   const prevSince = useMemo(
     () =>
       startOfDay(
-        subDays(new Date(), days * 2),
+        subDays(
+          new Date(),
+          Math.max(days * 2 - 1, 0),
+        ),
       ).toISOString(),
     [days],
   );
 
   const prevUntil = since;
+
+  const todayDate = useMemo(
+    () =>
+      format(
+        new Date(),
+        "yyyy-MM-dd",
+      ),
+    [],
+  );
 
   /*
    * ============================================================
@@ -197,18 +239,32 @@ function ReportesPage() {
           cashier_id
         `,
         )
-        .eq("branch_id", branchId!)
-        .eq("status", "completed")
-        .gte("created_at", since)
-        .order("created_at", {
-          ascending: true,
-        });
+        .eq(
+          "branch_id",
+          branchId!,
+        )
+        .eq(
+          "status",
+          "completed",
+        )
+        .gte(
+          "created_at",
+          since,
+        )
+        .order(
+          "created_at",
+          {
+            ascending: true,
+          },
+        );
 
       if (error) {
         throw error;
       }
 
-      return (data ?? []) as SaleRow[];
+      return (
+        (data ?? []) as SaleRow[]
+      );
     },
   });
 
@@ -238,8 +294,14 @@ function ReportesPage() {
         .select(
           "id, total, created_at",
         )
-        .eq("branch_id", branchId!)
-        .eq("status", "completed")
+        .eq(
+          "branch_id",
+          branchId!,
+        )
+        .eq(
+          "status",
+          "completed",
+        )
         .gte(
           "created_at",
           prevSince,
@@ -282,6 +344,19 @@ function ReportesPage() {
    * ============================================================
    * GASTOS
    * ============================================================
+   *
+   * El periodo ahora tiene límite superior.
+   *
+   * Antes:
+   *
+   *   >= fecha inicial
+   *
+   * Eso podía incluir gastos capturados con fecha futura.
+   *
+   * Ahora:
+   *
+   *   >= inicio
+   *   <= hoy
    */
 
   const {
@@ -312,6 +387,10 @@ function ReportesPage() {
         .gte(
           "expense_date",
           sinceDate,
+        )
+        .lte(
+          "expense_date",
+          todayDate,
         );
 
       if (error) {
@@ -327,7 +406,9 @@ function ReportesPage() {
         throw error;
       }
 
-      return (data ?? []).reduce(
+      return (
+        data ?? []
+      ).reduce(
         (
           total,
           expense,
@@ -344,18 +425,18 @@ function ReportesPage() {
   /*
    * ============================================================
    * ITEMS DE LAS VENTAS
-   *
-   * IMPORTANTE:
-   *
-   * Se utiliza cost_total almacenado
-   * en el momento de la venta.
-   *
-   * Ya NO se toma products.cost actual.
    * ============================================================
+   *
+   * Se utiliza cost_total almacenado en el momento de la venta.
+   *
+   * NO se utiliza products.cost actual.
    */
 
   const saleIds = useMemo(
-    () => sales.map((sale) => sale.id),
+    () =>
+      sales.map(
+        (sale) => sale.id,
+      ),
     [sales],
   );
 
@@ -399,21 +480,26 @@ function ReportesPage() {
         throw error;
       }
 
-      return (data ??
-        []) as SaleItemRow[];
+      return (
+        (data ??
+          []) as SaleItemRow[]
+      );
     },
   });
 
   /*
    * ============================================================
-   * KPIs PRINCIPALES
+   * KPI PRINCIPALES
    * ============================================================
    */
 
   const totalSales = useMemo(
     () =>
       sales.reduce(
-        (total, sale) =>
+        (
+          total,
+          sale,
+        ) =>
           total +
           Number(
             sale.total ?? 0,
@@ -475,7 +561,7 @@ function ReportesPage() {
           ) => {
             if (
               item.cost_total !==
-              null &&
+                null &&
               item.cost_total !==
                 undefined
             ) {
@@ -671,6 +757,23 @@ function ReportesPage() {
 
   /*
    * ============================================================
+   * COBERTURA DEL INVENTARIO
+   * ============================================================
+   *
+   * No se etiqueta como "periodos", porque el valor de inventario
+   * dividido entre ventas no representa realmente meses o semanas.
+   *
+   * Se muestra como multiplicador del valor de ventas del periodo.
+   */
+
+  const inventorySalesMultiple =
+    totalSales > 0
+      ? inventoryRetail /
+        totalSales
+      : 0;
+
+  /*
+   * ============================================================
    * VENTAS POR MÉTODO DE PAGO
    * ============================================================
    */
@@ -772,11 +875,10 @@ function ReportesPage() {
         map.entries(),
       )
         .sort(
-          ([
-            a,
-          ], [
-            b,
-          ]) =>
+          (
+            [a],
+            [b],
+          ) =>
             a.localeCompare(
               b,
             ),
@@ -803,8 +905,6 @@ function ReportesPage() {
   /*
    * ============================================================
    * TOP PRODUCTOS
-   *
-   * Agrupa por product_id cuando existe.
    * ============================================================
    */
 
@@ -849,7 +949,7 @@ function ReportesPage() {
 
         if (
           item.cost_total !==
-          null &&
+            null &&
           item.cost_total !==
             undefined
         ) {
@@ -909,25 +1009,11 @@ function ReportesPage() {
 
   /*
    * ============================================================
-   * INVENTARIO POR VALOR
-   * ============================================================
-   */
-
-  const inventoryCoverage =
-    totalSales > 0
-      ? inventoryRetail /
-        totalSales
-      : 0;
-
-  /*
-   * ============================================================
    * ERROR
    * ============================================================
    */
 
-  if (
-    salesError
-  ) {
+  if (salesError) {
     return (
       <PageShell>
         <PageHeader
@@ -1104,10 +1190,10 @@ function ReportesPage() {
           )}
           icon={TrendingUp}
           subtitle={
-            inventoryCoverage > 0
-              ? `≈ ${inventoryCoverage.toFixed(
+            inventorySalesMultiple > 0
+              ? `≈ ${inventorySalesMultiple.toFixed(
                   1,
-                )} periodos`
+                )}x las ventas del periodo`
               : undefined
           }
           loading={
