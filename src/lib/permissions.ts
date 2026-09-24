@@ -2,7 +2,13 @@
  * Permisos de navegación por rol — LULA OS
  * Ruta: src/lib/permissions.ts
  */
-export type AppRole = "owner" | "admin" | "manager" | "cashier" | "staff";
+
+export type AppRole =
+  | "owner"
+  | "admin"
+  | "manager"
+  | "cashier"
+  | "staff";
 
 export type NavKey =
   | "ventas"
@@ -15,6 +21,7 @@ export type NavKey =
   | "devoluciones"
   | "reportes"
   | "pedidos"
+  | "reposicion"
   | "ceo"
   | "ajustes";
 
@@ -30,9 +37,11 @@ const ROLE_NAV: Record<AppRole, NavKey[]> = {
     "devoluciones",
     "reportes",
     "pedidos",
+    "reposicion",
     "ceo",
     "ajustes",
   ],
+
   admin: [
     "ventas",
     "productos",
@@ -44,9 +53,11 @@ const ROLE_NAV: Record<AppRole, NavKey[]> = {
     "devoluciones",
     "reportes",
     "pedidos",
+    "reposicion",
     "ceo",
     "ajustes",
   ],
+
   manager: [
     "ventas",
     "productos",
@@ -58,25 +69,64 @@ const ROLE_NAV: Record<AppRole, NavKey[]> = {
     "reportes",
     "devoluciones",
     "pedidos",
+    "reposicion",
     "ceo",
   ],
-  cashier: ["ventas", "clientes", "caja", "devoluciones"],
-  staff: ["ventas", "clientes"],
+
+  cashier: [
+    "ventas",
+    "clientes",
+    "caja",
+    "devoluciones",
+    "reposicion",
+  ],
+
+  staff: [
+    "ventas",
+    "clientes",
+    "reposicion",
+  ],
 };
 
-export function canAccess(roles: AppRole[], key: NavKey): boolean {
+export function canAccess(
+  roles: AppRole[],
+  key: NavKey,
+): boolean {
   if (!roles.length) return false;
-  return roles.some((r) => ROLE_NAV[r]?.includes(key));
+
+  return roles.some((role) =>
+    ROLE_NAV[role]?.includes(key),
+  );
 }
 
-export function filterNavByRoles<T extends { key: NavKey }>(items: T[], roles: AppRole[]): T[] {
-  return items.filter((item) => canAccess(roles, item.key));
+export function filterNavByRoles<
+  T extends { key: NavKey },
+>(
+  items: T[],
+  roles: AppRole[],
+): T[] {
+  return items.filter((item) =>
+    canAccess(roles, item.key),
+  );
 }
 
-export function isAtLeastManager(roles: AppRole[]): boolean {
-  return roles.some((r) => r === "owner" || r === "admin" || r === "manager");
+export function isAtLeastManager(
+  roles: AppRole[],
+): boolean {
+  return roles.some(
+    (role) =>
+      role === "owner" ||
+      role === "admin" ||
+      role === "manager",
+  );
 }
 
-export function isAtLeastAdmin(roles: AppRole[]): boolean {
-  return roles.some((r) => r === "owner" || r === "admin");
+export function isAtLeastAdmin(
+  roles: AppRole[],
+): boolean {
+  return roles.some(
+    (role) =>
+      role === "owner" ||
+      role === "admin",
+  );
 }
