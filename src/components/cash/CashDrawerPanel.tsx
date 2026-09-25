@@ -8,6 +8,7 @@
  * - Entradas y salidas manuales.
  * - Ventas en efectivo.
  * - Pagos mixtos.
+ * - Devoluciones y reembolsos en efectivo.
  * - Gastos pagados en efectivo.
  * - Cierre con efectivo contado.
  * - Diferencia contra efectivo esperado.
@@ -153,14 +154,22 @@ export function CashDrawerPanel({
           .select("total")
           .eq("cash_session_id", id)
           .eq("payment_method", "cash")
-          .eq("status", "completed"),
+          .in("status", [
+            "completed",
+            "partially_refunded",
+            "refunded",
+          ]),
 
         supabase
           .from("sales")
           .select("cash_received")
           .eq("cash_session_id", id)
           .eq("payment_method", "mixed")
-          .eq("status", "completed"),
+          .in("status", [
+            "completed",
+            "partially_refunded",
+            "refunded",
+          ]),
 
         supabase
           .from("cash_movements")
@@ -319,15 +328,6 @@ export function CashDrawerPanel({
         );
       }
 
-      /*
-       * La protección definitiva está en PostgreSQL:
-       *
-       * cash_sessions_one_open_per_branch
-       *
-       * Por eso dos dispositivos no pueden crear
-       * simultáneamente dos cajas abiertas.
-       */
-
       const { error } = await supabase
         .from("cash_sessions")
         .insert({
@@ -358,11 +358,6 @@ export function CashDrawerPanel({
 
       toast.error(message);
 
-      /*
-       * Actualizamos la consulta porque otra persona
-       * pudo haber abierto la caja mientras esta pantalla
-       * todavía mostraba el estado anterior.
-       */
       invalidate();
     },
   });
@@ -545,10 +540,6 @@ export function CashDrawerPanel({
         className,
       )}
     >
-      {/* ======================================================
-          ESTADO DE CAJA
-          ====================================================== */}
-
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e2e8f0] bg-white p-4">
         <div className="flex items-center gap-3">
           <div
@@ -603,10 +594,6 @@ export function CashDrawerPanel({
         )}
       </div>
 
-      {/* ======================================================
-          CAJA CERRADA / APERTURA
-          ====================================================== */}
-
       {!session ? (
         <div className="rounded-2xl border border-[#e2e8f0] bg-white p-5">
           <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26]">
@@ -652,10 +639,6 @@ export function CashDrawerPanel({
         </div>
       ) : (
         <>
-          {/* ==================================================
-              CUADRE
-              ================================================== */}
-
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Stat
               label="Efectivo inicial"
@@ -713,10 +696,6 @@ export function CashDrawerPanel({
               </p>
             </div>
           </div>
-
-          {/* ==================================================
-              MOVIMIENTOS
-              ================================================== */}
 
           <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
             <h3 className="text-sm font-bold text-[#1a1d26]">
@@ -868,10 +847,6 @@ export function CashDrawerPanel({
         </>
       )}
 
-      {/* ======================================================
-          CIERRE DE CAJA
-          ====================================================== */}
-
       <Dialog
         open={closeOpen}
         onOpenChange={setCloseOpen}
@@ -966,10 +941,6 @@ export function CashDrawerPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* ======================================================
-          HISTORIAL
-          ====================================================== */}
 
       <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
         <h3 className="text-sm font-bold text-[#1a1d26]">
