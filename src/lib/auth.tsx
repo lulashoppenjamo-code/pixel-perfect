@@ -62,48 +62,99 @@ function isValidRole(
 }
 
 /**
- * Obtiene los roles del usuario.
+ * Obtiene los roles reales del usuario autenticado.
  *
- * Primero intenta leer user_roles.
- * Si esa lectura no devuelve roles, utiliza la función
- * SECURITY DEFINER has_role() como segundo mecanismo.
+ * Primero usa get_my_roles(), una función SECURITY DEFINER
+ * que consulta user_roles sin depender de las políticas RLS.
  *
- * Esto evita que una restricción RLS de user_roles deje
- * accidentalmente al propietario sin acceso en la interfaz.
+ * Después utiliza user_roles directamente como respaldo.
+ *
+ * Finalmente intenta has_role() para compatibilidad
+ * con instalaciones anteriores.
  */
 async function loadRoles(
   uid: string,
 ): Promise<AppRole[]> {
-  const rolesResponse =
-    await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid);
-
-  if (rolesResponse.error) {
-    console.error(
-      "[LULA AUTH] Error leyendo user_roles:",
-      rolesResponse.error,
+  /**
+   * MÉTODO PRINCIPAL
+   *
+   * get_my_roles() siempre trabaja con auth.uid()
+   * y por seguridad no confía únicamente en el uid enviado
+   * desde el navegador.
+   */
+  try {
+    const {
+      data,
+      error,
+    } = await supabase.rpc(
+      "get_my_roles",
     );
-  }
 
-  const directRoles =
-    (rolesResponse.data ?? [])
-      .map((item) => item?.role)
-      .filter(isValidRole);
+    if (!error) {
+      const roles = Array.isArray(data)
+        ? data.filter(isValidRole)
+        : [];
 
-  if (directRoles.length > 0) {
-    return Array.from(
-      new Set(directRoles),
+      if (roles.length > 0) {
+        return Array.from(
+          new Set(roles),
+        );
+      }
+    } else {
+      console.warn(
+        "[LULA AUTH] get_my_roles no disponible todavía:",
+        error,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      "[LULA AUTH] Error en get_my_roles:",
+      error,
     );
   }
 
   /**
-   * Segundo mecanismo:
-   * comprobar cada rol mediante has_role().
+   * RESPALDO 1
    *
-   * La función está protegida en Supabase como
-   * SECURITY DEFINER y requiere usuario autenticado.
+   * Lectura directa del rol propio.
+   */
+  try {
+    const {
+      data,
+      error,
+    } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", uid);
+
+    if (!error) {
+      const roles = (data ?? [])
+        .map((item) => item?.role)
+        .filter(isValidRole);
+
+      if (roles.length > 0) {
+        return Array.from(
+          new Set(roles),
+        );
+      }
+    } else {
+      console.warn(
+        "[LULA AUTH] Error leyendo user_roles:",
+        error,
+      );
+    }
+  } catch (error) {
+    console.warn(
+      "[LULA AUTH] Error consultando user_roles:",
+      error,
+    );
+  }
+
+  /**
+   * RESPALDO 2
+   *
+   * Compatibilidad con versiones anteriores
+   * de la base de datos.
    */
   const detectedRoles: AppRole[] = [];
 
@@ -120,21 +171,12 @@ async function loadRoles(
         },
       );
 
-      if (error) {
-        console.warn(
-          `[LULA AUTH] has_role(${role}) falló:`,
-          error,
-        );
-
-        continue;
-      }
-
-      if (data === true) {
+      if (!error && data === true) {
         detectedRoles.push(role);
       }
     } catch (error) {
       console.warn(
-        `[LULA AUTH] Error comprobando rol ${role}:`,
+        `[LULA AUTH] Error comprobando ${role}:`,
         error,
       );
     }
@@ -152,51 +194,59 @@ async function loadUserProfile(
   roles: AppRole[];
 }> {
   /**
-   * Intentamos asegurar que exista el perfil.
-   * Si falla, no bloqueamos automáticamente el acceso.
+   * Intentar crear el perfil si todavía no existe.
    */
-  const {
-    error: ensureError,
-  } = await supabase.rpc(
-    "ensure_profile",
-    {},
-  );
+  try {
+    const {
+      error,
+    } = await supabase.rpc(
+      "ensure_profile",
+      {},
+    );
 
-  if (ensureError) {
+    if (error) {
+      console.warn(
+        "[LULA AUTH] ensure_profile:",
+        error,
+      );
+    }
+  } catch (error) {
     console.warn(
-      "[LULA AUTH] ensure_profile no pudo ejecutarse:",
-      ensureError,
+      "[LULA AUTH] Error en ensure_profile:",
+      error,
     );
   }
 
   /**
-   * Leer el perfil del usuario actual.
+   * Leer perfil propio.
    */
-  const profileResponse =
-    await supabase
-      .from("profiles")
-      .select(
-        "id, full_name, branch_id, is_active",
-      )
-      .eq("id", uid)
-      .maybeSingle();
+  const {
+    data,
+    error,
+  } = await supabase
+    .from("profiles")
+    .select(
+      "id, full_name, branch_id, is_active",
+    )
+    .eq("id", uid)
+    .maybeSingle();
 
-  if (profileResponse.error) {
+  if (error) {
     console.error(
       "[LULA AUTH] Error leyendo profiles:",
-      profileResponse.error,
+      error,
     );
 
-    throw profileResponse.error;
+    throw error;
   }
 
   const profile =
-    (profileResponse.data as Profile | null) ??
+    (data as Profile | null) ??
     null;
 
   if (!profile) {
     console.warn(
-      "[LULA AUTH] No existe perfil para el usuario:",
+      "[LULA AUTH] No existe perfil:",
       uid,
     );
 
@@ -207,7 +257,7 @@ async function loadUserProfile(
   }
 
   /**
-   * Nunca damos permisos a un perfil inactivo.
+   * Un usuario inactivo nunca recibe permisos.
    */
   if (profile.is_active !== true) {
     console.warn(
@@ -221,14 +271,11 @@ async function loadUserProfile(
     };
   }
 
-  /**
-   * Cargamos roles usando ambos mecanismos.
-   */
   const roles =
     await loadRoles(uid);
 
   console.info(
-    "[LULA AUTH] ACCESO FINAL:",
+    "[LULA AUTH] ACCESO FINAL",
     {
       uid,
       active: profile.is_active,
@@ -249,17 +296,25 @@ export function AuthProvider({
 }: {
   children: ReactNode;
 }) {
-  const [session, setSession] =
-    useState<Session | null>(null);
+  const [
+    session,
+    setSession,
+  ] = useState<Session | null>(null);
 
-  const [profile, setProfile] =
-    useState<Profile | null>(null);
+  const [
+    profile,
+    setProfile,
+  ] = useState<Profile | null>(null);
 
-  const [roles, setRoles] =
-    useState<AppRole[]>([]);
+  const [
+    roles,
+    setRoles,
+  ] = useState<AppRole[]>([]);
 
-  const [loading, setLoading] =
-    useState(true);
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
 
   const loadProfile = async (
     currentSession: Session | null,
@@ -278,17 +333,17 @@ export function AuthProvider({
         await loadUserProfile(uid);
 
       /**
-       * Confirmamos que la sesión no cambió mientras
-       * cargábamos los permisos.
+       * Evitar aplicar permisos de una sesión
+       * que ya cambió.
        */
       const {
-        data: sessionResponse,
+        data,
       } =
         await supabase.auth.getSession();
 
       const currentUid =
-        sessionResponse.session?.user
-          ?.id ?? null;
+        data.session?.user?.id ??
+        null;
 
       if (currentUid !== uid) {
         return;
@@ -298,7 +353,7 @@ export function AuthProvider({
       setRoles(result.roles);
     } catch (error) {
       console.error(
-        "[LULA AUTH] Error cargando permisos:",
+        "[LULA AUTH] Error cargando perfil:",
         error,
       );
 
@@ -310,9 +365,6 @@ export function AuthProvider({
   useEffect(() => {
     let mounted = true;
 
-    /**
-     * Escucha login, logout y cambios de sesión.
-     */
     const {
       data: subscription,
     } =
@@ -332,8 +384,8 @@ export function AuthProvider({
           }
 
           /**
-           * Esperamos al siguiente ciclo para evitar
-           * consultas Supabase dentro del callback de auth.
+           * No hacemos consultas Supabase directamente
+           * dentro del callback de Auth.
            */
           setTimeout(() => {
             if (!mounted) {
@@ -351,9 +403,6 @@ export function AuthProvider({
         },
       );
 
-    /**
-     * Recuperar sesión existente al abrir la aplicación.
-     */
     void supabase.auth
       .getSession()
       .then(async ({ data }) => {
@@ -413,18 +462,20 @@ export function AuthProvider({
 
     loading,
 
-    isManager: roles.some(
-      (role) =>
-        role === "owner" ||
-        role === "admin" ||
-        role === "manager",
-    ),
+    isManager:
+      roles.some(
+        (role) =>
+          role === "owner" ||
+          role === "admin" ||
+          role === "manager",
+      ),
 
-    isAdmin: roles.some(
-      (role) =>
-        role === "owner" ||
-        role === "admin",
-    ),
+    isAdmin:
+      roles.some(
+        (role) =>
+          role === "owner" ||
+          role === "admin",
+      ),
 
     refresh: async () => {
       const {
