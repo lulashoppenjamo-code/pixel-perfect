@@ -49,22 +49,30 @@ async function loadUserProfile(
   roles: AppRole[];
 }> {
   /*
-   * ensure_profile solamente crea el perfil cuando
-   * realmente no existe.
+   * ensure_profile solamente intenta crear el perfil
+   * cuando realmente no existe.
    *
-   * La nueva función SQL:
-   * - primer usuario -> owner + activo
-   * - usuarios posteriores -> inactivos y sin rol
+   * IMPORTANTE:
+   * Un fallo de ensure_profile NO debe impedir que
+   * carguemos un perfil que ya existe.
    *
-   * Un perfil existente NO se reactiva automáticamente.
+   * Esto evita bloquear completamente el acceso si
+   * la RPC tiene un problema de permisos o migración.
    */
   const { error: ensureError } =
     await supabase.rpc("ensure_profile", {});
 
   if (ensureError) {
-    throw ensureError;
+    console.warn(
+      "No se pudo ejecutar ensure_profile; se continuará cargando el perfil existente:",
+      ensureError,
+    );
   }
 
+  /*
+   * Cargar perfil y roles aunque ensure_profile
+   * haya producido un error.
+   */
   const [
     profileResult,
     rolesResult,
@@ -96,9 +104,8 @@ async function loadUserProfile(
     null;
 
   /*
-   * La UI nunca debe tratar a un usuario inactivo
-   * como usuario autorizado aunque todavía tenga
-   * un rol almacenado.
+   * Un usuario inactivo nunca recibe permisos
+   * aunque todavía tenga un rol almacenado.
    */
   if (!profile?.is_active) {
     return {
@@ -188,8 +195,8 @@ export function AuthProvider({
           }
 
           /*
-           * No hacemos consultas complejas dentro
-           * directamente del callback de Supabase.
+           * No hacemos consultas complejas directamente
+           * dentro del callback de Supabase.
            */
           setTimeout(() => {
             if (!mounted) return;
