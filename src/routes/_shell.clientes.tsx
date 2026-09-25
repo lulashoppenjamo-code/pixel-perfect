@@ -1,19 +1,37 @@
 /**
  * Clientes — LULA OS
- * CRUD + historial + saldo crédito + abonos
  *
- * IMPORTANTE:
- * Los abonos se registran mediante RPC:
- *   register_credit_payment()
+ * CRUD de clientes
+ * Historial de compras
+ * Historial de crédito
+ * Saldo pendiente
+ * Abonos
  *
- * No se inserta directamente en credit_payments desde el frontend.
+ * Los abonos pasan exclusivamente por:
+ * register_credit_payment()
  */
+
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { RequireNavAccess } from "@/components/RequireNavAccess";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Pencil,
+  Trash2,
+  Search,
+  Wallet,
+  Users,
+  History,
+} from "lucide-react";
+
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+
 import { toast } from "sonner";
-import { Pencil, Trash2, Search, Wallet, Users } from "lucide-react";
+
+import { RequireNavAccess } from "@/components/RequireNavAccess";
+import { CreditHistoryDialog } from "@/components/customers/CreditHistoryDialog";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -63,7 +81,9 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 
-export const Route = createFileRoute("/_shell/clientes")({
+export const Route = createFileRoute(
+  "/_shell/clientes",
+)({
   head: () => ({
     meta: [{ title: "Clientes — Lula OS" }],
   }),
@@ -126,12 +146,12 @@ function ClientesPage() {
     useState<string | null>(null);
 
   const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] = useState("cash");
+  const [payMethod, setPayMethod] =
+    useState("cash");
   const [payNotes, setPayNotes] = useState("");
 
-  // ============================================================
-  // CLIENTES
-  // ============================================================
+  const [historyCustomerId, setHistoryCustomerId] =
+    useState<string | null>(null);
 
   const {
     data: customers = [],
@@ -145,71 +165,69 @@ function ClientesPage() {
         .select("*")
         .order("name");
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       return (data ?? []) as CustomerRow[];
     },
   });
 
-  // ============================================================
-  // VENTAS POR CLIENTE
-  // ============================================================
-
   const {
     data: salesByCustomer = [],
-  } = useQuery<SaleCustomerRow[]>({
-    queryKey: ["customer-sales-agg"],
+  } =
+    useQuery<SaleCustomerRow[]>({
+      queryKey: ["customer-sales-agg"],
 
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("sales")
-        .select(
-          "customer_id, total, status, payment_method, created_at",
-        )
-        .not("customer_id", "is", null)
-        .in("status", [
-          "completed",
-          "partially_refunded",
-        ]);
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from("sales")
+          .select(
+            "customer_id, total, status, payment_method, created_at",
+          )
+          .not("customer_id", "is", null)
+          .in("status", [
+            "completed",
+            "partially_refunded",
+          ]);
 
-      if (error) throw error;
+        if (error) {
+          throw error;
+        }
 
-      return (data ?? []) as SaleCustomerRow[];
-    },
-  });
-
-  // ============================================================
-  // ABONOS
-  // ============================================================
+        return (data ??
+          []) as SaleCustomerRow[];
+      },
+    });
 
   const {
     data: creditPayments = [],
-  } = useQuery<CreditPaymentRow[]>({
-    queryKey: ["credit-payments"],
+  } =
+    useQuery<CreditPaymentRow[]>({
+      queryKey: ["credit-payments"],
 
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("credit_payments")
-        .select("customer_id, amount");
+      queryFn: async () => {
+        const { data, error } = await supabase
+          .from("credit_payments")
+          .select("customer_id, amount");
 
-      if (error) {
-        if (
-          error.message?.includes("does not exist") ||
-          error.code === "42P01"
-        ) {
-          return [];
+        if (error) {
+          if (
+            error.message?.includes(
+              "does not exist",
+            ) ||
+            error.code === "42P01"
+          ) {
+            return [];
+          }
+
+          throw error;
         }
 
-        throw error;
-      }
-
-      return (data ?? []) as CreditPaymentRow[];
-    },
-  });
-
-  // ============================================================
-  // ESTADÍSTICAS
-  // ============================================================
+        return (data ??
+          []) as CreditPaymentRow[];
+      },
+    });
 
   const stats = useMemo(() => {
     const map = new Map<
@@ -223,7 +241,9 @@ function ClientesPage() {
     >();
 
     for (const sale of salesByCustomer) {
-      if (!sale.customer_id) continue;
+      if (!sale.customer_id) {
+        continue;
+      }
 
       const current =
         map.get(sale.customer_id) ?? {
@@ -234,10 +254,16 @@ function ClientesPage() {
         };
 
       current.count += 1;
-      current.total += Number(sale.total ?? 0);
+      current.total += Number(
+        sale.total ?? 0,
+      );
 
-      if (sale.payment_method === "credit") {
-        current.credit += Number(sale.total ?? 0);
+      if (
+        sale.payment_method === "credit"
+      ) {
+        current.credit += Number(
+          sale.total ?? 0,
+        );
       }
 
       if (
@@ -260,7 +286,10 @@ function ClientesPage() {
       );
     }
 
-    for (const [customerId, current] of map) {
+    for (const [
+      customerId,
+      current,
+    ] of map) {
       current.credit = Math.max(
         0,
         current.credit -
@@ -271,62 +300,72 @@ function ClientesPage() {
     return map;
   }, [salesByCustomer, creditPayments]);
 
-  // ============================================================
-  // FILTRO
-  // ============================================================
+  const filtered = customers.filter(
+    (customer) => {
+      if (!search.trim()) {
+        return true;
+      }
 
-  const filtered = customers.filter((customer) => {
-    if (!search.trim()) return true;
+      const q = search
+        .trim()
+        .toLowerCase();
 
-    const q = search.trim().toLowerCase();
-
-    return (
-      customer.name
-        .toLowerCase()
-        .includes(q) ||
-      (customer.phone ?? "")
-        .toLowerCase()
-        .includes(q) ||
-      (customer.email ?? "")
-        .toLowerCase()
-        .includes(q)
-    );
-  });
-
-  // ============================================================
-  // CREAR / ACTUALIZAR CLIENTE
-  // ============================================================
+      return (
+        customer.name
+          .toLowerCase()
+          .includes(q) ||
+        (customer.phone ?? "")
+          .toLowerCase()
+          .includes(q) ||
+        (customer.email ?? "")
+          .toLowerCase()
+          .includes(q)
+      );
+    },
+  );
 
   const save = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) {
-        throw new Error("Nombre requerido");
+        throw new Error(
+          "Nombre requerido",
+        );
       }
 
       const payload = {
         name: form.name.trim(),
-        phone: form.phone.trim() || null,
-        email: form.email.trim() || null,
-        notes: form.notes.trim() || null,
-        address: form.address.trim() || null,
+        phone:
+          form.phone.trim() || null,
+        email:
+          form.email.trim() || null,
+        notes:
+          form.notes.trim() || null,
+        address:
+          form.address.trim() || null,
       };
 
       if (form.id) {
-        const { error } = await supabase
-          .from("customers")
-          .update(payload)
-          .eq("id", form.id);
+        const { error } =
+          await supabase
+            .from("customers")
+            .update(payload)
+            .eq("id", form.id);
 
-        if (error) throw error;
+        if (error) {
+          throw error;
+        }
 
         return;
       }
 
-      const { error } = await supabase
-        .from("customers")
-        .insert(payload);
+      const { error } =
+        await supabase
+          .from("customers")
+          .insert(payload);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
     },
 
     onSuccess: () => {
@@ -352,10 +391,6 @@ function ClientesPage() {
     },
   });
 
-  // ============================================================
-  // ELIMINAR CLIENTE
-  // ============================================================
-
   const remove = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -363,11 +398,15 @@ function ClientesPage() {
         .delete()
         .eq("id", id);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
     },
 
     onSuccess: () => {
-      toast.success("Cliente eliminado");
+      toast.success(
+        "Cliente eliminado",
+      );
 
       void qc.invalidateQueries({
         queryKey: ["customers"],
@@ -383,21 +422,12 @@ function ClientesPage() {
     },
   });
 
-  // ============================================================
-  // REGISTRAR ABONO
-  //
-  // IMPORTANTE:
-  // Ya NO hacemos:
-  //
-  // supabase.from("credit_payments").insert(...)
-  //
-  // Todo pasa por register_credit_payment().
-  // ============================================================
-
   const registerPayment = useMutation({
     mutationFn: async () => {
       if (!payCustomerId) {
-        throw new Error("Selecciona un cliente");
+        throw new Error(
+          "Selecciona un cliente",
+        );
       }
 
       const amount = Number(payAmount);
@@ -412,9 +442,11 @@ function ClientesPage() {
       }
 
       if (
-        !["cash", "card", "transfer"].includes(
-          payMethod,
-        )
+        ![
+          "cash",
+          "card",
+          "transfer",
+        ].includes(payMethod)
       ) {
         throw new Error(
           "Método de pago inválido",
@@ -425,13 +457,18 @@ function ClientesPage() {
         await (supabase as any).rpc(
           "register_credit_payment",
           {
-            _customer_id: payCustomerId,
+            _customer_id:
+              payCustomerId,
             _amount: amount,
-            _payment_method: payMethod,
-            _branch_id: branchId ?? null,
-            _cash_session_id: null,
+            _payment_method:
+              payMethod,
+            _branch_id:
+              branchId ?? null,
+            _cash_session_id:
+              null,
             _notes:
-              payNotes.trim() || null,
+              payNotes.trim() ||
+              null,
           },
         );
 
@@ -443,7 +480,9 @@ function ClientesPage() {
     },
 
     onSuccess: () => {
-      toast.success("Abono registrado correctamente");
+      toast.success(
+        "Abono registrado correctamente",
+      );
 
       setPayCustomerId(null);
       setPayAmount("");
@@ -469,40 +508,57 @@ function ClientesPage() {
       void qc.invalidateQueries({
         queryKey: ["cash-movements"],
       });
+
+      void qc.invalidateQueries({
+        queryKey: [
+          "customer-credit-history",
+        ],
+      });
     },
 
     onError: (error: Error) => {
-      const message =
+      toast.error(
         error.message ||
-        "No se pudo registrar el abono";
-
-      toast.error(message);
+          "No se pudo registrar el abono",
+      );
     },
   });
 
-  // ============================================================
-  // CLIENTE SELECCIONADO PARA ABONO
-  // ============================================================
-
   const paymentCustomer = useMemo(() => {
-    if (!payCustomerId) return null;
+    if (!payCustomerId) {
+      return null;
+    }
 
     return (
       customers.find(
         (customer) =>
-          customer.id === payCustomerId,
+          customer.id ===
+          payCustomerId,
       ) ?? null
     );
   }, [customers, payCustomerId]);
 
   const paymentCustomerBalance =
     payCustomerId
-      ? stats.get(payCustomerId)?.credit ?? 0
+      ? stats.get(payCustomerId)
+          ?.credit ?? 0
       : 0;
 
-  // ============================================================
-  // UI
-  // ============================================================
+  const historyCustomer = useMemo(
+    () =>
+      customers.find(
+        (customer) =>
+          customer.id ===
+          historyCustomerId,
+      ) ?? null,
+    [customers, historyCustomerId],
+  );
+
+  const historyBalance =
+    historyCustomerId
+      ? stats.get(historyCustomerId)
+          ?.credit ?? 0
+      : 0;
 
   return (
     <PageShell>
@@ -513,10 +569,6 @@ function ClientesPage() {
       />
 
       <div className="grid gap-4 lg:grid-cols-3">
-        {/* ======================================================
-            FORMULARIO CLIENTE
-        ====================================================== */}
-
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">
@@ -549,7 +601,8 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    phone: event.target.value,
+                    phone:
+                      event.target.value,
                   }))
                 }
               />
@@ -564,7 +617,8 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    email: event.target.value,
+                    email:
+                      event.target.value,
                   }))
                 }
               />
@@ -578,7 +632,8 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    address: event.target.value,
+                    address:
+                      event.target.value,
                   }))
                 }
                 placeholder="Opcional"
@@ -593,7 +648,8 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    notes: event.target.value,
+                    notes:
+                      event.target.value,
                   }))
                 }
               />
@@ -629,10 +685,6 @@ function ClientesPage() {
           </CardContent>
         </Card>
 
-        {/* ======================================================
-            LISTADO
-        ====================================================== */}
-
         <Card className="lg:col-span-2">
           <CardHeader className="flex flex-row items-center justify-between gap-2">
             <CardTitle className="text-base">
@@ -647,7 +699,9 @@ function ClientesPage() {
                 placeholder="Buscar…"
                 value={search}
                 onChange={(event) =>
-                  setSearch(event.target.value)
+                  setSearch(
+                    event.target.value,
+                  )
                 }
               />
             </div>
@@ -684,131 +738,147 @@ function ClientesPage() {
               </TableHeader>
 
               <TableBody>
-                {filtered.map((customer) => {
-                  const stat =
-                    stats.get(customer.id);
+                {filtered.map(
+                  (customer) => {
+                    const stat =
+                      stats.get(
+                        customer.id,
+                      );
 
-                  const balance =
-                    stat?.credit ?? 0;
+                    const balance =
+                      stat?.credit ?? 0;
 
-                  return (
-                    <TableRow
-                      key={customer.id}
-                    >
-                      <TableCell className="font-medium">
-                        {customer.name}
-                      </TableCell>
+                    return (
+                      <TableRow
+                        key={customer.id}
+                      >
+                        <TableCell className="font-medium">
+                          {customer.name}
+                        </TableCell>
 
-                      <TableCell className="text-sm">
-                        {customer.phone ?? "—"}
-                      </TableCell>
+                        <TableCell className="text-sm">
+                          {customer.phone ??
+                            "—"}
+                        </TableCell>
 
-                      <TableCell className="text-right">
-                        {stat?.count ?? 0}
-                      </TableCell>
+                        <TableCell className="text-right">
+                          {stat?.count ?? 0}
+                        </TableCell>
 
-                      <TableCell className="text-right font-medium">
-                        {money(
-                          stat?.total ?? 0,
-                        )}
-                      </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {money(
+                            stat?.total ??
+                              0,
+                          )}
+                        </TableCell>
 
-                      <TableCell className="text-right">
-                        {balance > 0 ? (
-                          <Badge variant="destructive">
-                            {money(balance)}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">
-                            $0
-                          </span>
-                        )}
-                      </TableCell>
+                        <TableCell className="text-right">
+                          {balance > 0 ? (
+                            <Badge variant="destructive">
+                              {money(balance)}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">
+                              $0
+                            </span>
+                          )}
+                        </TableCell>
 
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-1">
-                          {/* ABONO */}
-
-                          {balance > 0 && (
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
                             <Button
                               size="icon"
                               variant="ghost"
                               className="h-8 w-8"
-                              title="Registrar abono"
-                              onClick={() => {
-                                setPayCustomerId(
-                                  customer.id,
-                                );
-
-                                setPayAmount(
-                                  balance.toFixed(
-                                    2,
-                                  ),
-                                );
-
-                                setPayMethod(
-                                  "cash",
-                                );
-
-                                setPayNotes("");
-                              }}
-                            >
-                              <Wallet className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-
-                          {/* EDITAR */}
-
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            title="Editar cliente"
-                            onClick={() =>
-                              setForm({
-                                id: customer.id,
-                                name:
-                                  customer.name,
-                                phone:
-                                  customer.phone ??
-                                  "",
-                                email:
-                                  customer.email ??
-                                  "",
-                                notes:
-                                  customer.notes ??
-                                  "",
-                                address:
-                                  customer.address ??
-                                  "",
-                              })
-                            }
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </Button>
-
-                          {/* ELIMINAR */}
-
-                          {isManager && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-destructive"
-                              title="Eliminar cliente"
+                              title="Ver historial de crédito"
                               onClick={() =>
-                                remove.mutate(
+                                setHistoryCustomerId(
                                   customer.id,
                                 )
                               }
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <History className="h-3.5 w-3.5" />
                             </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
+
+                            {balance > 0 && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                title="Registrar abono"
+                                onClick={() => {
+                                  setPayCustomerId(
+                                    customer.id,
+                                  );
+
+                                  setPayAmount(
+                                    balance.toFixed(
+                                      2,
+                                    ),
+                                  );
+
+                                  setPayMethod(
+                                    "cash",
+                                  );
+
+                                  setPayNotes(
+                                    "",
+                                  );
+                                }}
+                              >
+                                <Wallet className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              title="Editar cliente"
+                              onClick={() =>
+                                setForm({
+                                  id: customer.id,
+                                  name:
+                                    customer.name,
+                                  phone:
+                                    customer.phone ??
+                                    "",
+                                  email:
+                                    customer.email ??
+                                    "",
+                                  notes:
+                                    customer.notes ??
+                                    "",
+                                  address:
+                                    customer.address ??
+                                    "",
+                                })
+                              }
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+
+                            {isManager && (
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 text-destructive"
+                                title="Eliminar cliente"
+                                onClick={() =>
+                                  remove.mutate(
+                                    customer.id,
+                                  )
+                                }
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  },
+                )}
 
                 {!isLoading &&
                   filtered.length === 0 && (
@@ -826,10 +896,6 @@ function ClientesPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* ========================================================
-          DIALOG ABONO
-      ======================================================== */}
 
       <Dialog
         open={!!payCustomerId}
@@ -850,8 +916,6 @@ function ClientesPage() {
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* CLIENTE */}
-
             {paymentCustomer && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="text-sm font-medium">
@@ -878,8 +942,6 @@ function ClientesPage() {
               </div>
             )}
 
-            {/* MONTO */}
-
             <div>
               <Label>Monto</Label>
 
@@ -887,7 +949,8 @@ function ClientesPage() {
                 type="number"
                 min="0.01"
                 max={
-                  paymentCustomerBalance > 0
+                  paymentCustomerBalance >
+                  0
                     ? paymentCustomerBalance
                     : undefined
                 }
@@ -907,8 +970,6 @@ function ClientesPage() {
                 )}
               </p>
             </div>
-
-            {/* MÉTODO */}
 
             <div>
               <Label>
@@ -942,14 +1003,13 @@ function ClientesPage() {
 
               {payMethod === "cash" && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  El sistema buscará automáticamente
-                  la caja abierta y registrará el
+                  El sistema buscará
+                  automáticamente la caja
+                  abierta y registrará el
                   efectivo como entrada.
                 </p>
               )}
             </div>
-
-            {/* NOTAS */}
 
             <div>
               <Label>Notas</Label>
@@ -998,6 +1058,20 @@ function ClientesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <CreditHistoryDialog
+        open={!!historyCustomerId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setHistoryCustomerId(null);
+          }
+        }}
+        customerId={historyCustomerId}
+        customerName={
+          historyCustomer?.name
+        }
+        balance={historyBalance}
+      />
     </PageShell>
   );
 }
