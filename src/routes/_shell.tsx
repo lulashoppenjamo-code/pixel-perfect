@@ -23,6 +23,8 @@ import {
   type NavKey,
 } from "@/lib/permissions";
 
+import { InventoryAlerts } from "@/components/inventory/InventoryAlerts";
+
 import {
   ShoppingBag,
   Receipt,
@@ -215,6 +217,12 @@ function ShellLayout() {
     navigate({ to: path });
   };
 
+  const openInventory = () => {
+    navigate({
+      to: "/inventario",
+    });
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="hidden w-64 select-none flex-col justify-between border-r bg-card p-4 md:flex">
@@ -232,6 +240,15 @@ function ShellLayout() {
               <p className="text-xs text-muted-foreground">
                 Punto de Venta
               </p>
+            </div>
+
+            <div className="ml-auto">
+              <InventoryAlerts
+                compact
+                onOpenInventory={
+                  openInventory
+                }
+              />
             </div>
           </div>
 
@@ -320,6 +337,15 @@ function ShellLayout() {
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-slate-50/50 p-4 pb-20 md:p-6 md:pb-6">
+        <div className="mb-3 flex items-center justify-end md:hidden">
+          <InventoryAlerts
+            compact
+            onOpenInventory={
+              openInventory
+            }
+          />
+        </div>
+
         <Outlet />
       </main>
 
@@ -419,6 +445,25 @@ function ShellLayout() {
                   </option>
                 )}
               </select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-3">
+              <div>
+                <p className="text-sm font-semibold">
+                  Alertas de inventario
+                </p>
+
+                <p className="text-xs text-muted-foreground">
+                  Stock agotado o bajo mínimo
+                </p>
+              </div>
+
+              <InventoryAlerts
+                compact
+                onOpenInventory={
+                  openInventory
+                }
+              />
             </div>
 
             <div className="grid grid-cols-3 gap-2">
