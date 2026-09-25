@@ -3,53 +3,42 @@
 -- BLINDAJE FINAL DE EXECUTE EN RPC
 -- 2026-09-24
 --
--- OBJETIVO:
---   - Quitar EXECUTE a PUBLIC y anon en RPC sensibles.
---   - Permitir ejecución a usuarios autenticados.
---   - Mantener service_role donde corresponde.
---   - NO modificar tablas.
---   - NO modificar datos.
---   - NO modificar lógica de negocio.
---   - NO dividir shared_inventory por sucursal.
---
 -- IMPORTANTE:
--- Las firmas fueron comprobadas contra las funciones/migraciones
--- actuales del proyecto.
+-- Las firmas están en el orden real de PostgreSQL según
+-- src/integrations/supabase/types.ts.
+--
+-- NO modifica tablas.
+-- NO modifica datos.
+-- NO modifica shared_inventory.
 -- ============================================================
 
 BEGIN;
 
 
 -- ============================================================
--- 1. AJUSTE DE INVENTARIO
--- Firma REAL:
--- (uuid, uuid, numeric, uuid, text)
+-- INVENTARIO
 -- ============================================================
 
 REVOKE ALL
 ON FUNCTION public.adjust_stock(
   uuid,
+  text,
   uuid,
   numeric,
-  uuid,
-  text
+  uuid
 )
 FROM PUBLIC, anon;
 
 GRANT EXECUTE
 ON FUNCTION public.adjust_stock(
   uuid,
+  text,
   uuid,
   numeric,
-  uuid,
-  text
+  uuid
 )
 TO authenticated, service_role;
 
-
--- ============================================================
--- 2. CONSULTAS DE INVENTARIO
--- ============================================================
 
 REVOKE ALL
 ON FUNCTION public.available_stock(
@@ -92,10 +81,6 @@ ON FUNCTION public.get_shared_product_stock(
 TO authenticated, service_role;
 
 
--- ============================================================
--- 3. LÍMITES DE INVENTARIO COMPARTIDO
--- ============================================================
-
 REVOKE ALL
 ON FUNCTION public.set_shared_inventory_limits(
   uuid,
@@ -116,18 +101,22 @@ TO authenticated, service_role;
 
 
 -- ============================================================
--- 4. COMPATIBILIDAD DE LÍMITES POR SUCURSAL
+-- LÍMITES DE INVENTARIO LEGACY / COMPATIBILIDAD
 --
--- Firma:
--- (branch_id, product_id, min_stock, max_stock, variant_id)
+-- Firma real:
+-- _branch_id
+-- _max_stock
+-- _min_stock
+-- _product_id
+-- _variant_id
 -- ============================================================
 
 REVOKE ALL
 ON FUNCTION public.set_inventory_limits(
   uuid,
+  numeric,
+  numeric,
   uuid,
-  numeric,
-  numeric,
   uuid
 )
 FROM PUBLIC, anon;
@@ -135,273 +124,145 @@ FROM PUBLIC, anon;
 GRANT EXECUTE
 ON FUNCTION public.set_inventory_limits(
   uuid,
+  numeric,
+  numeric,
   uuid,
-  numeric,
-  numeric,
   uuid
 )
 TO authenticated, service_role;
 
 
 -- ============================================================
--- 5. CREAR VENTA
+-- TRANSFERENCIA DE STOCK
 --
--- Firma:
--- (branch_id, items, payment_method,
---  cash_received, cash_session_id, customer_id, discount)
+-- Firma real:
+-- _from_branch_id
+-- _notes
+-- _product_id
+-- _quantity
+-- _to_branch_id
+-- _variant_id
+--
+-- NOTA:
+-- La operación puede existir aunque actualmente Lula OS
+-- mantenga shared_inventory como inventario global.
+-- ============================================================
+
+REVOKE ALL
+ON FUNCTION public.transfer_stock(
+  uuid,
+  text,
+  uuid,
+  numeric,
+  uuid,
+  uuid
+)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE
+ON FUNCTION public.transfer_stock(
+  uuid,
+  text,
+  uuid,
+  numeric,
+  uuid,
+  uuid
+)
+TO authenticated, service_role;
+
+
+-- ============================================================
+-- VENTAS
+--
+-- Firma REAL de create_sale:
+--
+-- _branch_id
+-- _cash_received
+-- _cash_session_id
+-- _customer_id
+-- _discount
+-- _items
+-- _payment_method
 -- ============================================================
 
 REVOKE ALL
 ON FUNCTION public.create_sale(
   uuid,
+  numeric,
+  uuid,
+  uuid,
+  numeric,
   jsonb,
-  public.payment_method,
-  uuid,
-  uuid,
-  uuid,
-  numeric
+  public.payment_method
 )
 FROM PUBLIC, anon;
 
 GRANT EXECUTE
 ON FUNCTION public.create_sale(
   uuid,
+  numeric,
+  uuid,
+  uuid,
+  numeric,
   jsonb,
-  public.payment_method,
-  uuid,
-  uuid,
-  uuid,
-  numeric
+  public.payment_method
 )
 TO authenticated, service_role;
 
-
--- ============================================================
--- 6. PAGOS MIXTOS
--- ============================================================
-
-REVOKE ALL
-ON FUNCTION public.record_sale_payments(
-  uuid,
-  jsonb
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.record_sale_payments(
-  uuid,
-  jsonb
-)
-TO authenticated, service_role;
-
-
--- ============================================================
--- 7. CANCELACIÓN DE VENTA
--- ============================================================
 
 REVOKE ALL
 ON FUNCTION public.cancel_sale(
-  uuid,
-  text
+  text,
+  uuid
 )
 FROM PUBLIC, anon;
 
 GRANT EXECUTE
 ON FUNCTION public.cancel_sale(
-  uuid,
-  text
+  text,
+  uuid
 )
 TO authenticated, service_role;
 
 
--- ============================================================
--- 8. DEVOLUCIONES
--- ============================================================
-
 REVOKE ALL
 ON FUNCTION public.refund_sale(
-  uuid,
   jsonb,
-  text
+  text,
+  uuid
 )
 FROM PUBLIC, anon;
 
 GRANT EXECUTE
 ON FUNCTION public.refund_sale(
-  uuid,
   jsonb,
-  text
+  text,
+  uuid
 )
 TO authenticated, service_role;
 
 
 -- ============================================================
--- 9. CAJA
+-- CAJA
 -- ============================================================
 
 REVOKE ALL
 ON FUNCTION public.close_cash_session(
-  uuid,
-  numeric
+  numeric,
+  uuid
 )
 FROM PUBLIC, anon;
 
 GRANT EXECUTE
 ON FUNCTION public.close_cash_session(
-  uuid,
-  numeric
-)
-TO authenticated, service_role;
-
-
--- ============================================================
--- 10. ABONOS DE CRÉDITO
---
--- Firma REAL:
--- customer_id
--- amount
--- payment_method
--- branch_id
--- cash_session_id
--- notes
--- ============================================================
-
-REVOKE ALL
-ON FUNCTION public.register_credit_payment(
-  uuid,
   numeric,
-  text,
-  uuid,
-  uuid,
-  text
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.register_credit_payment(
-  uuid,
-  numeric,
-  text,
-  uuid,
-  uuid,
-  text
-)
-TO authenticated, service_role;
-
-
--- ============================================================
--- 11. HISTORIAL / SALDO DE CRÉDITO
--- ============================================================
-
-REVOKE ALL
-ON FUNCTION public.get_customer_balance(
-  uuid
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.get_customer_balance(
-  uuid
-)
-TO authenticated, service_role;
-
-
-REVOKE ALL
-ON FUNCTION public.get_customer_credit_summary(
-  uuid
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.get_customer_credit_summary(
   uuid
 )
 TO authenticated, service_role;
 
 
 -- ============================================================
--- 12. INVENTARIO FÍSICO
--- ============================================================
-
-REVOKE ALL
-ON FUNCTION public.start_inventory_count(
-  uuid,
-  text
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.start_inventory_count(
-  uuid,
-  text
-)
-TO authenticated, service_role;
-
-
-REVOKE ALL
-ON FUNCTION public.set_inventory_count_item(
-  uuid,
-  uuid,
-  numeric
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.set_inventory_count_item(
-  uuid,
-  uuid,
-  numeric
-)
-TO authenticated, service_role;
-
-
-REVOKE ALL
-ON FUNCTION public.complete_inventory_count(
-  uuid
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.complete_inventory_count(
-  uuid
-)
-TO authenticated, service_role;
-
-
--- ============================================================
--- 13. COMPRAS
--- ============================================================
-
-REVOKE ALL
-ON FUNCTION public.receive_purchase(
-  uuid
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.receive_purchase(
-  uuid
-)
-TO authenticated, service_role;
-
-
-REVOKE ALL
-ON FUNCTION public.receive_purchase_partial(
-  uuid,
-  jsonb
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.receive_purchase_partial(
-  uuid,
-  jsonb
-)
-TO authenticated, service_role;
-
-
--- ============================================================
--- 14. PEDIDOS ONLINE
+-- PEDIDOS ONLINE
 -- ============================================================
 
 REVOKE ALL
@@ -460,10 +321,7 @@ TO authenticated, service_role;
 
 
 -- ============================================================
--- 15. FUNCIONES DE AUTORIZACIÓN
---
--- Estas deben seguir disponibles para RLS y la aplicación.
--- No se eliminan para authenticated.
+-- AUTORIZACIÓN
 -- ============================================================
 
 REVOKE ALL
@@ -507,32 +365,6 @@ FROM PUBLIC, anon;
 
 GRANT EXECUTE
 ON FUNCTION public.ensure_profile(
-  text
-)
-TO authenticated, service_role;
-
-
--- ============================================================
--- 16. TRANSFERENCIAS DE STOCK
--- Si esta RPC está instalada en la base actual, queda protegida.
--- ============================================================
-
-REVOKE ALL
-ON FUNCTION public.transfer_stock(
-  uuid,
-  uuid,
-  numeric,
-  uuid,
-  text
-)
-FROM PUBLIC, anon;
-
-GRANT EXECUTE
-ON FUNCTION public.transfer_stock(
-  uuid,
-  uuid,
-  numeric,
-  uuid,
   text
 )
 TO authenticated, service_role;
