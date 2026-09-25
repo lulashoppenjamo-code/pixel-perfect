@@ -42,6 +42,25 @@ type AuthState = {
 const AuthContext =
   createContext<AuthState | null>(null);
 
+const VALID_ROLES: AppRole[] = [
+  "owner",
+  "admin",
+  "manager",
+  "cashier",
+  "staff",
+];
+
+function isValidRole(
+  value: unknown,
+): value is AppRole {
+  return (
+    typeof value === "string" &&
+    VALID_ROLES.includes(
+      value as AppRole,
+    )
+  );
+}
+
 async function loadUserProfile(
   uid: string,
 ): Promise<{
@@ -49,88 +68,119 @@ async function loadUserProfile(
   roles: AppRole[];
 }> {
   /*
-   * ensure_profile solamente intenta crear el perfil
-   * cuando realmente no existe.
+   * Primero intentamos asegurar que exista el perfil.
    *
-   * IMPORTANTE:
-   * Un fallo de ensure_profile NO debe impedir que
-   * carguemos un perfil que ya existe.
-   *
-   * Esto evita bloquear completamente el acceso si
-   * la RPC tiene un problema de permisos o migración.
+   * Esta RPC no debe bloquear el acceso si falla,
+   * porque el perfil puede existir correctamente.
    */
-  const { error: ensureError } =
-    await supabase.rpc("ensure_profile", {});
+  const {
+    error: ensureError,
+  } = await supabase.rpc(
+    "ensure_profile",
+    {},
+  );
 
   if (ensureError) {
     console.warn(
-      "No se pudo ejecutar ensure_profile; se continuará cargando el perfil existente:",
+      "[LULA AUTH] ensure_profile no pudo ejecutarse:",
       ensureError,
     );
   }
 
   /*
-   * Cargar perfil y roles aunque ensure_profile
-   * haya producido un error.
+   * Cargamos perfil y roles por separado.
+   *
+   * No ocultamos los errores de roles: si falla la
+   * consulta, lo registramos claramente para poder
+   * detectar problemas de RLS o sesión.
    */
-  const [
-    profileResult,
-    rolesResult,
-  ] = await Promise.all([
-    supabase
+  const profileResponse =
+    await supabase
       .from("profiles")
       .select(
         "id, full_name, branch_id, is_active",
       )
       .eq("id", uid)
-      .maybeSingle(),
+      .maybeSingle();
 
-    supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid),
-  ]);
+  if (profileResponse.error) {
+    console.error(
+      "[LULA AUTH] Error leyendo profiles:",
+      profileResponse.error,
+    );
 
-  if (profileResult.error) {
-    throw profileResult.error;
-  }
-
-  if (rolesResult.error) {
-    throw rolesResult.error;
+    throw profileResponse.error;
   }
 
   const profile =
-    (profileResult.data as Profile | null) ??
+    (profileResponse.data as Profile | null) ??
     null;
 
+  if (!profile) {
+    console.warn(
+      "[LULA AUTH] No existe perfil para el usuario:",
+      uid,
+    );
+
+    return {
+      profile: null,
+      roles: [],
+    };
+  }
+
   /*
-   * Un usuario inactivo nunca recibe permisos
-   * aunque todavía tenga un rol almacenado.
+   * Si el perfil está inactivo, jamás concedemos
+   * permisos aunque existan roles almacenados.
    */
-  if (!profile?.is_active) {
+  if (profile.is_active !== true) {
+    console.warn(
+      "[LULA AUTH] Perfil inactivo:",
+      uid,
+    );
+
     return {
       profile,
       roles: [],
     };
   }
 
-  const validRoles: AppRole[] = [
-    "owner",
-    "admin",
-    "manager",
-    "cashier",
-    "staff",
-  ];
+  /*
+   * Ahora obtenemos los roles del usuario autenticado.
+   */
+  const rolesResponse =
+    await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", uid);
 
-  const roles = (
-    (rolesResult.data ?? []) as {
-      role: AppRole;
-    }[]
-  )
-    .map((item) => item.role)
-    .filter((role) =>
-      validRoles.includes(role),
+  if (rolesResponse.error) {
+    console.error(
+      "[LULA AUTH] Error leyendo user_roles:",
+      rolesResponse.error,
     );
+
+    throw rolesResponse.error;
+  }
+
+  const rawRoles =
+    rolesResponse.data ?? [];
+
+  const roles = rawRoles
+    .map((item) => item?.role)
+    .filter(isValidRole);
+
+  /*
+   * Diagnóstico útil sin exponer información sensible.
+   */
+  console.info(
+    "[LULA AUTH] Acceso cargado:",
+    {
+      uid,
+      active: profile.is_active,
+      roles,
+      roleCount: roles.length,
+    },
+  );
 
   return {
     profile,
@@ -155,18 +205,47 @@ export function AuthProvider({
   const [loading, setLoading] =
     useState(true);
 
+  /*
+   * Carga de perfil asociada a una sesión concreta.
+   */
   const loadProfile = async (
-    uid: string,
+    currentSession: Session | null,
   ) => {
+    if (!currentSession?.user) {
+      setProfile(null);
+      setRoles([]);
+      return;
+    }
+
+    const uid =
+      currentSession.user.id;
+
     try {
       const result =
         await loadUserProfile(uid);
+
+      /*
+       * Antes de actualizar el estado verificamos
+       * que la sesión siga perteneciendo al mismo usuario.
+       */
+      const {
+        data: sessionResponse,
+      } =
+        await supabase.auth.getSession();
+
+      const currentUid =
+        sessionResponse.session?.user
+          ?.id ?? null;
+
+      if (currentUid !== uid) {
+        return;
+      }
 
       setProfile(result.profile);
       setRoles(result.roles);
     } catch (error) {
       console.error(
-        "Error cargando perfil de usuario:",
+        "[LULA AUTH] Error cargando permisos:",
         error,
       );
 
@@ -178,12 +257,17 @@ export function AuthProvider({
   useEffect(() => {
     let mounted = true;
 
+    /*
+     * Escuchamos cambios de autenticación.
+     */
     const {
       data: subscription,
     } =
       supabase.auth.onAuthStateChange(
         (_event, nextSession) => {
-          if (!mounted) return;
+          if (!mounted) {
+            return;
+          }
 
           setSession(nextSession);
 
@@ -195,14 +279,17 @@ export function AuthProvider({
           }
 
           /*
-           * No hacemos consultas complejas directamente
-           * dentro del callback de Supabase.
+           * Esperamos al siguiente ciclo para evitar
+           * consultas Supabase dentro del callback
+           * interno de autenticación.
            */
           setTimeout(() => {
-            if (!mounted) return;
+            if (!mounted) {
+              return;
+            }
 
             void loadProfile(
-              nextSession.user.id,
+              nextSession,
             ).finally(() => {
               if (mounted) {
                 setLoading(false);
@@ -212,16 +299,24 @@ export function AuthProvider({
         },
       );
 
+    /*
+     * Recuperamos la sesión existente al arrancar.
+     */
     void supabase.auth
       .getSession()
       .then(async ({ data }) => {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
-        setSession(data.session);
+        const nextSession =
+          data.session ?? null;
 
-        if (data.session?.user) {
+        setSession(nextSession);
+
+        if (nextSession?.user) {
           await loadProfile(
-            data.session.user.id,
+            nextSession,
           );
         } else {
           setProfile(null);
@@ -234,11 +329,13 @@ export function AuthProvider({
       })
       .catch((error) => {
         console.error(
-          "Error recuperando sesión:",
+          "[LULA AUTH] Error recuperando sesión:",
           error,
         );
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         setSession(null);
         setProfile(null);
@@ -278,19 +375,42 @@ export function AuthProvider({
     ),
 
     refresh: async () => {
-      if (!session?.user) {
+      const {
+        data,
+      } =
+        await supabase.auth.getSession();
+
+      const currentSession =
+        data.session ?? null;
+
+      setSession(currentSession);
+
+      if (!currentSession?.user) {
         setProfile(null);
         setRoles([]);
         return;
       }
 
-      await loadProfile(
-        session.user.id,
-      );
+      setLoading(true);
+
+      try {
+        await loadProfile(
+          currentSession,
+        );
+      } finally {
+        setLoading(false);
+      }
     },
 
     signOut: async () => {
-      await supabase.auth.signOut();
+      const {
+        error,
+      } =
+        await supabase.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
 
       setSession(null);
       setProfile(null);
@@ -299,7 +419,9 @@ export function AuthProvider({
   };
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={value}
+    >
       {children}
     </AuthContext.Provider>
   );
