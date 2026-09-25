@@ -71,9 +71,7 @@ export function CreditHistoryDialog({
     isError,
   } = useQuery<CreditHistoryRow[]>({
     queryKey: ["customer-credit-history", customerId],
-
     enabled: open && !!customerId,
-
     queryFn: async () => {
       if (!customerId) {
         return [];
@@ -95,35 +93,24 @@ export function CreditHistoryDialog({
   });
 
   const creditTotal = history
-    .filter(
-      (row) => row.movement_type === "credit_sale",
-    )
+    .filter((row) => row.movement_type === "credit_sale")
     .reduce(
-      (sum, row) =>
-        sum + Number(row.amount ?? 0),
+      (sum, row) => sum + Number(row.amount ?? 0),
       0,
     );
 
   const paymentsTotal = history
-    .filter(
-      (row) => row.movement_type === "payment",
-    )
+    .filter((row) => row.movement_type === "payment")
     .reduce(
-      (sum, row) =>
-        sum + Number(row.amount ?? 0),
+      (sum, row) => sum + Number(row.amount ?? 0),
       0,
     );
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-    >
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
         <DialogHeader>
-          <DialogTitle>
-            Historial de crédito
-          </DialogTitle>
+          <DialogTitle>Historial de crédito</DialogTitle>
 
           {customerName && (
             <p className="text-sm text-muted-foreground">
@@ -133,7 +120,7 @@ export function CreditHistoryDialog({
         </DialogHeader>
 
         <div className="space-y-4 overflow-y-auto pr-1">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">
                 Ventas a crédito
@@ -165,135 +152,117 @@ export function CreditHistoryDialog({
             </div>
           </div>
 
-          {isLoading && (
+          {isLoading ? (
             <div className="flex items-center justify-center py-10 text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               Cargando historial…
             </div>
-          )}
-
-          {isError && !isLoading && (
+          ) : isError ? (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
               No se pudo cargar el historial de crédito.
             </div>
-          )}
+          ) : history.length === 0 ? (
+            <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
+              Este cliente todavía no tiene movimientos de crédito.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {history.map((row) => {
+                const sale =
+                  row.movement_type === "credit_sale";
 
-          {!isLoading &&
-            !isError &&
-            history.length === 0 && (
-              <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
-                Este cliente todavía no tiene movimientos de crédito.
-              </div>
-            )}
+                return (
+                  <div
+                    key={row.movement_id}
+                    className="flex items-center gap-3 rounded-lg border p-3"
+                  >
+                    <div className="rounded-full bg-muted p-2">
+                      {sale ? (
+                        <ArrowUpCircle className="h-4 w-4" />
+                      ) : (
+                        <ArrowDownCircle className="h-4 w-4" />
+                      )}
+                    </div>
 
-          {!isLoading &&
-            !isError &&
-            history.length > 0 && (
-              <div className="space-y-2">
-                {history.map((row) => {
-                  const sale =
-                    row.movement_type ===
-                    "credit_sale";
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {sale
+                            ? "Venta a crédito"
+                            : "Abono"}
+                        </span>
 
-                  return (
-                    <div
-                      key={row.movement_id}
-                      className="flex items-center gap-3 rounded-lg border p-3"
-                    >
-                      <div className="rounded-full bg-muted p-2">
-                        {sale ? (
-                          <ArrowUpCircle className="h-4 w-4" />
-                        ) : (
-                          <ArrowDownCircle className="h-4 w-4" />
-                        )}
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">
-                            {sale
-                              ? "Venta a crédito"
-                              : "Abono"}
-                          </span>
-
-                          <Badge
-                            variant={
-                              sale
-                                ? "destructive"
-                                : "secondary"
-                            }
-                          >
-                            {sale
-                              ? row.sale_folio
-                                ? `Folio ${row.sale_folio}`
-                                : "Crédito"
-                              : methodLabel[
-                                    row.payment_method ??
-                                      ""
-                                  ] ??
-                                  row.payment_method ??
-                                  "Abono"}
-                          </Badge>
-                        </div>
-
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(
-                            row.movement_date,
-                          ).toLocaleString("es-MX")}
-                        </p>
-
-                        {row.notes && (
-                          <p className="mt-1 truncate text-xs text-muted-foreground">
-                            {row.notes}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="text-right">
-                        <div
-                          className={
+                        <Badge
+                          variant={
                             sale
-                              ? "font-semibold text-destructive"
-                              : "font-semibold text-emerald-600"
+                              ? "destructive"
+                              : "secondary"
                           }
                         >
-                          {sale ? "+" : "-"}
-                          {money(
-                            Number(
-                              row.amount ?? 0,
-                            ),
-                          )}
-                        </div>
-
-                        {!sale &&
-                          row.payment_method && (
-                            <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
-                              <MethodIcon
-                                method={
-                                  row.payment_method
-                                }
-                              />
-
-                              {methodLabel[
-                                row.payment_method
-                              ] ??
-                                row.payment_method}
-                            </div>
-                          )}
+                          {sale
+                            ? row.sale_folio
+                              ? `Folio ${row.sale_folio}`
+                              : "Crédito"
+                            : methodLabel[
+                                  row.payment_method ?? ""
+                                ] ??
+                              row.payment_method ??
+                              "Abono"}
+                        </Badge>
                       </div>
+
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(
+                          row.movement_date,
+                        ).toLocaleString("es-MX")}
+                      </p>
+
+                      {row.notes && (
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {row.notes}
+                        </p>
+                      )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+
+                    <div className="text-right">
+                      <div
+                        className={
+                          sale
+                            ? "font-semibold text-destructive"
+                            : "font-semibold text-emerald-600"
+                        }
+                      >
+                        {sale ? "+" : "-"}
+                        {money(Number(row.amount ?? 0))}
+                      </div>
+
+                      {!sale &&
+                        row.payment_method && (
+                          <div className="mt-1 flex items-center justify-end gap-1 text-[11px] text-muted-foreground">
+                            <MethodIcon
+                              method={
+                                row.payment_method
+                              }
+                            />
+
+                            {methodLabel[
+                              row.payment_method
+                            ] ??
+                              row.payment_method}
+                          </div>
+                        )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end">
           <Button
             variant="outline"
-            onClick={() =>
-              onOpenChange(false)
-            }
+            onClick={() => onOpenChange(false)}
           >
             Cerrar
           </Button>
