@@ -6,7 +6,6 @@ import {
   Bot,
   Boxes,
   DollarSign,
-  Package,
   RefreshCw,
   Send,
   ShoppingCart,
@@ -37,9 +36,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
-import {
-  getSharedInventory,
-} from "@/lib/sharedInventory";
+import { getSharedInventory } from "@/lib/sharedInventory";
 
 import {
   buildCeoAnalysis,
@@ -107,31 +104,27 @@ function CeoPage() {
     )?.name ?? "Sucursal";
 
   const [input, setInput] = useState("");
-  const [thinking, setThinking] =
-    useState(false);
+  const [thinking, setThinking] = useState(false);
 
-  const [messages, setMessages] =
-    useState<Message[]>([
-      {
-        role: "assistant",
-        text:
-          `Hola. Soy el CEO IA de LULA OS.\n\n` +
-          `Estoy conectado a ventas, costos históricos, gastos e inventario compartido.\n\n` +
-          `Ahora puedo analizar ventas de hoy, ayer, semana y 30 días; utilidad, márgenes, inventario, productos estancados y reposición.`,
-      },
-    ]);
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      role: "assistant",
+      text:
+        `Hola. Soy el CEO IA de LULA OS.\n\n` +
+        `Estoy conectado a ventas, costos históricos, gastos e inventario compartido.\n\n` +
+        `Ahora puedo analizar ventas de hoy, ayer, semana y 30 días; utilidad, márgenes, inventario, productos estancados y reposición.`,
+    },
+  ]);
 
   const now = new Date();
 
   const todayStart = useMemo(
-    () =>
-      startOfDay(now).toISOString(),
+    () => startOfDay(now).toISOString(),
     [],
   );
 
   const monthStart = useMemo(
-    () =>
-      startOfMonth(now).toISOString(),
+    () => startOfMonth(now).toISOString(),
     [],
   );
 
@@ -167,34 +160,19 @@ function CeoPage() {
       const { data, error } =
         await supabase
           .from("sales")
-          .select(
-            "id,total,created_at",
-          )
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .eq(
-            "status",
-            "completed",
-          )
-          .gte(
-            "created_at",
-            todayStart,
-          )
-          .order(
-            "created_at",
-            {
-              ascending: true,
-            },
-          );
+          .select("id,total,created_at")
+          .eq("branch_id", branchId!)
+          .eq("status", "completed")
+          .gte("created_at", todayStart)
+          .order("created_at", {
+            ascending: true,
+          });
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CeoSale[];
+      return (data ?? []) as CeoSale[];
     },
   });
 
@@ -214,41 +192,25 @@ function CeoPage() {
       const { data, error } =
         await supabase
           .from("sales")
-          .select(
-            "id,total,created_at",
-          )
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .eq(
-            "status",
-            "completed",
-          )
-          .gte(
-            "created_at",
-            since30,
-          )
-          .order(
-            "created_at",
-            {
-              ascending: true,
-            },
-          );
+          .select("id,total,created_at")
+          .eq("branch_id", branchId!)
+          .eq("status", "completed")
+          .gte("created_at", since30)
+          .order("created_at", {
+            ascending: true,
+          });
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CeoSale[];
+      return (data ?? []) as CeoSale[];
     },
   });
 
   const {
     data: salesPrevious = [],
-    isFetching:
-      fetchingPrevious,
+    isFetching: fetchingPrevious,
   } = useQuery({
     queryKey: [
       "ceo",
@@ -262,38 +224,20 @@ function CeoPage() {
       const { data, error } =
         await supabase
           .from("sales")
-          .select(
-            "id,total,created_at",
-          )
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .eq(
-            "status",
-            "completed",
-          )
-          .gte(
-            "created_at",
-            since60,
-          )
-          .lt(
-            "created_at",
-            since30,
-          )
-          .order(
-            "created_at",
-            {
-              ascending: true,
-            },
-          );
+          .select("id,total,created_at")
+          .eq("branch_id", branchId!)
+          .eq("status", "completed")
+          .gte("created_at", since60)
+          .lt("created_at", since30)
+          .order("created_at", {
+            ascending: true,
+          });
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CeoSale[];
+      return (data ?? []) as CeoSale[];
     },
   });
 
@@ -312,34 +256,19 @@ function CeoPage() {
       const { data, error } =
         await supabase
           .from("sales")
-          .select(
-            "id,total,created_at",
-          )
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .eq(
-            "status",
-            "completed",
-          )
-          .gte(
-            "created_at",
-            monthStart,
-          )
-          .order(
-            "created_at",
-            {
-              ascending: true,
-            },
-          );
+          .select("id,total,created_at")
+          .eq("branch_id", branchId!)
+          .eq("status", "completed")
+          .gte("created_at", monthStart)
+          .order("created_at", {
+            ascending: true,
+          });
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CeoSale[];
+      return (data ?? []) as CeoSale[];
     },
   });
 
@@ -353,16 +282,14 @@ function CeoPage() {
 
   const {
     data: saleItems = [],
-    isFetching:
-      fetchingSaleItems,
+    isFetching: fetchingSaleItems,
   } = useQuery({
     queryKey: [
       "ceo",
       "sale-items",
       saleIds.join(","),
     ],
-    enabled:
-      saleIds.length > 0,
+    enabled: saleIds.length > 0,
     queryFn: async () => {
       const { data, error } =
         await supabase
@@ -379,26 +306,19 @@ function CeoPage() {
               cost_total
             `,
           )
-          .in(
-            "sale_id",
-            saleIds,
-          );
+          .in("sale_id", saleIds);
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CeoSaleItem[];
+      return (data ?? []) as CeoSaleItem[];
     },
   });
 
   const {
     data: inventory = [],
-    isLoading:
-      loadingInventory,
-    isFetching:
-      fetchingInventory,
+    isFetching: fetchingInventory,
   } = useQuery({
     queryKey: [
       "ceo",
@@ -411,8 +331,7 @@ function CeoPage() {
 
   const {
     data: products = [],
-    isFetching:
-      fetchingProducts,
+    isFetching: fetchingProducts,
   } = useQuery({
     queryKey: [
       "ceo",
@@ -422,32 +341,20 @@ function CeoPage() {
       const { data, error } =
         await supabase
           .from("products")
-          .select(
-            "id,name,cost,price",
-          )
-          .eq(
-            "is_active",
-            true,
-          );
+          .select("id,name,cost,price")
+          .eq("is_active", true);
 
       if (error) {
         throw error;
       }
 
-      return (data ??
-        []) as CeoProduct[];
+      return (data ?? []) as CeoProduct[];
     },
   });
 
-  /*
-   * Los gastos se consultan para los últimos
-   * 30 días, para que la utilidad neta tenga
-   * el mismo periodo que las ventas analizadas.
-   */
   const {
     data: expenses = [],
-    isFetching:
-      fetchingExpenses,
+    isFetching: fetchingExpenses,
   } = useQuery({
     queryKey: [
       "ceo",
@@ -458,10 +365,7 @@ function CeoPage() {
     enabled: !!branchId,
     queryFn: async () => {
       const startDate =
-        since30.slice(
-          0,
-          10,
-        );
+        since30.slice(0, 10);
 
       const todayDate =
         new Date()
@@ -472,23 +376,13 @@ function CeoPage() {
         await supabase
           .from("expenses")
           .select("amount")
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .gte(
-            "expense_date",
-            startDate,
-          )
-          .lte(
-            "expense_date",
-            todayDate,
-          );
+          .eq("branch_id", branchId!)
+          .gte("expense_date", startDate)
+          .lte("expense_date", todayDate);
 
       if (error) {
         if (
-          error.code ===
-            "42P01" ||
+          error.code === "42P01" ||
           error.message?.includes(
             "does not exist",
           )
@@ -499,8 +393,7 @@ function CeoPage() {
         throw error;
       }
 
-      return (data ??
-        []) as CeoExpense[];
+      return (data ?? []) as CeoExpense[];
     },
   });
 
@@ -544,18 +437,12 @@ function CeoPage() {
     question: string,
   ) => {
     const text =
-      normalizeQuestion(
-        question,
-      );
+      normalizeQuestion(question);
 
     if (
       text.includes("resumen") ||
-      text.includes(
-        "como vamos",
-      ) ||
-      text.includes(
-        "como van",
-      )
+      text.includes("como vamos") ||
+      text.includes("como van")
     ) {
       return (
         `RESUMEN EJECUTIVO — ${branchName}\n\n` +
@@ -573,8 +460,7 @@ function CeoPage() {
           analysis.last7Sales,
         )}\n` +
         `Variación semanal: ${
-          analysis.change7 >=
-          0
+          analysis.change7 >= 0
             ? "+"
             : ""
         }${analysis.change7.toFixed(
@@ -584,8 +470,7 @@ function CeoPage() {
           analysis.last30Sales,
         )}\n` +
         `Variación 30 días: ${
-          analysis.change >=
-          0
+          analysis.change >= 0
             ? "+"
             : ""
         }${analysis.change.toFixed(
@@ -629,15 +514,9 @@ function CeoPage() {
     if (
       text.includes("hoy") &&
       (
-        text.includes(
-          "venta",
-        ) ||
-        text.includes(
-          "vend",
-        ) ||
-        text.includes(
-          "como",
-        )
+        text.includes("venta") ||
+        text.includes("vend") ||
+        text.includes("como")
       )
     ) {
       return (
@@ -658,8 +537,7 @@ function CeoPage() {
             ? "+"
             : ""
         }${
-          analysis.yesterdaySales >
-          0
+          analysis.yesterdaySales > 0
             ? (
                 ((analysis.todaySales -
                   analysis.yesterdaySales) /
@@ -673,9 +551,7 @@ function CeoPage() {
 
     if (
       text.includes("semana") ||
-      text.includes(
-        "7 dias",
-      )
+      text.includes("7 dias")
     ) {
       return (
         `VENTAS — ÚLTIMOS 7 DÍAS\n\n` +
@@ -684,8 +560,7 @@ function CeoPage() {
         )}\n` +
         `Tickets: ${analysis.tickets7}\n` +
         `Ticket promedio: ${money(
-          analysis.tickets7 >
-            0
+          analysis.tickets7 > 0
             ? analysis.last7Sales /
                 analysis.tickets7
             : 0,
@@ -694,8 +569,7 @@ function CeoPage() {
           analysis.previous7Sales,
         )}\n` +
         `Variación: ${
-          analysis.change7 >=
-          0
+          analysis.change7 >= 0
             ? "+"
             : ""
         }${analysis.change7.toFixed(
@@ -705,12 +579,8 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "mes",
-      ) &&
-      !text.includes(
-        "anterior",
-      )
+      text.includes("mes") &&
+      !text.includes("anterior")
     ) {
       return (
         `VENTAS DEL MES\n\n` +
@@ -719,8 +589,7 @@ function CeoPage() {
         )}\n` +
         `Tickets: ${analysis.monthTickets}\n` +
         `Ticket promedio: ${money(
-          analysis.monthTickets >
-            0
+          analysis.monthTickets > 0
             ? analysis.monthSales /
                 analysis.monthTickets
             : 0,
@@ -729,9 +598,7 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "ticket",
-      )
+      text.includes("ticket")
     ) {
       return (
         `TICKET PROMEDIO\n\n` +
@@ -751,19 +618,12 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "mas vendidos",
-      ) ||
-      text.includes(
-        "vendiendo mas",
-      ) ||
-      text.includes(
-        "que se vende",
-      )
+      text.includes("mas vendidos") ||
+      text.includes("vendiendo mas") ||
+      text.includes("que se vende")
     ) {
       if (
-        !analysis.topProducts
-          .length
+        !analysis.topProducts.length
       ) {
         return "No hay ventas suficientes para analizar productos.";
       }
@@ -790,17 +650,11 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "mayor margen",
-      ) ||
-      text.includes(
-        "mejor margen",
-      )
+      text.includes("mayor margen") ||
+      text.includes("mejor margen")
     ) {
       if (
-        !analysis
-          .catalogMargins
-          .length
+        !analysis.catalogMargins.length
       ) {
         return "No hay productos con precio válido para calcular margen.";
       }
@@ -825,19 +679,12 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "mas utilidad",
-      ) ||
-      text.includes(
-        "mayor utilidad",
-      ) ||
-      text.includes(
-        "ganan mas",
-      )
+      text.includes("mas utilidad") ||
+      text.includes("mayor utilidad") ||
+      text.includes("ganan mas")
     ) {
       if (
-        !analysis
-          .topProfitProducts
+        !analysis.topProfitProducts
           .length
       ) {
         return "No hay suficiente información de costos históricos para analizar utilidad por producto.";
@@ -865,15 +712,9 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "utilidad",
-      ) ||
-      text.includes(
-        "ganancia",
-      ) ||
-      text.includes(
-        "margen",
-      )
+      text.includes("utilidad") ||
+      text.includes("ganancia") ||
+      text.includes("margen")
     ) {
       return (
         `UTILIDAD REAL — 30 DÍAS\n\n` +
@@ -900,18 +741,10 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "anterior",
-      ) ||
-      text.includes(
-        "compar",
-      ) ||
-      text.includes(
-        "periodo",
-      ) ||
-      text.includes(
-        "vs",
-      )
+      text.includes("anterior") ||
+      text.includes("compar") ||
+      text.includes("periodo") ||
+      text.includes("vs")
     ) {
       return (
         `COMPARACIÓN — PERIODOS DE 30 DÍAS\n\n` +
@@ -924,8 +757,7 @@ function CeoPage() {
         `Tickets actuales: ${analysis.tickets30}\n` +
         `Tickets anteriores: ${analysis.previousTickets}\n` +
         `Variación: ${
-          analysis.change >=
-          0
+          analysis.change >= 0
             ? "+"
             : ""
         }${analysis.change.toFixed(
@@ -935,23 +767,13 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "comprar",
-      ) ||
-      text.includes(
-        "reponer",
-      ) ||
-      text.includes(
-        "pedir",
-      ) ||
-      text.includes(
-        "pedido",
-      )
+      text.includes("comprar") ||
+      text.includes("reponer") ||
+      text.includes("pedir") ||
+      text.includes("pedido")
     ) {
       if (
-        !analysis
-          .replenishment
-          .length
+        !analysis.replenishment.length
       ) {
         return "No hay alertas de reposición basadas en los mínimos configurados.";
       }
@@ -961,15 +783,12 @@ function CeoPage() {
         analysis.replenishment
           .slice(0, 15)
           .map(
-            (
-              item,
-            ) =>
+            (item) =>
               `• ${item.name}: ` +
               `${item.available} disponibles, ` +
               `${item.unitsSold30} vendidos/30 días, ` +
               `${
-                item.daysOfStock !==
-                null
+                item.daysOfStock !== null
                   ? `${item.daysOfStock.toFixed(
                       1,
                     )} días estimados, `
@@ -985,13 +804,10 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "agot",
-      )
+      text.includes("agot")
     ) {
       if (
-        !analysis
-          .outOfStock.length
+        !analysis.outOfStock.length
       ) {
         return "No hay productos agotados actualmente.";
       }
@@ -1009,23 +825,13 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "stock",
-      ) ||
-      text.includes(
-        "inventario",
-      ) ||
-      text.includes(
-        "minimo",
-      )
+      text.includes("stock") ||
+      text.includes("inventario") ||
+      text.includes("minimo")
     ) {
       if (
-        text.includes(
-          "inventario",
-        ) &&
-        !text.includes(
-          "agot",
-        )
+        text.includes("inventario") &&
+        !text.includes("agot")
       ) {
         return (
           `INVENTARIO CENTRAL\n\n` +
@@ -1053,10 +859,7 @@ function CeoPage() {
       }
 
       const rows =
-        analysis.lowStock.slice(
-          0,
-          15,
-        );
+        analysis.lowStock.slice(0, 15);
 
       if (!rows.length) {
         return "No hay productos bajo el mínimo configurado.";
@@ -1076,19 +879,12 @@ function CeoPage() {
     }
 
     if (
-      text.includes(
-        "estanc",
-      ) ||
-      text.includes(
-        "no se vende",
-      ) ||
-      text.includes(
-        "parado",
-      )
+      text.includes("estanc") ||
+      text.includes("no se vende") ||
+      text.includes("parado")
     ) {
       if (
-        !analysis
-          .stagnant.length
+        !analysis.stagnant.length
       ) {
         return "No detecté productos con existencia disponible que no hayan aparecido en las ventas de los últimos 30 días.";
       }
@@ -1131,8 +927,7 @@ function CeoPage() {
   const ask = (
     question: string,
   ) => {
-    const value =
-      question.trim();
+    const value = question.trim();
 
     if (
       !value ||
@@ -1154,30 +949,24 @@ function CeoPage() {
     setInput("");
     setThinking(true);
 
-    window.setTimeout(
-      () => {
-        setMessages(
-          (current) => [
-            ...current,
-            {
-              role: "assistant",
-              text: answer(
-                value,
-              ),
-            },
-          ],
-        );
+    window.setTimeout(() => {
+      setMessages(
+        (current) => [
+          ...current,
+          {
+            role: "assistant",
+            text: answer(value),
+          },
+        ],
+      );
 
-        setThinking(false);
-      },
-      200,
-    );
+      setThinking(false);
+    }, 200);
   };
 
   const salesChangeText =
     `${
-      analysis.change >=
-      0
+      analysis.change >= 0
         ? "+"
         : ""
     }${analysis.change.toFixed(
@@ -1186,8 +975,7 @@ function CeoPage() {
 
   const weeklyChangeText =
     `${
-      analysis.change7 >=
-      0
+      analysis.change7 >= 0
         ? "+"
         : ""
     }${analysis.change7.toFixed(
@@ -1286,8 +1074,7 @@ function CeoPage() {
 
         <MiniKpi
           icon={
-            analysis.netProfit >=
-            0
+            analysis.netProfit >= 0
               ? TrendingUp
               : TrendingDown
           }
@@ -1302,8 +1089,7 @@ function CeoPage() {
 
         <MiniKpi
           icon={
-            analysis.outOfStock
-              .length > 0
+            analysis.outOfStock.length > 0
               ? AlertTriangle
               : Boxes
           }
@@ -1319,14 +1105,10 @@ function CeoPage() {
         {SUGGESTIONS.map(
           (suggestion) => (
             <button
-              key={
-                suggestion
-              }
+              key={suggestion}
               type="button"
               onClick={() =>
-                ask(
-                  suggestion,
-                )
+                ask(suggestion)
               }
               className="whitespace-nowrap rounded-full border bg-card px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-foreground"
             >
@@ -1406,9 +1188,7 @@ function CeoPage() {
                     index,
                   ) => (
                     <div
-                      key={
-                        index
-                      }
+                      key={index}
                       className={cn(
                         "max-w-[94%] whitespace-pre-wrap rounded-2xl px-3.5 py-2.5 text-sm",
                         message.role ===
@@ -1417,12 +1197,223 @@ function CeoPage() {
                           : "bg-muted",
                       )}
                     >
-                      {
-                        message.text
-                      }
+                      {message.text}
                     </div>
                   ),
                 )}
 
                 {thinking && (
-                  <div className="
+                  <div className="max-w-[94%] rounded-2xl bg-muted px-3.5 py-2.5 text-sm">
+                    Analizando datos…
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                ask(input);
+              }}
+              className="flex shrink-0 gap-2 border-t p-3"
+            >
+              <Input
+                value={input}
+                onChange={(event) =>
+                  setInput(event.target.value)
+                }
+                placeholder="Pregunta sobre ventas, utilidad, inventario..."
+                disabled={thinking}
+                aria-label="Pregunta al CEO IA"
+              />
+
+              <Button
+                type="submit"
+                size="icon"
+                disabled={
+                  !input.trim() ||
+                  thinking
+                }
+                aria-label="Enviar pregunta"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+
+        <Card className="min-h-0 overflow-hidden">
+          <CardHeader className="border-b py-3">
+            <CardTitle className="text-sm">
+              Indicadores rápidos
+            </CardTitle>
+          </CardHeader>
+
+          <CardContent className="space-y-3 overflow-y-auto p-4">
+            <QuickRow
+              label="Utilidad bruta"
+              value={money(
+                analysis.grossProfit,
+              )}
+            />
+
+            <QuickRow
+              label="Utilidad neta"
+              value={money(
+                analysis.netProfit,
+              )}
+            />
+
+            <QuickRow
+              label="Margen bruto"
+              value={`${analysis.margin.toFixed(
+                1,
+              )}%`}
+            />
+
+            <QuickRow
+              label="Ticket promedio"
+              value={money(
+                analysis.averageTicket,
+              )}
+            />
+
+            <QuickRow
+              label="Unidades por ticket"
+              value={analysis.averageUnitsPerSale.toFixed(
+                1,
+              )}
+            />
+
+            <QuickRow
+              label="Inventario a costo"
+              value={money(
+                analysis.inventoryCost,
+              )}
+            />
+
+            <QuickRow
+              label="Inventario a venta"
+              value={money(
+                analysis.inventoryRetail,
+              )}
+            />
+
+            <QuickRow
+              label="Agotados"
+              value={String(
+                analysis.outOfStock.length,
+              )}
+            />
+
+            <QuickRow
+              label="Bajo mínimo"
+              value={String(
+                analysis.lowStock.length,
+              )}
+            />
+
+            <QuickRow
+              label="Sin movimiento"
+              value={String(
+                analysis.stagnant.length,
+              )}
+            />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function MiniKpi({
+  icon: Icon,
+  label,
+  value,
+  detail,
+}: {
+  icon: typeof DollarSign;
+  label: string;
+  value: string;
+  detail: string;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-start gap-3 p-3">
+        <div className="rounded-lg bg-muted p-2">
+          <Icon className="h-4 w-4" />
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground">
+            {label}
+          </p>
+
+          <p className="truncate text-lg font-semibold">
+            {value}
+          </p>
+
+          <p className="truncate text-xs text-muted-foreground">
+            {detail}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function MetricCard({
+  title,
+  value,
+  detail,
+  icon: Icon,
+}: {
+  title: string;
+  value: string;
+  detail: string;
+  icon: typeof DollarSign;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-center gap-3 p-4">
+        <div className="rounded-xl bg-muted p-2.5">
+          <Icon className="h-5 w-5" />
+        </div>
+
+        <div className="min-w-0">
+          <p className="text-xs font-medium text-muted-foreground">
+            {title}
+          </p>
+
+          <p className="truncate text-xl font-bold">
+            {value}
+          </p>
+
+          <p className="truncate text-xs text-muted-foreground">
+            {detail}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function QuickRow({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+      <span className="text-sm text-muted-foreground">
+        {label}
+      </span>
+
+      <span className="text-sm font-semibold">
+        {value}
+      </span>
+    </div>
+  );
+}
