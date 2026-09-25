@@ -271,6 +271,7 @@ function ReposicionPage() {
 
   const {
     data: variants = [],
+    isLoading: variantsLoading,
   } = useQuery({
     queryKey: [
       "replenishment-variants",
@@ -320,11 +321,25 @@ function ReposicionPage() {
     isLoading:
       requestsLoading,
   } = useQuery({
+    /*
+     * IMPORTANTE:
+     * La sucursal forma parte de la queryKey.
+     * Así React Query nunca reutiliza la lista
+     * de solicitudes de la sucursal anterior.
+     */
     queryKey: [
       "replenishment-requests",
+      branchId,
     ],
 
+    enabled:
+      Boolean(branchId),
+
     queryFn: async () => {
+      if (!branchId) {
+        return [];
+      }
+
       const { data, error } =
         await (supabase as any)
           .from(
@@ -356,6 +371,16 @@ function ReposicionPage() {
                 full_name
               )
             `,
+          )
+          /*
+           * Mostramos:
+           * 1. solicitudes de la sucursal activa
+           * 2. solicitudes antiguas/globales con branch_id NULL
+           *
+           * Nunca mostramos solicitudes de otra sucursal.
+           */
+          .or(
+            `branch_id.eq.${branchId},branch_id.is.null`,
           )
           .order(
             "created_at",
@@ -561,6 +586,34 @@ function ReposicionPage() {
       );
     }, [requests]);
 
+  const selectedProductData =
+    products.find(
+      (product) =>
+        product.id ===
+        selectedProduct,
+    );
+
+  const hasVariants =
+    Boolean(
+      selectedProductData?.has_variants,
+    );
+
+  const selectedVariantData =
+    variants.find(
+      (variant) =>
+        variant.id ===
+        selectedVariant,
+    );
+
+  const variantRequiredButMissing =
+    hasVariants &&
+    !selectedVariant;
+
+  const variantSelectionInvalid =
+    hasVariants &&
+    Boolean(selectedVariant) &&
+    !selectedVariantData;
+
   const createRequest =
     useMutation({
       mutationFn:
@@ -571,10 +624,37 @@ function ReposicionPage() {
             );
           }
 
+          if (!branchId) {
+            throw new Error(
+              "No hay una sucursal activa.",
+            );
+          }
+
           if (!selectedProduct) {
             throw new Error(
               "Selecciona un producto.",
             );
+          }
+
+          /*
+           * Los productos con variantes deben
+           * identificar exactamente cuál variante
+           * se necesita reponer.
+           */
+          if (hasVariants) {
+            if (!selectedVariant) {
+              throw new Error(
+                "Selecciona una variante.",
+              );
+            }
+
+            if (
+              variantSelectionInvalid
+            ) {
+              throw new Error(
+                "La variante seleccionada no es válida.",
+              );
+            }
           }
 
           const parsedQuantity =
@@ -599,18 +679,25 @@ function ReposicionPage() {
               .insert({
                 product_id:
                   selectedProduct,
+
                 variant_id:
-                  selectedVariant ||
-                  null,
+                  hasVariants
+                    ? selectedVariant
+                    : null,
+
                 branch_id:
-                  branchId || null,
+                  branchId,
+
                 requested_by:
                   user.id,
+
                 quantity:
                   parsedQuantity,
+
                 note:
                   note.trim() ||
                   null,
+
                 status:
                   "pending",
               });
@@ -634,6 +721,7 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
+              branchId,
             ],
           },
         );
@@ -703,6 +791,7 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
+              branchId,
             ],
           },
         );
@@ -762,6 +851,7 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
+              branchId,
             ],
           },
         );
@@ -785,6 +875,12 @@ function ReposicionPage() {
           if (!user?.id) {
             throw new Error(
               "No hay usuario autenticado.",
+            );
+          }
+
+          if (!branchId) {
+            throw new Error(
+              "No hay una sucursal activa.",
             );
           }
 
@@ -850,16 +946,22 @@ function ReposicionPage() {
               .insert({
                 product_id:
                   row.product_id,
+
                 variant_id:
                   row.variant_id,
+
                 branch_id:
-                  branchId || null,
+                  branchId,
+
                 requested_by:
                   user.id,
+
                 quantity:
                   suggested,
+
                 note:
                   "Sugerencia automática por stock bajo.",
+
                 status:
                   "pending",
               });
@@ -878,6 +980,7 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
+              branchId,
             ],
           },
         );
@@ -891,18 +994,6 @@ function ReposicionPage() {
         );
       },
     });
-
-  const selectedProductData =
-    products.find(
-      (product) =>
-        product.id ===
-        selectedProduct,
-    );
-
-  const hasVariants =
-    Boolean(
-      selectedProductData?.has_variants,
-    );
 
   return (
     <PageShell>
@@ -1032,7 +1123,13 @@ function ReposicionPage() {
                   }
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Selecciona variante" />
+                    <SelectValue
+                      placeholder={
+                        variantsLoading
+                          ? "Cargando variantes..."
+                          : "Selecciona variante"
+                      }
+                    />
                   </SelectTrigger>
 
                   <SelectContent>
@@ -1055,6 +1152,14 @@ function ReposicionPage() {
                     )}
                   </SelectContent>
                 </Select>
+
+                {!variantsLoading &&
+                  variants.length ===
+                    0 && (
+                    <p className="text-xs text-destructive">
+                      Este producto está marcado con variantes pero no tiene variantes configuradas.
+                    </p>
+                  )}
               </div>
             )}
 
@@ -1093,11 +1198,21 @@ function ReposicionPage() {
             </div>
           </div>
 
-          <div className="mt-4 flex justify-end">
+          <div className="mt-4 flex flex-col items-end gap-2">
+            {variantRequiredButMissing &&
+              selectedProduct && (
+                <p className="text-xs text-destructive">
+                  Selecciona la variante antes de agregar el producto.
+                </p>
+              )}
+
             <Button
               disabled={
                 createRequest.isPending ||
-                !selectedProduct
+                !selectedProduct ||
+                variantRequiredButMissing ||
+                variantSelectionInvalid ||
+                variantsLoading
               }
               onClick={() =>
                 createRequest.mutate()
@@ -1229,6 +1344,12 @@ function ReposicionPage() {
                         >
                           <TableCell className="font-medium">
                             {row.product_name}
+
+                            {row.variant_id && (
+                              <p className="text-xs text-muted-foreground">
+                                Variante
+                              </p>
+                            )}
                           </TableCell>
 
                           <TableCell>
@@ -1405,6 +1526,10 @@ function ReposicionPage() {
           {requestsLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Cargando solicitudes...
+            </p>
+          ) : !branchId ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Selecciona una sucursal para consultar las solicitudes.
             </p>
           ) : (
             <Table>
