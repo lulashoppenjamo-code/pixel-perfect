@@ -71,6 +71,7 @@ import { cn } from "@/lib/utils";
 
 import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
 import { RestockList } from "@/components/inventory/RestockList";
+import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgress";
 
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
@@ -1233,6 +1234,16 @@ function InventarioPage() {
             </Card>
           ) : (
             <div className="space-y-4">
+              <PhysicalCountProgress
+                startedAt={
+                  activeCount.started_at
+                }
+                total={countSummary.total}
+                counted={countSummary.counted}
+                pending={countSummary.pending}
+                completed={false}
+              />
+
               <Card>
                 <CardHeader>
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1824,7 +1835,7 @@ function InventarioPage() {
           value="reposicion"
           className="mt-4"
         >
-          <RestockList />
+          <RestockList inventory={inventory} />
         </TabsContent>
 
         <TabsContent
