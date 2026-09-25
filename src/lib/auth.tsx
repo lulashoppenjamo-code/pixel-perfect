@@ -61,17 +61,99 @@ function isValidRole(
   );
 }
 
+/**
+ * Obtiene los roles del usuario.
+ *
+ * Primero intenta leer user_roles.
+ * Si esa lectura no devuelve roles, utiliza la función
+ * SECURITY DEFINER has_role() como segundo mecanismo.
+ *
+ * Esto evita que una restricción RLS de user_roles deje
+ * accidentalmente al propietario sin acceso en la interfaz.
+ */
+async function loadRoles(
+  uid: string,
+): Promise<AppRole[]> {
+  const rolesResponse =
+    await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", uid);
+
+  if (rolesResponse.error) {
+    console.error(
+      "[LULA AUTH] Error leyendo user_roles:",
+      rolesResponse.error,
+    );
+  }
+
+  const directRoles =
+    (rolesResponse.data ?? [])
+      .map((item) => item?.role)
+      .filter(isValidRole);
+
+  if (directRoles.length > 0) {
+    return Array.from(
+      new Set(directRoles),
+    );
+  }
+
+  /**
+   * Segundo mecanismo:
+   * comprobar cada rol mediante has_role().
+   *
+   * La función está protegida en Supabase como
+   * SECURITY DEFINER y requiere usuario autenticado.
+   */
+  const detectedRoles: AppRole[] = [];
+
+  for (const role of VALID_ROLES) {
+    try {
+      const {
+        data,
+        error,
+      } = await supabase.rpc(
+        "has_role",
+        {
+          _user_id: uid,
+          _role: role,
+        },
+      );
+
+      if (error) {
+        console.warn(
+          `[LULA AUTH] has_role(${role}) falló:`,
+          error,
+        );
+
+        continue;
+      }
+
+      if (data === true) {
+        detectedRoles.push(role);
+      }
+    } catch (error) {
+      console.warn(
+        `[LULA AUTH] Error comprobando rol ${role}:`,
+        error,
+      );
+    }
+  }
+
+  return Array.from(
+    new Set(detectedRoles),
+  );
+}
+
 async function loadUserProfile(
   uid: string,
 ): Promise<{
   profile: Profile | null;
   roles: AppRole[];
 }> {
-  /*
-   * Primero intentamos asegurar que exista el perfil.
-   *
-   * Esta RPC no debe bloquear el acceso si falla,
-   * porque el perfil puede existir correctamente.
+  /**
+   * Intentamos asegurar que exista el perfil.
+   * Si falla, no bloqueamos automáticamente el acceso.
    */
   const {
     error: ensureError,
@@ -87,12 +169,8 @@ async function loadUserProfile(
     );
   }
 
-  /*
-   * Cargamos perfil y roles por separado.
-   *
-   * No ocultamos los errores de roles: si falla la
-   * consulta, lo registramos claramente para poder
-   * detectar problemas de RLS o sesión.
+  /**
+   * Leer el perfil del usuario actual.
    */
   const profileResponse =
     await supabase
@@ -128,9 +206,8 @@ async function loadUserProfile(
     };
   }
 
-  /*
-   * Si el perfil está inactivo, jamás concedemos
-   * permisos aunque existan roles almacenados.
+  /**
+   * Nunca damos permisos a un perfil inactivo.
    */
   if (profile.is_active !== true) {
     console.warn(
@@ -144,39 +221,18 @@ async function loadUserProfile(
     };
   }
 
-  /*
-   * Ahora obtenemos los roles del usuario autenticado.
+  /**
+   * Cargamos roles usando ambos mecanismos.
    */
-  const rolesResponse =
-    await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", uid);
+  const roles =
+    await loadRoles(uid);
 
-  if (rolesResponse.error) {
-    console.error(
-      "[LULA AUTH] Error leyendo user_roles:",
-      rolesResponse.error,
-    );
-
-    throw rolesResponse.error;
-  }
-
-  const rawRoles =
-    rolesResponse.data ?? [];
-
-  const roles = rawRoles
-    .map((item) => item?.role)
-    .filter(isValidRole);
-
-  /*
-   * Diagnóstico útil sin exponer información sensible.
-   */
   console.info(
-    "[LULA AUTH] Acceso cargado:",
+    "[LULA AUTH] ACCESO FINAL:",
     {
       uid,
       active: profile.is_active,
+      branchId: profile.branch_id,
       roles,
       roleCount: roles.length,
     },
@@ -205,9 +261,6 @@ export function AuthProvider({
   const [loading, setLoading] =
     useState(true);
 
-  /*
-   * Carga de perfil asociada a una sesión concreta.
-   */
   const loadProfile = async (
     currentSession: Session | null,
   ) => {
@@ -224,9 +277,9 @@ export function AuthProvider({
       const result =
         await loadUserProfile(uid);
 
-      /*
-       * Antes de actualizar el estado verificamos
-       * que la sesión siga perteneciendo al mismo usuario.
+      /**
+       * Confirmamos que la sesión no cambió mientras
+       * cargábamos los permisos.
        */
       const {
         data: sessionResponse,
@@ -257,8 +310,8 @@ export function AuthProvider({
   useEffect(() => {
     let mounted = true;
 
-    /*
-     * Escuchamos cambios de autenticación.
+    /**
+     * Escucha login, logout y cambios de sesión.
      */
     const {
       data: subscription,
@@ -278,10 +331,9 @@ export function AuthProvider({
             return;
           }
 
-          /*
+          /**
            * Esperamos al siguiente ciclo para evitar
-           * consultas Supabase dentro del callback
-           * interno de autenticación.
+           * consultas Supabase dentro del callback de auth.
            */
           setTimeout(() => {
             if (!mounted) {
@@ -299,8 +351,8 @@ export function AuthProvider({
         },
       );
 
-    /*
-     * Recuperamos la sesión existente al arrancar.
+    /**
+     * Recuperar sesión existente al abrir la aplicación.
      */
     void supabase.auth
       .getSession()
