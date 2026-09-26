@@ -31,90 +31,75 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-
 const ShellRoute = ShellRouteImport.update({
   id: '/_shell',
   getParentRoute: () => rootRouteImport,
 } as any)
-
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
-
 const ShellAjustesRoute = ShellAjustesRouteImport.update({
   id: '/ajustes',
   path: '/ajustes',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellCajaRoute = ShellCajaRouteImport.update({
   id: '/caja',
   path: '/caja',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellCeoRoute = ShellCeoRouteImport.update({
   id: '/ceo',
   path: '/ceo',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellClientesRoute = ShellClientesRouteImport.update({
   id: '/clientes',
   path: '/clientes',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellComprasRoute = ShellComprasRouteImport.update({
   id: '/compras',
   path: '/compras',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellDevolucionesRoute = ShellDevolucionesRouteImport.update({
   id: '/devoluciones',
   path: '/devoluciones',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellGastosRoute = ShellGastosRouteImport.update({
   id: '/gastos',
   path: '/gastos',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellInventarioRoute = ShellInventarioRouteImport.update({
   id: '/inventario',
   path: '/inventario',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellPedidosRoute = ShellPedidosRouteImport.update({
   id: '/pedidos',
   path: '/pedidos',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellProductosRoute = ShellProductosRouteImport.update({
   id: '/productos',
   path: '/productos',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellReportesRoute = ShellReportesRouteImport.update({
   id: '/reportes',
   path: '/reportes',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellReposicionRoute = ShellReposicionRouteImport.update({
   id: '/reposicion',
   path: '/reposicion',
   getParentRoute: () => ShellRoute,
 } as any)
-
 const ShellVentasRoute = ShellVentasRouteImport.update({
   id: '/ventas',
   path: '/ventas',
@@ -138,7 +123,6 @@ export interface FileRoutesByFullPath {
   '/reposicion': typeof ShellReposicionRoute
   '/ventas': typeof ShellVentasRoute
 }
-
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
@@ -156,7 +140,6 @@ export interface FileRoutesByTo {
   '/reposicion': typeof ShellReposicionRoute
   '/ventas': typeof ShellVentasRoute
 }
-
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
@@ -176,10 +159,8 @@ export interface FileRoutesById {
   '/_shell/reposicion': typeof ShellReposicionRoute
   '/_shell/ventas': typeof ShellVentasRoute
 }
-
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-
   fullPaths:
     | '/'
     | '/auth'
@@ -196,9 +177,7 @@ export interface FileRouteTypes {
     | '/reportes'
     | '/reposicion'
     | '/ventas'
-
   fileRoutesByTo: FileRoutesByTo
-
   to:
     | '/'
     | '/auth'
@@ -215,7 +194,6 @@ export interface FileRouteTypes {
     | '/reportes'
     | '/reposicion'
     | '/ventas'
-
   id:
     | '__root__'
     | '/'
@@ -234,10 +212,8 @@ export interface FileRouteTypes {
     | '/_shell/reportes'
     | '/_shell/reposicion'
     | '/_shell/ventas'
-
   fileRoutesById: FileRoutesById
 }
-
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ShellRoute: typeof ShellRouteWithChildren
@@ -253,7 +229,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-
     '/_shell': {
       id: '/_shell'
       path: ''
@@ -261,7 +236,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellRouteImport
       parentRoute: typeof rootRouteImport
     }
-
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -269,7 +243,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
-
     '/_shell/ajustes': {
       id: '/_shell/ajustes'
       path: '/ajustes'
@@ -277,7 +250,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellAjustesRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/caja': {
       id: '/_shell/caja'
       path: '/caja'
@@ -285,7 +257,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellCajaRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/ceo': {
       id: '/_shell/ceo'
       path: '/ceo'
@@ -293,7 +264,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellCeoRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/clientes': {
       id: '/_shell/clientes'
       path: '/clientes'
@@ -301,7 +271,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellClientesRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/compras': {
       id: '/_shell/compras'
       path: '/compras'
@@ -309,7 +278,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellComprasRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/devoluciones': {
       id: '/_shell/devoluciones'
       path: '/devoluciones'
@@ -317,7 +285,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellDevolucionesRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/gastos': {
       id: '/_shell/gastos'
       path: '/gastos'
@@ -325,7 +292,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellGastosRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/inventario': {
       id: '/_shell/inventario'
       path: '/inventario'
@@ -333,7 +299,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellInventarioRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/pedidos': {
       id: '/_shell/pedidos'
       path: '/pedidos'
@@ -341,7 +306,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellPedidosRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/productos': {
       id: '/_shell/productos'
       path: '/productos'
@@ -349,7 +313,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellProductosRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/reportes': {
       id: '/_shell/reportes'
       path: '/reportes'
@@ -357,7 +320,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellReportesRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/reposicion': {
       id: '/_shell/reposicion'
       path: '/reposicion'
@@ -365,7 +327,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellReposicionRouteImport
       parentRoute: typeof ShellRoute
     }
-
     '/_shell/ventas': {
       id: '/_shell/ventas'
       path: '/ventas'
@@ -415,14 +376,12 @@ const rootRouteChildren: RootRouteChildren = {
   ShellRoute: ShellRouteWithChildren,
   AuthRoute: AuthRoute,
 }
-
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
 import type { startInstance } from './start.ts'
-
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
