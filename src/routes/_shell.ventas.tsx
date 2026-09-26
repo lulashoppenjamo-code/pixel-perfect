@@ -7,6 +7,7 @@
  * El punto de venta está en Caja (/caja).
  */
 import { useMemo, useState } from "react";
+import type { Database } from "@/integrations/supabase/types";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -94,8 +95,8 @@ function VentasPage() {
       // Los días se interpretan en la zona horaria del dispositivo.
       if (from) q = q.gte("created_at", new Date(`${from}T00:00:00`).toISOString());
       if (to) q = q.lte("created_at", new Date(`${to}T23:59:59.999`).toISOString());
-      if (method !== ALL) q = q.eq("payment_method", method);
-      if (status !== ALL) q = q.eq("status", status);
+      if (method !== ALL) q = q.eq("payment_method", method as Database["public"]["Enums"]["payment_method"]);
+      if (status !== ALL) q = q.eq("status", status as Database["public"]["Enums"]["sale_status"]);
 
       const { data, error } = await q;
       if (error) throw error;
