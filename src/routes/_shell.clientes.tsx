@@ -20,6 +20,10 @@ import {
   Wallet,
   Users,
   History,
+  CreditCard,
+  UserCheck,
+  AlertCircle,
+  ShoppingBag,
 } from "lucide-react";
 
 import {
@@ -134,6 +138,13 @@ type CreditPaymentRow = {
   amount: number;
 };
 
+type CustomerStats = {
+  count: number;
+  total: number;
+  credit: number;
+  last: string | null;
+};
+
 function ClientesPage() {
   const { isManager } = useAuth();
   const { branchId } = useBranch();
@@ -156,6 +167,7 @@ function ClientesPage() {
   const {
     data: customers = [],
     isLoading,
+    isError: customersError,
   } = useQuery<CustomerRow[]>({
     queryKey: ["customers"],
 
@@ -175,70 +187,58 @@ function ClientesPage() {
 
   const {
     data: salesByCustomer = [],
-  } =
-    useQuery<SaleCustomerRow[]>({
-      queryKey: ["customer-sales-agg"],
+    isError: salesError,
+  } = useQuery<SaleCustomerRow[]>({
+    queryKey: ["customer-sales-agg"],
 
-      queryFn: async () => {
-        const { data, error } = await supabase
-          .from("sales")
-          .select(
-            "customer_id, total, status, payment_method, created_at",
-          )
-          .not("customer_id", "is", null)
-          .in("status", [
-            "completed",
-            "partially_refunded",
-          ]);
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sales")
+        .select(
+          "customer_id, total, status, payment_method, created_at",
+        )
+        .not("customer_id", "is", null)
+        .in("status", [
+          "completed",
+          "partially_refunded",
+        ]);
 
-        if (error) {
-          throw error;
-        }
+      if (error) {
+        throw error;
+      }
 
-        return (data ??
-          []) as SaleCustomerRow[];
-      },
-    });
+      return (data ?? []) as SaleCustomerRow[];
+    },
+  });
 
   const {
     data: creditPayments = [],
-  } =
-    useQuery<CreditPaymentRow[]>({
-      queryKey: ["credit-payments"],
+    isError: paymentsError,
+  } = useQuery<CreditPaymentRow[]>({
+    queryKey: ["credit-payments"],
 
-      queryFn: async () => {
-        const { data, error } = await supabase
-          .from("credit_payments")
-          .select("customer_id, amount");
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("credit_payments")
+        .select("customer_id, amount");
 
-        if (error) {
-          if (
-            error.message?.includes(
-              "does not exist",
-            ) ||
-            error.code === "42P01"
-          ) {
-            return [];
-          }
-
-          throw error;
+      if (error) {
+        if (
+          error.message?.includes("does not exist") ||
+          error.code === "42P01"
+        ) {
+          return [];
         }
 
-        return (data ??
-          []) as CreditPaymentRow[];
-      },
-    });
+        throw error;
+      }
+
+      return (data ?? []) as CreditPaymentRow[];
+    },
+  });
 
   const stats = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        count: number;
-        total: number;
-        credit: number;
-        last: string | null;
-      }
-    >();
+    const map = new Map<string, CustomerStats>();
 
     for (const sale of salesByCustomer) {
       if (!sale.customer_id) {
@@ -254,13 +254,12 @@ function ClientesPage() {
         };
 
       current.count += 1;
+
       current.total += Number(
         sale.total ?? 0,
       );
 
-      if (
-        sale.payment_method === "credit"
-      ) {
+      if (sale.payment_method === "credit") {
         current.credit += Number(
           sale.total ?? 0,
         );
@@ -300,6 +299,40 @@ function ClientesPage() {
     return map;
   }, [salesByCustomer, creditPayments]);
 
+  const dashboard = useMemo(() => {
+    let totalPurchases = 0;
+    let totalCredit = 0;
+    let customersWithPurchases = 0;
+    let customersWithDebt = 0;
+
+    for (const customer of customers) {
+      const stat = stats.get(customer.id);
+
+      if (!stat) {
+        continue;
+      }
+
+      totalPurchases += stat.total;
+
+      if (stat.count > 0) {
+        customersWithPurchases += 1;
+      }
+
+      if (stat.credit > 0) {
+        customersWithDebt += 1;
+        totalCredit += stat.credit;
+      }
+    }
+
+    return {
+      totalCustomers: customers.length,
+      customersWithPurchases,
+      customersWithDebt,
+      totalPurchases,
+      totalCredit,
+    };
+  }, [customers, stats]);
+
   const filtered = customers.filter(
     (customer) => {
       if (!search.trim()) {
@@ -327,9 +360,7 @@ function ClientesPage() {
   const save = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) {
-        throw new Error(
-          "Nombre requerido",
-        );
+        throw new Error("Nombre requerido");
       }
 
       const payload = {
@@ -393,6 +424,14 @@ function ClientesPage() {
 
   const remove = useMutation({
     mutationFn: async (id: string) => {
+      const stat = stats.get(id);
+
+      if (stat && stat.credit > 0) {
+        throw new Error(
+          "No puedes eliminar un cliente con saldo pendiente.",
+        );
+      }
+
       const { error } = await supabase
         .from("customers")
         .delete()
@@ -404,9 +443,7 @@ function ClientesPage() {
     },
 
     onSuccess: () => {
-      toast.success(
-        "Cliente eliminado",
-      );
+      toast.success("Cliente eliminado");
 
       void qc.invalidateQueries({
         queryKey: ["customers"],
@@ -453,13 +490,24 @@ function ClientesPage() {
         );
       }
 
+      if (
+        amount >
+        paymentCustomerBalance + 0.005
+      ) {
+        throw new Error(
+          "El abono no puede superar el saldo pendiente.",
+        );
+      }
+
       const { data, error } =
         await (supabase as any).rpc(
           "register_credit_payment",
           {
             _customer_id:
               payCustomerId,
-            _amount: amount,
+            _amount: Number(
+              amount.toFixed(2),
+            ),
             _payment_method:
               payMethod,
             _branch_id:
@@ -560,13 +608,118 @@ function ClientesPage() {
           ?.credit ?? 0
       : 0;
 
+  const hasDataError =
+    customersError ||
+    salesError ||
+    paymentsError;
+
   return (
     <PageShell>
       <PageHeader
         icon={Users}
         title="Clientes"
-        description="Contactos, historial de compras, saldo a crédito y abonos."
+        description="Contactos, historial de compras, crédito y abonos."
       />
+
+      {hasDataError && (
+        <Card className="border-destructive/40">
+          <CardContent className="flex items-center gap-3 py-4">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+
+            <div>
+              <p className="font-medium">
+                No se pudieron cargar todos los datos.
+              </p>
+
+              <p className="text-sm text-muted-foreground">
+                Actualiza la página e inténtalo nuevamente.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">
+                Clientes
+              </p>
+
+              <p className="mt-1 text-2xl font-semibold">
+                {dashboard.totalCustomers}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                registrados
+              </p>
+            </div>
+
+            <Users className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">
+                Clientes activos
+              </p>
+
+              <p className="mt-1 text-2xl font-semibold">
+                {dashboard.customersWithPurchases}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                con compras
+              </p>
+            </div>
+
+            <UserCheck className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">
+                Saldo pendiente
+              </p>
+
+              <p className="mt-1 text-2xl font-semibold">
+                {money(dashboard.totalCredit)}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                {dashboard.customersWithDebt} con deuda
+              </p>
+            </div>
+
+            <CreditCard className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="flex items-center justify-between p-4">
+            <div>
+              <p className="text-xs text-muted-foreground">
+                Compras acumuladas
+              </p>
+
+              <p className="mt-1 text-2xl font-semibold">
+                {money(dashboard.totalPurchases)}
+              </p>
+
+              <p className="text-xs text-muted-foreground">
+                clientes registrados
+              </p>
+            </div>
+
+            <ShoppingBag className="h-5 w-5 text-muted-foreground" />
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-1">
@@ -590,6 +743,7 @@ function ClientesPage() {
                     name: event.target.value,
                   }))
                 }
+                placeholder="Nombre del cliente"
               />
             </div>
 
@@ -605,6 +759,7 @@ function ClientesPage() {
                       event.target.value,
                   }))
                 }
+                placeholder="Opcional"
               />
             </div>
 
@@ -621,6 +776,7 @@ function ClientesPage() {
                       event.target.value,
                   }))
                 }
+                placeholder="Opcional"
               />
             </div>
 
@@ -652,10 +808,11 @@ function ClientesPage() {
                       event.target.value,
                   }))
                 }
+                placeholder="Opcional"
               />
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex gap-2 pt-1">
               {form.id && (
                 <Button
                   variant="outline"
@@ -670,7 +827,10 @@ function ClientesPage() {
 
               <Button
                 className="flex-1"
-                disabled={save.isPending}
+                disabled={
+                  save.isPending ||
+                  !form.name.trim()
+                }
                 onClick={() =>
                   save.mutate()
                 }
@@ -686,17 +846,23 @@ function ClientesPage() {
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base">
-              Listado
-            </CardTitle>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-base">
+                Clientes
+              </CardTitle>
 
-            <div className="relative w-48">
+              <p className="text-xs text-muted-foreground">
+                Busca por nombre, teléfono o correo.
+              </p>
+            </div>
+
+            <div className="relative w-full sm:w-56">
               <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 
               <Input
-                className="h-8 pl-7"
-                placeholder="Buscar…"
+                className="h-9 pl-7"
+                placeholder="Buscar cliente…"
                 value={search}
                 onChange={(event) =>
                   setSearch(
@@ -708,191 +874,213 @@ function ClientesPage() {
           </CardHeader>
 
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    Nombre
-                  </TableHead>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      Cliente
+                    </TableHead>
 
-                  <TableHead>
-                    Teléfono
-                  </TableHead>
+                    <TableHead>
+                      Teléfono
+                    </TableHead>
 
-                  <TableHead className="text-right">
-                    Compras
-                  </TableHead>
+                    <TableHead className="text-right">
+                      Compras
+                    </TableHead>
 
-                  <TableHead className="text-right">
-                    Total
-                  </TableHead>
+                    <TableHead className="text-right">
+                      Total
+                    </TableHead>
 
-                  <TableHead className="text-right">
-                    Saldo crédito
-                  </TableHead>
+                    <TableHead className="text-right">
+                      Crédito
+                    </TableHead>
 
-                  <TableHead className="text-right">
-                    Acciones
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
+                    <TableHead className="text-right">
+                      Acciones
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
 
-              <TableBody>
-                {filtered.map(
-                  (customer) => {
-                    const stat =
-                      stats.get(
-                        customer.id,
-                      );
+                <TableBody>
+                  {filtered.map(
+                    (customer) => {
+                      const stat =
+                        stats.get(
+                          customer.id,
+                        );
 
-                    const balance =
-                      stat?.credit ?? 0;
+                      const balance =
+                        stat?.credit ?? 0;
 
-                    return (
-                      <TableRow
-                        key={customer.id}
-                      >
-                        <TableCell className="font-medium">
-                          {customer.name}
-                        </TableCell>
+                      return (
+                        <TableRow
+                          key={customer.id}
+                        >
+                          <TableCell>
+                            <div className="min-w-[150px]">
+                              <div className="font-medium">
+                                {customer.name}
+                              </div>
 
-                        <TableCell className="text-sm">
-                          {customer.phone ??
-                            "—"}
-                        </TableCell>
+                              {customer.email && (
+                                <div className="truncate text-xs text-muted-foreground">
+                                  {customer.email}
+                                </div>
+                              )}
+                            </div>
+                          </TableCell>
 
-                        <TableCell className="text-right">
-                          {stat?.count ?? 0}
-                        </TableCell>
+                          <TableCell className="text-sm">
+                            {customer.phone ??
+                              "—"}
+                          </TableCell>
 
-                        <TableCell className="text-right font-medium">
-                          {money(
-                            stat?.total ??
-                              0,
-                          )}
-                        </TableCell>
+                          <TableCell className="text-right">
+                            {stat?.count ?? 0}
+                          </TableCell>
 
-                        <TableCell className="text-right">
-                          {balance > 0 ? (
-                            <Badge variant="destructive">
-                              {money(balance)}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground">
-                              $0
-                            </span>
-                          )}
-                        </TableCell>
+                          <TableCell className="text-right font-medium">
+                            {money(
+                              stat?.total ??
+                                0,
+                            )}
+                          </TableCell>
 
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              title="Ver historial de crédito"
-                              onClick={() =>
-                                setHistoryCustomerId(
-                                  customer.id,
-                                )
-                              }
-                            >
-                              <History className="h-3.5 w-3.5" />
-                            </Button>
+                          <TableCell className="text-right">
+                            {balance > 0 ? (
+                              <Badge variant="destructive">
+                                {money(balance)}
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary">
+                                $0
+                              </Badge>
+                            )}
+                          </TableCell>
 
-                            {balance > 0 && (
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-1">
                               <Button
                                 size="icon"
                                 variant="ghost"
                                 className="h-8 w-8"
-                                title="Registrar abono"
-                                onClick={() => {
-                                  setPayCustomerId(
-                                    customer.id,
-                                  );
-
-                                  setPayAmount(
-                                    balance.toFixed(
-                                      2,
-                                    ),
-                                  );
-
-                                  setPayMethod(
-                                    "cash",
-                                  );
-
-                                  setPayNotes(
-                                    "",
-                                  );
-                                }}
-                              >
-                                <Wallet className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
-
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8"
-                              title="Editar cliente"
-                              onClick={() =>
-                                setForm({
-                                  id: customer.id,
-                                  name:
-                                    customer.name,
-                                  phone:
-                                    customer.phone ??
-                                    "",
-                                  email:
-                                    customer.email ??
-                                    "",
-                                  notes:
-                                    customer.notes ??
-                                    "",
-                                  address:
-                                    customer.address ??
-                                    "",
-                                })
-                              }
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-
-                            {isManager && (
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8 text-destructive"
-                                title="Eliminar cliente"
+                                title="Ver historial de crédito"
                                 onClick={() =>
-                                  remove.mutate(
+                                  setHistoryCustomerId(
                                     customer.id,
                                   )
                                 }
                               >
-                                <Trash2 className="h-3.5 w-3.5" />
+                                <History className="h-3.5 w-3.5" />
                               </Button>
-                            )}
-                          </div>
+
+                              {balance > 0 && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8"
+                                  title="Registrar abono"
+                                  onClick={() => {
+                                    setPayCustomerId(
+                                      customer.id,
+                                    );
+
+                                    setPayAmount(
+                                      balance.toFixed(
+                                        2,
+                                      ),
+                                    );
+
+                                    setPayMethod(
+                                      "cash",
+                                    );
+
+                                    setPayNotes(
+                                      "",
+                                    );
+                                  }}
+                                >
+                                  <Wallet className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                title="Editar cliente"
+                                onClick={() =>
+                                  setForm({
+                                    id: customer.id,
+                                    name:
+                                      customer.name,
+                                    phone:
+                                      customer.phone ??
+                                      "",
+                                    email:
+                                      customer.email ??
+                                      "",
+                                    notes:
+                                      customer.notes ??
+                                      "",
+                                    address:
+                                      customer.address ??
+                                      "",
+                                  })
+                                }
+                              >
+                                <Pencil className="h-3.5 w-3.5" />
+                              </Button>
+
+                              {isManager && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-destructive"
+                                  title={
+                                    balance > 0
+                                      ? "No se puede eliminar con saldo pendiente"
+                                      : "Eliminar cliente"
+                                  }
+                                  disabled={
+                                    remove.isPending ||
+                                    balance > 0
+                                  }
+                                  onClick={() =>
+                                    remove.mutate(
+                                      customer.id,
+                                    )
+                                  }
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    },
+                  )}
+
+                  {!isLoading &&
+                    filtered.length === 0 && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={6}
+                          className="py-10 text-center text-muted-foreground"
+                        >
+                          {search.trim()
+                            ? "No se encontraron clientes."
+                            : "Sin clientes."}
                         </TableCell>
                       </TableRow>
-                    );
-                  },
-                )}
-
-                {!isLoading &&
-                  filtered.length === 0 && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={6}
-                        className="py-10 text-center text-muted-foreground"
-                      >
-                        Sin clientes.
-                      </TableCell>
-                    </TableRow>
-                  )}
-              </TableBody>
-            </Table>
+                    )}
+                </TableBody>
+              </Table>
+            </div>
           </CardContent>
         </Card>
       </div>
