@@ -14,7 +14,9 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  AlertTriangle,
   CheckCircle2,
+  Clock3,
   PackageCheck,
   Plus,
   Search,
@@ -82,22 +84,6 @@ type ReplenishmentStatus =
   | "received"
   | "cancelled";
 
-type ProductRow = {
-  id: string;
-  name: string;
-  sku: string | null;
-  barcode: string | null;
-  has_variants: boolean;
-  is_active: boolean;
-};
-
-type VariantRow = {
-  id: string;
-  product_id: string;
-  name: string;
-  sku: string | null;
-};
-
 type ReplenishmentRow = {
   id: string;
   product_id: string;
@@ -127,13 +113,35 @@ type ReplenishmentRow = {
   } | null;
 };
 
+type ProductRow = {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  has_variants: boolean;
+  is_active: boolean;
+};
+
+type VariantRow = {
+  id: string;
+  product_id: string;
+  name: string;
+  sku: string | null;
+};
+
+type SelectedItem = {
+  productId: string;
+  variantId: string | null;
+};
+
 export const Route = createFileRoute(
   "/_shell/reposicion",
 )({
   head: () => ({
     meta: [
       {
-        title: "Reposición — Lula OS",
+        title:
+          "Reposición — Lula OS",
       },
       {
         name: "description",
@@ -171,19 +179,19 @@ function statusLabel(
 function statusVariant(
   status: ReplenishmentStatus,
 ) {
-  switch (status) {
-    case "pending":
-      return "secondary" as const;
-
-    case "purchased":
-      return "outline" as const;
-
-    case "received":
-      return "default" as const;
-
-    case "cancelled":
-      return "destructive" as const;
+  if (status === "pending") {
+    return "secondary" as const;
   }
+
+  if (status === "purchased") {
+    return "outline" as const;
+  }
+
+  if (status === "received") {
+    return "default" as const;
+  }
+
+  return "destructive" as const;
 }
 
 function formatDate(
@@ -204,8 +212,9 @@ function formatDate(
 function ReposicionPage() {
   const { user } = useAuth();
 
-  const { branchId } =
-    useBranch();
+  const {
+    branchId,
+  } = useBranch();
 
   const queryClient =
     useQueryClient();
@@ -238,13 +247,19 @@ function ReposicionPage() {
   const [
     statusFilter,
     setStatusFilter,
-  ] = useState<
-    "all" | ReplenishmentStatus
-  >("all");
+  ] =
+    useState<"all" | ReplenishmentStatus>(
+      "all",
+    );
+
+  /*
+   * ============================================================
+   * PRODUCTOS
+   * ============================================================
+   */
 
   const {
     data: products = [],
-    isLoading: productsLoading,
   } = useQuery({
     queryKey: [
       "replenishment-products",
@@ -269,9 +284,14 @@ function ReposicionPage() {
     },
   });
 
+  /*
+   * ============================================================
+   * VARIANTES
+   * ============================================================
+   */
+
   const {
     data: variants = [],
-    isLoading: variantsLoading,
   } = useQuery({
     queryKey: [
       "replenishment-variants",
@@ -303,6 +323,12 @@ function ReposicionPage() {
     },
   });
 
+  /*
+   * ============================================================
+   * INVENTARIO
+   * ============================================================
+   */
+
   const {
     data: inventory = [],
     isLoading:
@@ -316,30 +342,22 @@ function ReposicionPage() {
       getSharedInventory,
   });
 
+  /*
+   * ============================================================
+   * SOLICITUDES
+   * ============================================================
+   */
+
   const {
     data: requests = [],
     isLoading:
       requestsLoading,
   } = useQuery({
-    /*
-     * IMPORTANTE:
-     * La sucursal forma parte de la queryKey.
-     * Así React Query nunca reutiliza la lista
-     * de solicitudes de la sucursal anterior.
-     */
     queryKey: [
       "replenishment-requests",
-      branchId,
     ],
 
-    enabled:
-      Boolean(branchId),
-
     queryFn: async () => {
-      if (!branchId) {
-        return [];
-      }
-
       const { data, error } =
         await (supabase as any)
           .from(
@@ -372,16 +390,6 @@ function ReposicionPage() {
               )
             `,
           )
-          /*
-           * Mostramos:
-           * 1. solicitudes de la sucursal activa
-           * 2. solicitudes antiguas/globales con branch_id NULL
-           *
-           * Nunca mostramos solicitudes de otra sucursal.
-           */
-          .or(
-            `branch_id.eq.${branchId},branch_id.is.null`,
-          )
           .order(
             "created_at",
             {
@@ -397,6 +405,12 @@ function ReposicionPage() {
         []) as ReplenishmentRow[];
     },
   });
+
+  /*
+   * ============================================================
+   * PRODUCTOS BAJO MÍNIMO
+   * ============================================================
+   */
 
   const lowStock =
     useMemo(() => {
@@ -418,6 +432,12 @@ function ReposicionPage() {
           ) <= 0,
       );
     }, [inventory]);
+
+  /*
+   * ============================================================
+   * PRODUCTOS FILTRADOS
+   * ============================================================
+   */
 
   const filteredProducts =
     useMemo(() => {
@@ -450,6 +470,12 @@ function ReposicionPage() {
         .slice(0, 80);
     }, [products, search]);
 
+  /*
+   * ============================================================
+   * SOLICITUDES FILTRADAS
+   * ============================================================
+   */
+
   const filteredRequests =
     useMemo(() => {
       const term =
@@ -466,11 +492,13 @@ function ReposicionPage() {
 
           const productName =
             request.product
-              ?.name ?? "";
+              ?.name ??
+            "";
 
           const variantName =
             request.variant
-              ?.name ?? "";
+              ?.name ??
+            "";
 
           const matchesSearch =
             !term ||
@@ -499,6 +527,12 @@ function ReposicionPage() {
       statusFilter,
     ]);
 
+  /*
+   * ============================================================
+   * RESUMEN
+   * ============================================================
+   */
+
   const pendingRequests =
     requests.filter(
       (request) =>
@@ -519,6 +553,12 @@ function ReposicionPage() {
         request.status ===
         "received",
     );
+
+  /*
+   * ============================================================
+   * AGREGACIÓN SEMANAL
+   * ============================================================
+   */
 
   const weeklyAggregation =
     useMemo(() => {
@@ -542,10 +582,11 @@ function ReposicionPage() {
           continue;
         }
 
-        const key = `${request.product_id}:${
+        const key = [
+          request.product_id,
           request.variant_id ??
-          "base"
-        }`;
+            "base",
+        ].join(":");
 
         const current =
           map.get(key);
@@ -586,33 +627,11 @@ function ReposicionPage() {
       );
     }, [requests]);
 
-  const selectedProductData =
-    products.find(
-      (product) =>
-        product.id ===
-        selectedProduct,
-    );
-
-  const hasVariants =
-    Boolean(
-      selectedProductData?.has_variants,
-    );
-
-  const selectedVariantData =
-    variants.find(
-      (variant) =>
-        variant.id ===
-        selectedVariant,
-    );
-
-  const variantRequiredButMissing =
-    hasVariants &&
-    !selectedVariant;
-
-  const variantSelectionInvalid =
-    hasVariants &&
-    Boolean(selectedVariant) &&
-    !selectedVariantData;
+  /*
+   * ============================================================
+   * CREAR SOLICITUD
+   * ============================================================
+   */
 
   const createRequest =
     useMutation({
@@ -624,37 +643,10 @@ function ReposicionPage() {
             );
           }
 
-          if (!branchId) {
-            throw new Error(
-              "No hay una sucursal activa.",
-            );
-          }
-
           if (!selectedProduct) {
             throw new Error(
               "Selecciona un producto.",
             );
-          }
-
-          /*
-           * Los productos con variantes deben
-           * identificar exactamente cuál variante
-           * se necesita reponer.
-           */
-          if (hasVariants) {
-            if (!selectedVariant) {
-              throw new Error(
-                "Selecciona una variante.",
-              );
-            }
-
-            if (
-              variantSelectionInvalid
-            ) {
-              throw new Error(
-                "La variante seleccionada no es válida.",
-              );
-            }
           }
 
           const parsedQuantity =
@@ -681,12 +673,11 @@ function ReposicionPage() {
                   selectedProduct,
 
                 variant_id:
-                  hasVariants
-                    ? selectedVariant
-                    : null,
+                  selectedVariant ||
+                  null,
 
                 branch_id:
-                  branchId,
+                  branchId || null,
 
                 requested_by:
                   user.id,
@@ -721,7 +712,6 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
-              branchId,
             ],
           },
         );
@@ -735,6 +725,12 @@ function ReposicionPage() {
         );
       },
     });
+
+  /*
+   * ============================================================
+   * CAMBIAR ESTADO
+   * ============================================================
+   */
 
   const updateStatus =
     useMutation({
@@ -757,7 +753,7 @@ function ReposicionPage() {
             status ===
             "purchased"
           ) {
-            values.purchased_at =
+            values["purchased_at"] =
               new Date().toISOString();
           }
 
@@ -765,7 +761,7 @@ function ReposicionPage() {
             status ===
             "received"
           ) {
-            values.received_at =
+            values["received_at"] =
               new Date().toISOString();
           }
 
@@ -791,7 +787,6 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
-              branchId,
             ],
           },
         );
@@ -805,6 +800,12 @@ function ReposicionPage() {
         );
       },
     });
+
+  /*
+   * ============================================================
+   * CAMBIAR CANTIDAD
+   * ============================================================
+   */
 
   const updateQuantity =
     useMutation({
@@ -851,7 +852,6 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
-              branchId,
             ],
           },
         );
@@ -866,6 +866,12 @@ function ReposicionPage() {
       },
     });
 
+  /*
+   * ============================================================
+   * AGREGAR PRODUCTO AUTOMÁTICAMENTE
+   * ============================================================
+   */
+
   const addSuggested =
     useMutation({
       mutationFn:
@@ -875,12 +881,6 @@ function ReposicionPage() {
           if (!user?.id) {
             throw new Error(
               "No hay usuario autenticado.",
-            );
-          }
-
-          if (!branchId) {
-            throw new Error(
-              "No hay una sucursal activa.",
             );
           }
 
@@ -931,12 +931,13 @@ function ReposicionPage() {
             );
           }
 
-          suggested = Math.max(
-            Math.ceil(
-              suggested,
-            ),
-            1,
-          );
+          suggested =
+            Math.max(
+              Math.ceil(
+                suggested,
+              ),
+              1,
+            );
 
           const { error } =
             await (supabase as any)
@@ -951,7 +952,7 @@ function ReposicionPage() {
                   row.variant_id,
 
                 branch_id:
-                  branchId,
+                  branchId || null,
 
                 requested_by:
                   user.id,
@@ -961,7 +962,6 @@ function ReposicionPage() {
 
                 note:
                   "Sugerencia automática por stock bajo.",
-
                 status:
                   "pending",
               });
@@ -980,7 +980,6 @@ function ReposicionPage() {
           {
             queryKey: [
               "replenishment-requests",
-              branchId,
             ],
           },
         );
@@ -995,107 +994,169 @@ function ReposicionPage() {
       },
     });
 
+  const selectedProductData =
+    products.find(
+      (product) =>
+        product.id ===
+        selectedProduct,
+    );
+
+  const hasVariants =
+    Boolean(
+      selectedProductData?.has_variants,
+    );
+
   return (
     <PageShell>
       <PageHeader
-        title="Reposición"
-        description="Lista de productos que hacen falta comprar. No modifica el inventario real."
-        icon={ShoppingCart}
-      />
+  title="Reposición"
+  description="Lista de productos que hacen falta comprar. No modifica el inventario real."
+  icon={ShoppingCart}
+/>
+      {/* ======================================================
+          RESUMEN
+      ======================================================= */}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
-              Pendientes
-            </p>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Pendientes
+                </p>
 
-            <p className="mt-1 text-2xl font-bold">
-              {pendingRequests.length}
-            </p>
+                <p className="text-2xl font-bold">
+                  {pendingRequests.length}
+                </p>
+              </div>
+
+              <Clock3 className="h-5 w-5 text-muted-foreground" />
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
-              Comprados
-            </p>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Comprados
+                </p>
 
-            <p className="mt-1 text-2xl font-bold">
-              {purchasedRequests.length}
-            </p>
+                <p className="text-2xl font-bold">
+                  {purchasedRequests.length}
+                </p>
+              </div>
+
+              <ShoppingCart className="h-5 w-5 text-muted-foreground" />
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
-              Recibidos
-            </p>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Recibidos
+                </p>
 
-            <p className="mt-1 text-2xl font-bold">
-              {receivedRequests.length}
-            </p>
+                <p className="text-2xl font-bold">
+                  {receivedRequests.length}
+                </p>
+              </div>
+
+              <PackageCheck className="h-5 w-5 text-muted-foreground" />
+            </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
-              Agotados
-            </p>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Bajo mínimo
+                </p>
 
-            <p className="mt-1 text-2xl font-bold">
-              {outOfStock.length}
-            </p>
+                <p className="text-2xl font-bold">
+                  {lowStock.length}
+                </p>
+              </div>
+
+              <AlertTriangle className="h-5 w-5 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs text-muted-foreground">
+                  Agotados
+                </p>
+
+                <p className="text-2xl font-bold">
+                  {outOfStock.length}
+                </p>
+              </div>
+
+              <XCircle className="h-5 w-5 text-destructive" />
+            </div>
           </CardContent>
         </Card>
       </div>
 
+      {/* ======================================================
+          AGREGAR MANUALMENTE
+      ======================================================= */}
+
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle className="text-base">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Plus className="h-4 w-4" />
             Agregar producto a reposición
           </CardTitle>
-
-          <p className="text-xs text-muted-foreground">
-            Esto crea una lista de compra y no modifica las existencias.
-          </p>
         </CardHeader>
 
         <CardContent>
-          <div className="grid gap-4 lg:grid-cols-4">
+          <div className="grid gap-4 lg:grid-cols-[2fr_1.5fr_120px_2fr_auto]">
             <div className="space-y-1.5">
               <Label>
                 Producto
               </Label>
 
               <Select
-                value={selectedProduct}
-                onValueChange={(value) => {
+                value={
+                  selectedProduct
+                }
+                onValueChange={(
+                  value,
+                ) => {
                   setSelectedProduct(
                     value,
                   );
-                  setSelectedVariant("");
+                  setSelectedVariant(
+                    "",
+                  );
                 }}
               >
                 <SelectTrigger>
-                  <SelectValue
-                    placeholder={
-                      productsLoading
-                        ? "Cargando..."
-                        : "Selecciona producto"
-                    }
-                  />
+                  <SelectValue placeholder="Selecciona producto" />
                 </SelectTrigger>
 
                 <SelectContent>
                   {filteredProducts.map(
                     (product) => (
                       <SelectItem
-                        key={product.id}
-                        value={product.id}
+                        key={
+                          product.id
+                        }
+                        value={
+                          product.id
+                        }
                       >
                         {product.name}
                         {product.sku
@@ -1108,60 +1169,54 @@ function ReposicionPage() {
               </Select>
             </div>
 
-            {hasVariants && (
-              <div className="space-y-1.5">
-                <Label>
-                  Variante
-                </Label>
+            <div className="space-y-1.5">
+              <Label>
+                Variante
+              </Label>
 
-                <Select
-                  value={
-                    selectedVariant
-                  }
-                  onValueChange={
-                    setSelectedVariant
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        variantsLoading
-                          ? "Cargando variantes..."
-                          : "Selecciona variante"
-                      }
-                    />
-                  </SelectTrigger>
+              <Select
+                value={
+                  selectedVariant
+                }
+                onValueChange={
+                  setSelectedVariant
+                }
+                disabled={
+                  !selectedProduct ||
+                  !hasVariants
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue
+                    placeholder={
+                      hasVariants
+                        ? "Selecciona variante"
+                        : "Sin variante"
+                    }
+                  />
+                </SelectTrigger>
 
-                  <SelectContent>
-                    {variants.map(
-                      (variant) => (
-                        <SelectItem
-                          key={
-                            variant.id
-                          }
-                          value={
-                            variant.id
-                          }
-                        >
-                          {variant.name}
-                          {variant.sku
-                            ? ` — ${variant.sku}`
-                            : ""}
-                        </SelectItem>
-                      ),
-                    )}
-                  </SelectContent>
-                </Select>
-
-                {!variantsLoading &&
-                  variants.length ===
-                    0 && (
-                    <p className="text-xs text-destructive">
-                      Este producto está marcado con variantes pero no tiene variantes configuradas.
-                    </p>
+                <SelectContent>
+                  {variants.map(
+                    (variant) => (
+                      <SelectItem
+                        key={
+                          variant.id
+                        }
+                        value={
+                          variant.id
+                        }
+                      >
+                        {variant.name}
+                        {variant.sku
+                          ? ` — ${variant.sku}`
+                          : ""}
+                      </SelectItem>
+                    ),
                   )}
-              </div>
-            )}
+                </SelectContent>
+              </Select>
+            </div>
 
             <div className="space-y-1.5">
               <Label>
@@ -1173,9 +1228,12 @@ function ReposicionPage() {
                 min="1"
                 step="1"
                 value={quantity}
-                onChange={(event) =>
+                onChange={(
+                  event,
+                ) =>
                   setQuantity(
-                    event.target.value,
+                    event.target
+                      .value,
                   )
                 }
               />
@@ -1188,45 +1246,41 @@ function ReposicionPage() {
 
               <Input
                 value={note}
-                onChange={(event) =>
+                onChange={(
+                  event,
+                ) =>
                   setNote(
-                    event.target.value,
+                    event.target
+                      .value,
                   )
                 }
                 placeholder="Ej. Se está terminando..."
               />
             </div>
-          </div>
 
-          <div className="mt-4 flex flex-col items-end gap-2">
-            {variantRequiredButMissing &&
-              selectedProduct && (
-                <p className="text-xs text-destructive">
-                  Selecciona la variante antes de agregar el producto.
-                </p>
-              )}
-
-            <Button
-              disabled={
-                createRequest.isPending ||
-                !selectedProduct ||
-                variantRequiredButMissing ||
-                variantSelectionInvalid ||
-                variantsLoading
-              }
-              onClick={() =>
-                createRequest.mutate()
-              }
-            >
-              <Plus className="mr-2 h-4 w-4" />
-
-              {createRequest.isPending
-                ? "Agregando..."
-                : "Agregar a reposición"}
-            </Button>
+            <div className="flex items-end">
+              <Button
+                className="w-full"
+                disabled={
+                  createRequest.isPending ||
+                  !selectedProduct
+                }
+                onClick={() =>
+                  createRequest.mutate()
+                }
+              >
+                {createRequest.isPending
+                  ? "Agregando..."
+                  : "Agregar"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* ======================================================
+          SUGERENCIAS
+      ======================================================= */}
 
       <Card className="mb-6">
         <CardHeader>
@@ -1236,6 +1290,7 @@ function ReposicionPage() {
 
           <p className="text-xs text-muted-foreground">
             Productos agotados o debajo de su mínimo configurado.
+            Agregarlos aquí solamente crea una solicitud de compra.
           </p>
         </CardHeader>
 
@@ -1244,7 +1299,8 @@ function ReposicionPage() {
             <p className="py-6 text-center text-sm text-muted-foreground">
               Revisando inventario...
             </p>
-          ) : lowStock.length === 0 ? (
+          ) : lowStock.length ===
+            0 ? (
             <div className="py-6 text-center">
               <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
 
@@ -1346,21 +1402,25 @@ function ReposicionPage() {
                             {row.product_name}
 
                             {row.variant_id && (
-                              <p className="text-xs text-muted-foreground">
+                              <span className="ml-2 text-xs text-muted-foreground">
                                 Variante
-                              </p>
+                              </span>
                             )}
                           </TableCell>
 
                           <TableCell>
                             <Badge
                               variant={
-                                current <= 0
+                                Number(
+                                  row.available_stock,
+                                ) <= 0
                                   ? "destructive"
                                   : "outline"
                               }
                             >
-                              {current}
+                              {Number(
+                                row.available_stock,
+                              )}
                             </Badge>
                           </TableCell>
 
@@ -1400,6 +1460,10 @@ function ReposicionPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* ======================================================
+          LISTA SEMANAL
+      ======================================================= */}
 
       <Card className="mb-6">
         <CardHeader>
@@ -1453,6 +1517,10 @@ function ReposicionPage() {
         </CardContent>
       </Card>
 
+      {/* ======================================================
+          HISTORIAL / SOLICITUDES
+      ======================================================= */}
+
       <Card>
         <CardHeader>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -1462,7 +1530,7 @@ function ReposicionPage() {
               </CardTitle>
 
               <p className="text-xs text-muted-foreground">
-                Recibir una solicitud no modifica el inventario.
+                El cambio a "Recibido" no modifica existencias.
               </p>
             </div>
 
@@ -1472,9 +1540,12 @@ function ReposicionPage() {
 
                 <Input
                   value={search}
-                  onChange={(event) =>
+                  onChange={(
+                    event,
+                  ) =>
                     setSearch(
-                      event.target.value,
+                      event.target
+                        .value,
                     )
                   }
                   placeholder="Buscar producto..."
@@ -1483,8 +1554,12 @@ function ReposicionPage() {
               </div>
 
               <Select
-                value={statusFilter}
-                onValueChange={(value) =>
+                value={
+                  statusFilter
+                }
+                onValueChange={(
+                  value,
+                ) =>
                   setStatusFilter(
                     value as
                       | "all"
@@ -1526,10 +1601,6 @@ function ReposicionPage() {
           {requestsLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Cargando solicitudes...
-            </p>
-          ) : !branchId ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Selecciona una sucursal para consultar las solicitudes.
             </p>
           ) : (
             <Table>
@@ -1574,12 +1645,14 @@ function ReposicionPage() {
                       <TableCell>
                         <div>
                           <p className="font-medium">
-                            {request.product
+                            {request
+                              .product
                               ?.name ??
                               "Producto"}
                           </p>
 
-                          {request.variant
+                          {request
+                            .variant
                             ?.name && (
                             <p className="text-xs text-muted-foreground">
                               {
@@ -1657,7 +1730,8 @@ function ReposicionPage() {
 
                       <TableCell>
                         <span className="text-xs">
-                          {request.requester
+                          {request
+                            .requester
                             ?.full_name ||
                             "Usuario"}
                         </span>
@@ -1690,7 +1764,6 @@ function ReposicionPage() {
                                   )
                                 }
                               >
-                                <PackageCheck className="mr-1 h-4 w-4" />
                                 Comprado
                               </Button>
 

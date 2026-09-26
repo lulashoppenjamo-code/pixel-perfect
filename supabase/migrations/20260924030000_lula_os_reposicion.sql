@@ -51,6 +51,10 @@ CREATE TABLE IF NOT EXISTS public.replenishment_requests (
   received_at timestamptz
 );
 
+-- ============================================================
+-- ÍNDICES
+-- ============================================================
+
 CREATE INDEX IF NOT EXISTS
 replenishment_requests_status_idx
 ON public.replenishment_requests(status);
@@ -71,6 +75,10 @@ CREATE INDEX IF NOT EXISTS
 replenishment_requests_branch_idx
 ON public.replenishment_requests(branch_id);
 
+-- ============================================================
+-- UPDATED_AT
+-- ============================================================
+
 DROP TRIGGER IF EXISTS
 replenishment_requests_updated_at
 ON public.replenishment_requests;
@@ -82,12 +90,21 @@ ON public.replenishment_requests
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
 
+-- ============================================================
+-- RLS
+-- ============================================================
+
 ALTER TABLE public.replenishment_requests
 ENABLE ROW LEVEL SECURITY;
 
 GRANT SELECT, INSERT, UPDATE
 ON public.replenishment_requests
 TO authenticated;
+
+-- ============================================================
+-- CONSULTA
+-- Todos los usuarios autenticados pueden consultar.
+-- ============================================================
 
 DROP POLICY IF EXISTS
 replenishment_requests_read
@@ -99,6 +116,12 @@ ON public.replenishment_requests
 FOR SELECT
 TO authenticated
 USING (true);
+
+-- ============================================================
+-- CREAR
+-- Cualquier usuario autenticado puede crear una solicitud,
+-- pero únicamente a nombre de sí mismo.
+-- ============================================================
 
 DROP POLICY IF EXISTS
 replenishment_requests_create
@@ -112,6 +135,15 @@ TO authenticated
 WITH CHECK (
   requested_by = auth.uid()
 );
+
+-- ============================================================
+-- ACTUALIZAR
+--
+-- Managers pueden administrar todo.
+--
+-- Los demás usuarios solamente pueden modificar sus propias
+-- solicitudes mientras estén pendientes.
+-- ============================================================
 
 DROP POLICY IF EXISTS
 replenishment_requests_update
@@ -136,6 +168,13 @@ WITH CHECK (
     AND status = 'pending'
   )
 );
+
+-- ============================================================
+-- SEGURIDAD EXTRA
+-- ============================================================
+-- No se permite borrar solicitudes desde el frontend.
+-- Se conservan como historial.
+-- ============================================================
 
 COMMENT ON TABLE public.replenishment_requests IS
 'LULA OS: lista de reposición independiente del inventario real. No modifica shared_inventory.';

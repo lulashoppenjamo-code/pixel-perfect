@@ -23,8 +23,6 @@ import {
   type NavKey,
 } from "@/lib/permissions";
 
-import { InventoryAlerts } from "@/components/inventory/InventoryAlerts";
-
 import {
   ShoppingBag,
   Receipt,
@@ -78,9 +76,9 @@ function ShellErrorComponent({
         </Button>
 
         <Button
-          onClick={() => {
-            window.location.href = "/auth";
-          }}
+          onClick={() =>
+            (window.location.href = "/auth")
+          }
           variant="outline"
         >
           Ir al Login
@@ -114,72 +112,84 @@ function ShellLayout() {
       icon: ShoppingBag,
       key: "caja",
     },
+
     {
       label: "Historial de ventas",
       path: "/ventas",
       icon: Receipt,
       key: "ventas",
     },
+
     {
       label: "Productos",
       path: "/productos",
       icon: Package,
       key: "productos",
     },
+
     {
       label: "Inventario",
       path: "/inventario",
       icon: Boxes,
       key: "inventario",
     },
+
     {
       label: "Reposición",
       path: "/reposicion",
       icon: ShoppingCart,
       key: "reposicion",
     },
+
     {
       label: "Compras",
       path: "/compras",
       icon: Truck,
       key: "compras",
     },
+
     {
       label: "Clientes",
       path: "/clientes",
       icon: Users,
       key: "clientes",
     },
+
     {
       label: "Devoluciones",
       path: "/devoluciones",
       icon: Undo2,
       key: "devoluciones",
     },
+
     {
       label: "Gastos",
       path: "/gastos",
       icon: Wallet,
       key: "gastos",
     },
+
     {
       label: "Pedidos",
       path: "/pedidos",
       icon: ClipboardList,
       key: "pedidos",
     },
+
     {
       label: "Reportes",
       path: "/reportes",
       icon: TrendingUp,
       key: "reportes",
     },
+
     {
       label: "CEO",
       path: "/ceo",
       icon: TrendingUp,
       key: "ceo",
     },
+
     {
       label: "Ajustes",
       path: "/ajustes",
@@ -193,7 +203,8 @@ function ShellLayout() {
     roles,
   );
 
-  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreOpen, setMoreOpen] =
+    useState(false);
 
   const primaryKeys: NavKey[] = [
     "caja",
@@ -217,12 +228,6 @@ function ShellLayout() {
     navigate({ to: path });
   };
 
-  const openInventory = () => {
-    navigate({
-      to: "/inventario",
-    });
-  };
-
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       <aside className="hidden w-64 select-none flex-col justify-between border-r bg-card p-4 md:flex">
@@ -240,15 +245,6 @@ function ShellLayout() {
               <p className="text-xs text-muted-foreground">
                 Punto de Venta
               </p>
-            </div>
-
-            <div className="ml-auto">
-              <InventoryAlerts
-                compact
-                onOpenInventory={
-                  openInventory
-                }
-              />
             </div>
           </div>
 
@@ -306,6 +302,7 @@ function ShellLayout() {
                   }`}
                 >
                   <Icon className="h-4 w-4" />
+
                   {item.label}
                 </button>
               );
@@ -337,15 +334,6 @@ function ShellLayout() {
       </aside>
 
       <main className="flex-1 overflow-y-auto bg-slate-50/50 p-4 pb-20 md:p-6 md:pb-6">
-        <div className="mb-3 flex items-center justify-end md:hidden">
-          <InventoryAlerts
-            compact
-            onOpenInventory={
-              openInventory
-            }
-          />
-        </div>
-
         <Outlet />
       </main>
 
@@ -393,6 +381,7 @@ function ShellLayout() {
             className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-muted-foreground"
           >
             <MoreHorizontal className="h-5 w-5" />
+
             <span>Más</span>
           </button>
         )}
@@ -445,25 +434,6 @@ function ShellLayout() {
                   </option>
                 )}
               </select>
-            </div>
-
-            <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-3">
-              <div>
-                <p className="text-sm font-semibold">
-                  Alertas de inventario
-                </p>
-
-                <p className="text-xs text-muted-foreground">
-                  Stock agotado o bajo mínimo
-                </p>
-              </div>
-
-              <InventoryAlerts
-                compact
-                onOpenInventory={
-                  openInventory
-                }
-              />
             </div>
 
             <div className="grid grid-cols-3 gap-2">

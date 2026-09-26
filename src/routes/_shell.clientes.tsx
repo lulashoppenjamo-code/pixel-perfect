@@ -1,41 +1,19 @@
 /**
  * Clientes — LULA OS
+ * CRUD + historial + saldo crédito + abonos
  *
- * CRUD de clientes
- * Historial de compras
- * Historial de crédito
- * Saldo pendiente
- * Abonos
+ * IMPORTANTE:
+ * Los abonos se registran mediante RPC:
+ *   register_credit_payment()
  *
- * Los abonos pasan exclusivamente por:
- * register_credit_payment()
+ * No se inserta directamente en credit_payments desde el frontend.
  */
-
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-  Pencil,
-  Trash2,
-  Search,
-  Wallet,
-  Users,
-  History,
-  CreditCard,
-  UserCheck,
-  AlertCircle,
-  ShoppingBag,
-} from "lucide-react";
-
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-
-import { toast } from "sonner";
-
 import { RequireNavAccess } from "@/components/RequireNavAccess";
-import { CreditHistoryDialog } from "@/components/customers/CreditHistoryDialog";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { Pencil, Trash2, Search, Wallet, Users } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -85,9 +63,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 
-export const Route = createFileRoute(
-  "/_shell/clientes",
-)({
+export const Route = createFileRoute("/_shell/clientes")({
   head: () => ({
     meta: [{ title: "Clientes — Lula OS" }],
   }),
@@ -138,13 +114,6 @@ type CreditPaymentRow = {
   amount: number;
 };
 
-type CustomerStats = {
-  count: number;
-  total: number;
-  credit: number;
-  last: string | null;
-};
-
 function ClientesPage() {
   const { isManager } = useAuth();
   const { branchId } = useBranch();
@@ -157,17 +126,16 @@ function ClientesPage() {
     useState<string | null>(null);
 
   const [payAmount, setPayAmount] = useState("");
-  const [payMethod, setPayMethod] =
-    useState("cash");
+  const [payMethod, setPayMethod] = useState("cash");
   const [payNotes, setPayNotes] = useState("");
 
-  const [historyCustomerId, setHistoryCustomerId] =
-    useState<string | null>(null);
+  // ============================================================
+  // CLIENTES
+  // ============================================================
 
   const {
     data: customers = [],
     isLoading,
-    isError: customersError,
   } = useQuery<CustomerRow[]>({
     queryKey: ["customers"],
 
@@ -177,17 +145,18 @@ function ClientesPage() {
         .select("*")
         .order("name");
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       return (data ?? []) as CustomerRow[];
     },
   });
 
+  // ============================================================
+  // VENTAS POR CLIENTE
+  // ============================================================
+
   const {
     data: salesByCustomer = [],
-    isError: salesError,
   } = useQuery<SaleCustomerRow[]>({
     queryKey: ["customer-sales-agg"],
 
@@ -203,17 +172,18 @@ function ClientesPage() {
           "partially_refunded",
         ]);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       return (data ?? []) as SaleCustomerRow[];
     },
   });
 
+  // ============================================================
+  // ABONOS
+  // ============================================================
+
   const {
     data: creditPayments = [],
-    isError: paymentsError,
   } = useQuery<CreditPaymentRow[]>({
     queryKey: ["credit-payments"],
 
@@ -237,13 +207,23 @@ function ClientesPage() {
     },
   });
 
+  // ============================================================
+  // ESTADÍSTICAS
+  // ============================================================
+
   const stats = useMemo(() => {
-    const map = new Map<string, CustomerStats>();
+    const map = new Map<
+      string,
+      {
+        count: number;
+        total: number;
+        credit: number;
+        last: string | null;
+      }
+    >();
 
     for (const sale of salesByCustomer) {
-      if (!sale.customer_id) {
-        continue;
-      }
+      if (!sale.customer_id) continue;
 
       const current =
         map.get(sale.customer_id) ?? {
@@ -254,15 +234,10 @@ function ClientesPage() {
         };
 
       current.count += 1;
-
-      current.total += Number(
-        sale.total ?? 0,
-      );
+      current.total += Number(sale.total ?? 0);
 
       if (sale.payment_method === "credit") {
-        current.credit += Number(
-          sale.total ?? 0,
-        );
+        current.credit += Number(sale.total ?? 0);
       }
 
       if (
@@ -285,10 +260,7 @@ function ClientesPage() {
       );
     }
 
-    for (const [
-      customerId,
-      current,
-    ] of map) {
+    for (const [customerId, current] of map) {
       current.credit = Math.max(
         0,
         current.credit -
@@ -299,63 +271,31 @@ function ClientesPage() {
     return map;
   }, [salesByCustomer, creditPayments]);
 
-  const dashboard = useMemo(() => {
-    let totalPurchases = 0;
-    let totalCredit = 0;
-    let customersWithPurchases = 0;
-    let customersWithDebt = 0;
+  // ============================================================
+  // FILTRO
+  // ============================================================
 
-    for (const customer of customers) {
-      const stat = stats.get(customer.id);
+  const filtered = customers.filter((customer) => {
+    if (!search.trim()) return true;
 
-      if (!stat) {
-        continue;
-      }
+    const q = search.trim().toLowerCase();
 
-      totalPurchases += stat.total;
+    return (
+      customer.name
+        .toLowerCase()
+        .includes(q) ||
+      (customer.phone ?? "")
+        .toLowerCase()
+        .includes(q) ||
+      (customer.email ?? "")
+        .toLowerCase()
+        .includes(q)
+    );
+  });
 
-      if (stat.count > 0) {
-        customersWithPurchases += 1;
-      }
-
-      if (stat.credit > 0) {
-        customersWithDebt += 1;
-        totalCredit += stat.credit;
-      }
-    }
-
-    return {
-      totalCustomers: customers.length,
-      customersWithPurchases,
-      customersWithDebt,
-      totalPurchases,
-      totalCredit,
-    };
-  }, [customers, stats]);
-
-  const filtered = customers.filter(
-    (customer) => {
-      if (!search.trim()) {
-        return true;
-      }
-
-      const q = search
-        .trim()
-        .toLowerCase();
-
-      return (
-        customer.name
-          .toLowerCase()
-          .includes(q) ||
-        (customer.phone ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        (customer.email ?? "")
-          .toLowerCase()
-          .includes(q)
-      );
-    },
-  );
+  // ============================================================
+  // CREAR / ACTUALIZAR CLIENTE
+  // ============================================================
 
   const save = useMutation({
     mutationFn: async () => {
@@ -365,38 +305,28 @@ function ClientesPage() {
 
       const payload = {
         name: form.name.trim(),
-        phone:
-          form.phone.trim() || null,
-        email:
-          form.email.trim() || null,
-        notes:
-          form.notes.trim() || null,
-        address:
-          form.address.trim() || null,
+        phone: form.phone.trim() || null,
+        email: form.email.trim() || null,
+        notes: form.notes.trim() || null,
+        address: form.address.trim() || null,
       };
 
       if (form.id) {
-        const { error } =
-          await supabase
-            .from("customers")
-            .update(payload)
-            .eq("id", form.id);
+        const { error } = await supabase
+          .from("customers")
+          .update(payload)
+          .eq("id", form.id);
 
-        if (error) {
-          throw error;
-        }
+        if (error) throw error;
 
         return;
       }
 
-      const { error } =
-        await supabase
-          .from("customers")
-          .insert(payload);
+      const { error } = await supabase
+        .from("customers")
+        .insert(payload);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
     },
 
     onSuccess: () => {
@@ -422,24 +352,18 @@ function ClientesPage() {
     },
   });
 
+  // ============================================================
+  // ELIMINAR CLIENTE
+  // ============================================================
+
   const remove = useMutation({
     mutationFn: async (id: string) => {
-      const stat = stats.get(id);
-
-      if (stat && stat.credit > 0) {
-        throw new Error(
-          "No puedes eliminar un cliente con saldo pendiente.",
-        );
-      }
-
       const { error } = await supabase
         .from("customers")
         .delete()
         .eq("id", id);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
     },
 
     onSuccess: () => {
@@ -459,12 +383,21 @@ function ClientesPage() {
     },
   });
 
+  // ============================================================
+  // REGISTRAR ABONO
+  //
+  // IMPORTANTE:
+  // Ya NO hacemos:
+  //
+  // supabase.from("credit_payments").insert(...)
+  //
+  // Todo pasa por register_credit_payment().
+  // ============================================================
+
   const registerPayment = useMutation({
     mutationFn: async () => {
       if (!payCustomerId) {
-        throw new Error(
-          "Selecciona un cliente",
-        );
+        throw new Error("Selecciona un cliente");
       }
 
       const amount = Number(payAmount);
@@ -479,23 +412,12 @@ function ClientesPage() {
       }
 
       if (
-        ![
-          "cash",
-          "card",
-          "transfer",
-        ].includes(payMethod)
+        !["cash", "card", "transfer"].includes(
+          payMethod,
+        )
       ) {
         throw new Error(
           "Método de pago inválido",
-        );
-      }
-
-      if (
-        amount >
-        paymentCustomerBalance + 0.005
-      ) {
-        throw new Error(
-          "El abono no puede superar el saldo pendiente.",
         );
       }
 
@@ -503,20 +425,13 @@ function ClientesPage() {
         await (supabase as any).rpc(
           "register_credit_payment",
           {
-            _customer_id:
-              payCustomerId,
-            _amount: Number(
-              amount.toFixed(2),
-            ),
-            _payment_method:
-              payMethod,
-            _branch_id:
-              branchId ?? null,
-            _cash_session_id:
-              null,
+            _customer_id: payCustomerId,
+            _amount: amount,
+            _payment_method: payMethod,
+            _branch_id: branchId ?? null,
+            _cash_session_id: null,
             _notes:
-              payNotes.trim() ||
-              null,
+              payNotes.trim() || null,
           },
         );
 
@@ -528,9 +443,7 @@ function ClientesPage() {
     },
 
     onSuccess: () => {
-      toast.success(
-        "Abono registrado correctamente",
-      );
+      toast.success("Abono registrado correctamente");
 
       setPayCustomerId(null);
       setPayAmount("");
@@ -556,172 +469,54 @@ function ClientesPage() {
       void qc.invalidateQueries({
         queryKey: ["cash-movements"],
       });
-
-      void qc.invalidateQueries({
-        queryKey: [
-          "customer-credit-history",
-        ],
-      });
     },
 
     onError: (error: Error) => {
-      toast.error(
+      const message =
         error.message ||
-          "No se pudo registrar el abono",
-      );
+        "No se pudo registrar el abono";
+
+      toast.error(message);
     },
   });
 
+  // ============================================================
+  // CLIENTE SELECCIONADO PARA ABONO
+  // ============================================================
+
   const paymentCustomer = useMemo(() => {
-    if (!payCustomerId) {
-      return null;
-    }
+    if (!payCustomerId) return null;
 
     return (
       customers.find(
         (customer) =>
-          customer.id ===
-          payCustomerId,
+          customer.id === payCustomerId,
       ) ?? null
     );
   }, [customers, payCustomerId]);
 
   const paymentCustomerBalance =
     payCustomerId
-      ? stats.get(payCustomerId)
-          ?.credit ?? 0
+      ? stats.get(payCustomerId)?.credit ?? 0
       : 0;
 
-  const historyCustomer = useMemo(
-    () =>
-      customers.find(
-        (customer) =>
-          customer.id ===
-          historyCustomerId,
-      ) ?? null,
-    [customers, historyCustomerId],
-  );
-
-  const historyBalance =
-    historyCustomerId
-      ? stats.get(historyCustomerId)
-          ?.credit ?? 0
-      : 0;
-
-  const hasDataError =
-    customersError ||
-    salesError ||
-    paymentsError;
+  // ============================================================
+  // UI
+  // ============================================================
 
   return (
     <PageShell>
       <PageHeader
         icon={Users}
         title="Clientes"
-        description="Contactos, historial de compras, crédito y abonos."
+        description="Contactos, historial de compras, saldo a crédito y abonos."
       />
 
-      {hasDataError && (
-        <Card className="border-destructive/40">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-
-            <div>
-              <p className="font-medium">
-                No se pudieron cargar todos los datos.
-              </p>
-
-              <p className="text-sm text-muted-foreground">
-                Actualiza la página e inténtalo nuevamente.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Clientes
-              </p>
-
-              <p className="mt-1 text-2xl font-semibold">
-                {dashboard.totalCustomers}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                registrados
-              </p>
-            </div>
-
-            <Users className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Clientes activos
-              </p>
-
-              <p className="mt-1 text-2xl font-semibold">
-                {dashboard.customersWithPurchases}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                con compras
-              </p>
-            </div>
-
-            <UserCheck className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Saldo pendiente
-              </p>
-
-              <p className="mt-1 text-2xl font-semibold">
-                {money(dashboard.totalCredit)}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                {dashboard.customersWithDebt} con deuda
-              </p>
-            </div>
-
-            <CreditCard className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-xs text-muted-foreground">
-                Compras acumuladas
-              </p>
-
-              <p className="mt-1 text-2xl font-semibold">
-                {money(dashboard.totalPurchases)}
-              </p>
-
-              <p className="text-xs text-muted-foreground">
-                clientes registrados
-              </p>
-            </div>
-
-            <ShoppingBag className="h-5 w-5 text-muted-foreground" />
-          </CardContent>
-        </Card>
-      </div>
-
       <div className="grid gap-4 lg:grid-cols-3">
+        {/* ======================================================
+            FORMULARIO CLIENTE
+        ====================================================== */}
+
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">
@@ -743,7 +538,6 @@ function ClientesPage() {
                     name: event.target.value,
                   }))
                 }
-                placeholder="Nombre del cliente"
               />
             </div>
 
@@ -755,11 +549,9 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    phone:
-                      event.target.value,
+                    phone: event.target.value,
                   }))
                 }
-                placeholder="Opcional"
               />
             </div>
 
@@ -772,11 +564,9 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    email:
-                      event.target.value,
+                    email: event.target.value,
                   }))
                 }
-                placeholder="Opcional"
               />
             </div>
 
@@ -788,8 +578,7 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    address:
-                      event.target.value,
+                    address: event.target.value,
                   }))
                 }
                 placeholder="Opcional"
@@ -804,15 +593,13 @@ function ClientesPage() {
                 onChange={(event) =>
                   setForm((current) => ({
                     ...current,
-                    notes:
-                      event.target.value,
+                    notes: event.target.value,
                   }))
                 }
-                placeholder="Opcional"
               />
             </div>
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2">
               {form.id && (
                 <Button
                   variant="outline"
@@ -827,10 +614,7 @@ function ClientesPage() {
 
               <Button
                 className="flex-1"
-                disabled={
-                  save.isPending ||
-                  !form.name.trim()
-                }
+                disabled={save.isPending}
                 onClick={() =>
                   save.mutate()
                 }
@@ -845,245 +629,207 @@ function ClientesPage() {
           </CardContent>
         </Card>
 
+        {/* ======================================================
+            LISTADO
+        ====================================================== */}
+
         <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-base">
-                Clientes
-              </CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-base">
+              Listado
+            </CardTitle>
 
-              <p className="text-xs text-muted-foreground">
-                Busca por nombre, teléfono o correo.
-              </p>
-            </div>
-
-            <div className="relative w-full sm:w-56">
+            <div className="relative w-48">
               <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
 
               <Input
-                className="h-9 pl-7"
-                placeholder="Buscar cliente…"
+                className="h-8 pl-7"
+                placeholder="Buscar…"
                 value={search}
                 onChange={(event) =>
-                  setSearch(
-                    event.target.value,
-                  )
+                  setSearch(event.target.value)
                 }
               />
             </div>
           </CardHeader>
 
           <CardContent>
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      Cliente
-                    </TableHead>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    Nombre
+                  </TableHead>
 
-                    <TableHead>
-                      Teléfono
-                    </TableHead>
+                  <TableHead>
+                    Teléfono
+                  </TableHead>
 
-                    <TableHead className="text-right">
-                      Compras
-                    </TableHead>
+                  <TableHead className="text-right">
+                    Compras
+                  </TableHead>
 
-                    <TableHead className="text-right">
-                      Total
-                    </TableHead>
+                  <TableHead className="text-right">
+                    Total
+                  </TableHead>
 
-                    <TableHead className="text-right">
-                      Crédito
-                    </TableHead>
+                  <TableHead className="text-right">
+                    Saldo crédito
+                  </TableHead>
 
-                    <TableHead className="text-right">
-                      Acciones
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
+                  <TableHead className="text-right">
+                    Acciones
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
 
-                <TableBody>
-                  {filtered.map(
-                    (customer) => {
-                      const stat =
-                        stats.get(
-                          customer.id,
-                        );
+              <TableBody>
+                {filtered.map((customer) => {
+                  const stat =
+                    stats.get(customer.id);
 
-                      const balance =
-                        stat?.credit ?? 0;
+                  const balance =
+                    stat?.credit ?? 0;
 
-                      return (
-                        <TableRow
-                          key={customer.id}
-                        >
-                          <TableCell>
-                            <div className="min-w-[150px]">
-                              <div className="font-medium">
-                                {customer.name}
-                              </div>
+                  return (
+                    <TableRow
+                      key={customer.id}
+                    >
+                      <TableCell className="font-medium">
+                        {customer.name}
+                      </TableCell>
 
-                              {customer.email && (
-                                <div className="truncate text-xs text-muted-foreground">
-                                  {customer.email}
-                                </div>
-                              )}
-                            </div>
-                          </TableCell>
+                      <TableCell className="text-sm">
+                        {customer.phone ?? "—"}
+                      </TableCell>
 
-                          <TableCell className="text-sm">
-                            {customer.phone ??
-                              "—"}
-                          </TableCell>
+                      <TableCell className="text-right">
+                        {stat?.count ?? 0}
+                      </TableCell>
 
-                          <TableCell className="text-right">
-                            {stat?.count ?? 0}
-                          </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {money(
+                          stat?.total ?? 0,
+                        )}
+                      </TableCell>
 
-                          <TableCell className="text-right font-medium">
-                            {money(
-                              stat?.total ??
-                                0,
-                            )}
-                          </TableCell>
+                      <TableCell className="text-right">
+                        {balance > 0 ? (
+                          <Badge variant="destructive">
+                            {money(balance)}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">
+                            $0
+                          </span>
+                        )}
+                      </TableCell>
 
-                          <TableCell className="text-right">
-                            {balance > 0 ? (
-                              <Badge variant="destructive">
-                                {money(balance)}
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary">
-                                $0
-                              </Badge>
-                            )}
-                          </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          {/* ABONO */}
 
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-1">
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8"
-                                title="Ver historial de crédito"
-                                onClick={() =>
-                                  setHistoryCustomerId(
-                                    customer.id,
-                                  )
-                                }
-                              >
-                                <History className="h-3.5 w-3.5" />
-                              </Button>
+                          {balance > 0 && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8"
+                              title="Registrar abono"
+                              onClick={() => {
+                                setPayCustomerId(
+                                  customer.id,
+                                );
 
-                              {balance > 0 && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8"
-                                  title="Registrar abono"
-                                  onClick={() => {
-                                    setPayCustomerId(
-                                      customer.id,
-                                    );
+                                setPayAmount(
+                                  balance.toFixed(
+                                    2,
+                                  ),
+                                );
 
-                                    setPayAmount(
-                                      balance.toFixed(
-                                        2,
-                                      ),
-                                    );
+                                setPayMethod(
+                                  "cash",
+                                );
 
-                                    setPayMethod(
-                                      "cash",
-                                    );
+                                setPayNotes("");
+                              }}
+                            >
+                              <Wallet className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
 
-                                    setPayNotes(
-                                      "",
-                                    );
-                                  }}
-                                >
-                                  <Wallet className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
+                          {/* EDITAR */}
 
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                className="h-8 w-8"
-                                title="Editar cliente"
-                                onClick={() =>
-                                  setForm({
-                                    id: customer.id,
-                                    name:
-                                      customer.name,
-                                    phone:
-                                      customer.phone ??
-                                      "",
-                                    email:
-                                      customer.email ??
-                                      "",
-                                    notes:
-                                      customer.notes ??
-                                      "",
-                                    address:
-                                      customer.address ??
-                                      "",
-                                  })
-                                }
-                              >
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8"
+                            title="Editar cliente"
+                            onClick={() =>
+                              setForm({
+                                id: customer.id,
+                                name:
+                                  customer.name,
+                                phone:
+                                  customer.phone ??
+                                  "",
+                                email:
+                                  customer.email ??
+                                  "",
+                                notes:
+                                  customer.notes ??
+                                  "",
+                                address:
+                                  customer.address ??
+                                  "",
+                              })
+                            }
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
 
-                              {isManager && (
-                                <Button
-                                  size="icon"
-                                  variant="ghost"
-                                  className="h-8 w-8 text-destructive"
-                                  title={
-                                    balance > 0
-                                      ? "No se puede eliminar con saldo pendiente"
-                                      : "Eliminar cliente"
-                                  }
-                                  disabled={
-                                    remove.isPending ||
-                                    balance > 0
-                                  }
-                                  onClick={() =>
-                                    remove.mutate(
-                                      customer.id,
-                                    )
-                                  }
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    },
+                          {/* ELIMINAR */}
+
+                          {isManager && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-destructive"
+                              title="Eliminar cliente"
+                              onClick={() =>
+                                remove.mutate(
+                                  customer.id,
+                                )
+                              }
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+
+                {!isLoading &&
+                  filtered.length === 0 && (
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        className="py-10 text-center text-muted-foreground"
+                      >
+                        Sin clientes.
+                      </TableCell>
+                    </TableRow>
                   )}
-
-                  {!isLoading &&
-                    filtered.length === 0 && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={6}
-                          className="py-10 text-center text-muted-foreground"
-                        >
-                          {search.trim()
-                            ? "No se encontraron clientes."
-                            : "Sin clientes."}
-                        </TableCell>
-                      </TableRow>
-                    )}
-                </TableBody>
-              </Table>
-            </div>
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
+
+      {/* ========================================================
+          DIALOG ABONO
+      ======================================================== */}
 
       <Dialog
         open={!!payCustomerId}
@@ -1104,6 +850,8 @@ function ClientesPage() {
           </DialogHeader>
 
           <div className="space-y-4">
+            {/* CLIENTE */}
+
             {paymentCustomer && (
               <div className="rounded-lg border bg-muted/30 p-3">
                 <div className="text-sm font-medium">
@@ -1130,6 +878,8 @@ function ClientesPage() {
               </div>
             )}
 
+            {/* MONTO */}
+
             <div>
               <Label>Monto</Label>
 
@@ -1137,8 +887,7 @@ function ClientesPage() {
                 type="number"
                 min="0.01"
                 max={
-                  paymentCustomerBalance >
-                  0
+                  paymentCustomerBalance > 0
                     ? paymentCustomerBalance
                     : undefined
                 }
@@ -1158,6 +907,8 @@ function ClientesPage() {
                 )}
               </p>
             </div>
+
+            {/* MÉTODO */}
 
             <div>
               <Label>
@@ -1191,13 +942,14 @@ function ClientesPage() {
 
               {payMethod === "cash" && (
                 <p className="mt-1 text-xs text-muted-foreground">
-                  El sistema buscará
-                  automáticamente la caja
-                  abierta y registrará el
+                  El sistema buscará automáticamente
+                  la caja abierta y registrará el
                   efectivo como entrada.
                 </p>
               )}
             </div>
+
+            {/* NOTAS */}
 
             <div>
               <Label>Notas</Label>
@@ -1246,20 +998,6 @@ function ClientesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <CreditHistoryDialog
-        open={!!historyCustomerId}
-        onOpenChange={(open) => {
-          if (!open) {
-            setHistoryCustomerId(null);
-          }
-        }}
-        customerId={historyCustomerId}
-        customerName={
-          historyCustomer?.name
-        }
-        balance={historyBalance}
-      />
     </PageShell>
   );
 }
