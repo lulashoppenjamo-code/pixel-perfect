@@ -7,12 +7,9 @@ import {
   type ReactNode,
 } from "react";
 
-import {
-  useQuery,
-} from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
-
 import { useAuth } from "@/lib/auth";
 
 export type Branch = {
@@ -30,22 +27,27 @@ type BranchState = {
   loading: boolean;
 };
 
-const Ctx =
-  createContext<BranchState | null>(
-    null,
-  );
+const Ctx = createContext<BranchState | null>(null);
+
+const STORAGE_KEY = "lula-os-active-branch";
 
 export function useBranches() {
+  const { user, profile } = useAuth();
+
   return useQuery({
-    queryKey: ["branches"],
+    queryKey: ["branches", user?.id],
+
+    enabled:
+      !!user &&
+      !!profile &&
+      profile.is_active === true,
 
     queryFn: async () => {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from("branches")
-        .select("*")
+        .select(
+          "id, name, address, phone, is_active",
+        )
         .eq("is_active", true)
         .order("name");
 
@@ -53,10 +55,48 @@ export function useBranches() {
         throw error;
       }
 
-      return (data ??
-        []) as Branch[];
+      return (data ?? []) as Branch[];
     },
   });
+}
+
+function readStoredBranchId(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    return (
+      window.localStorage.getItem(
+        STORAGE_KEY,
+      ) || null
+    );
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredBranchId(
+  branchId: string | null,
+) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    if (branchId) {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        branchId,
+      );
+    } else {
+      window.localStorage.removeItem(
+        STORAGE_KEY,
+      );
+    }
+  } catch {
+    // El sistema sigue funcionando aunque localStorage no esté disponible.
+  }
 }
 
 export function BranchProvider({
@@ -64,32 +104,27 @@ export function BranchProvider({
 }: {
   children: ReactNode;
 }) {
-  const {
-    profile,
-    roles,
-  } = useAuth();
+  const { profile, roles, user } = useAuth();
 
   const {
     data: allBranches = [],
     isLoading,
+    isFetching,
   } = useBranches();
 
+  const isOwnerOrAdmin =
+    roles.includes("owner") ||
+    roles.includes("admin");
+
   /*
-   * Owner y admin pueden operar cualquier sucursal activa.
+   * Owner/admin:
+   * pueden trabajar con cualquier sucursal activa.
    *
-   * Manager, cashier y staff quedan limitados a la
-   * sucursal asignada a su perfil.
-   *
-   * Esto coincide con la seguridad del backend y evita
-   * que la UI permita seleccionar una sucursal que
-   * posteriormente sería rechazada por RLS/RPC.
+   * Manager/cashier/staff:
+   * solamente con la sucursal asignada al perfil.
    */
   const branches = useMemo(() => {
-    const isAdmin =
-      roles.includes("owner") ||
-      roles.includes("admin");
-
-    if (isAdmin) {
+    if (isOwnerOrAdmin) {
       return allBranches;
     }
 
@@ -99,27 +134,174 @@ export function BranchProvider({
 
     return allBranches.filter(
       (branch) =>
-        branch.id ===
-        profile.branch_id,
+        branch.id === profile.branch_id,
     );
   }, [
     allBranches,
+    isOwnerOrAdmin,
     profile?.branch_id,
-    roles,
   ]);
 
+  /*
+   * Recuperamos la última sucursal usada.
+   *
+   * Esto evita que al entrar nuevamente al sistema
+   * el owner/admin termine automáticamente en la
+   * primera sucursal.
+   */
   const [
     branchId,
     setBranchIdState,
   ] = useState<string | null>(
-    null,
+    readStoredBranchId,
   );
 
   /*
-   * Cambio controlado de sucursal.
+   * Cuando cambia de usuario, no debemos conservar
+   * la sucursal del usuario anterior.
+   */
+  const [
+    branchUserId,
+    setBranchUserId,
+  ] = useState<string | null>(null);
+
+  useEffect(() => {
+    const currentUserId =
+      user?.id ?? null;
+
+    if (
+      currentUserId !==
+      branchUserId
+    ) {
+      setBranchUserId(
+        currentUserId,
+      );
+
+      /*
+       * No eliminamos todavía el valor almacenado.
+       * Primero verificamos abajo si sigue siendo válido.
+       */
+    }
+  }, [
+    user?.id,
+    branchUserId,
+  ]);
+
+  /*
+   * Mantiene la sucursal seleccionada válida
+   * respecto a las sucursales realmente permitidas.
+   */
+  useEffect(() => {
+    if (!user || !profile?.is_active) {
+      if (branchId !== null) {
+        setBranchIdState(null);
+      }
+
+      return;
+    }
+
+    /*
+     * Mientras se están cargando las sucursales
+     * no cambiamos la selección actual.
+     */
+    if (isLoading || isFetching) {
+      return;
+    }
+
+    if (branches.length === 0) {
+      if (branchId !== null) {
+        setBranchIdState(null);
+        writeStoredBranchId(null);
+      }
+
+      return;
+    }
+
+    /*
+     * 1. Si la selección actual sigue permitida,
+     *    la conservamos.
+     */
+    const currentIsValid =
+      branchId !== null &&
+      branches.some(
+        (branch) =>
+          branch.id === branchId,
+      );
+
+    if (currentIsValid) {
+      writeStoredBranchId(branchId);
+      return;
+    }
+
+    /*
+     * 2. Para usuarios limitados por perfil,
+     *    siempre debe ganar branch_id del perfil.
+     */
+    if (
+      !isOwnerOrAdmin &&
+      profile.branch_id &&
+      branches.some(
+        (branch) =>
+          branch.id ===
+          profile.branch_id,
+      )
+    ) {
+      setBranchIdState(
+        profile.branch_id,
+      );
+
+      writeStoredBranchId(
+        profile.branch_id,
+      );
+
+      return;
+    }
+
+    /*
+     * 3. Owner/admin:
+     *    si la sucursal guardada ya no existe,
+     *    usamos la primera disponible.
+     */
+    const stored =
+      readStoredBranchId();
+
+    if (
+      isOwnerOrAdmin &&
+      stored &&
+      branches.some(
+        (branch) =>
+          branch.id === stored,
+      )
+    ) {
+      setBranchIdState(stored);
+      return;
+    }
+
+    /*
+     * 4. Último recurso:
+     *    primera sucursal activa.
+     */
+    const first =
+      branches[0]?.id ?? null;
+
+    setBranchIdState(first);
+    writeStoredBranchId(first);
+  }, [
+    user,
+    profile?.is_active,
+    profile?.branch_id,
+    branches,
+    branchId,
+    isOwnerOrAdmin,
+    isLoading,
+    isFetching,
+  ]);
+
+  /*
+   * Cambio manual de sucursal.
    *
-   * Nunca permitimos establecer desde la UI
-   * una sucursal que el usuario no tenga disponible.
+   * La UI nunca puede seleccionar una sucursal
+   * que no esté dentro de "branches".
    */
   const setBranchId = (
     id: string,
@@ -135,57 +317,32 @@ export function BranchProvider({
     }
 
     setBranchIdState(id);
+    writeStoredBranchId(id);
   };
 
   /*
-   * Selección inicial:
-   *
-   * 1. Conserva la sucursal actual si todavía es válida.
-   * 2. Para usuarios con sucursal asignada, usa esa.
-   * 3. Para owner/admin sin asignación, usa la primera.
+   * Si cambia el usuario autenticado, eliminamos
+   * cualquier selección que no corresponda a su acceso.
    */
   useEffect(() => {
-    if (branches.length === 0) {
-      if (branchId !== null) {
-        setBranchIdState(null);
-      }
-
-      return;
-    }
-
-    const currentIsValid =
-      branchId !== null &&
-      branches.some(
-        (branch) =>
-          branch.id === branchId,
-      );
-
-    if (currentIsValid) {
+    if (!user || !profile?.is_active) {
+      writeStoredBranchId(null);
       return;
     }
 
     if (
-      profile?.branch_id &&
-      branches.some(
-        (branch) =>
-          branch.id ===
-          profile.branch_id,
-      )
+      !isOwnerOrAdmin &&
+      profile.branch_id
     ) {
-      setBranchIdState(
+      writeStoredBranchId(
         profile.branch_id,
       );
-
-      return;
     }
-
-    setBranchIdState(
-      branches[0]!.id,
-    );
   }, [
-    branches,
-    branchId,
+    user?.id,
+    profile?.is_active,
     profile?.branch_id,
+    isOwnerOrAdmin,
   ]);
 
   const value = useMemo(
@@ -193,12 +350,15 @@ export function BranchProvider({
       branches,
       branchId,
       setBranchId,
-      loading: isLoading,
+      loading:
+        isLoading ||
+        isFetching,
     }),
     [
       branches,
       branchId,
       isLoading,
+      isFetching,
     ],
   );
 
