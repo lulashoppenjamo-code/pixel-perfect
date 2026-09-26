@@ -186,6 +186,7 @@ export type CeoAnalysis = {
 
   topProducts: CeoProductPerformance[];
   topProfitProducts: CeoProductPerformance[];
+
   catalogMargins: Array<{
     id: string;
     name: string;
@@ -373,9 +374,16 @@ export function buildCeoAnalysis({
       tomorrowStart,
     );
 
+  // Los 7 días anteriores también deben salir
+  // de sales30, ya que sales30 contiene los
+  // últimos 30 días completos disponibles.
+  //
+  // salesPrevious corresponde al periodo
+  // anterior de 30 días y se utiliza para
+  // la comparación mensual.
   const previous7 =
     getSalesBetween(
-      salesPrevious,
+      sales30,
       previous7Start,
       last8Start,
     );
