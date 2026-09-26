@@ -753,7 +753,7 @@ function ReposicionPage() {
             status ===
             "purchased"
           ) {
-            values.purchased_at =
+            values["purchased_at"] =
               new Date().toISOString();
           }
 
@@ -761,7 +761,7 @@ function ReposicionPage() {
             status ===
             "received"
           ) {
-            values.received_at =
+            values["received_at"] =
               new Date().toISOString();
           }
 

@@ -1534,8 +1534,8 @@ function KpiCard({
   title: string;
   value: string;
   icon: typeof DollarSign;
-  delta?: number;
-  subtitle?: string;
+  delta?: number | undefined;
+  subtitle?: string | undefined;
   loading?: boolean;
 }) {
   const safeDelta =
