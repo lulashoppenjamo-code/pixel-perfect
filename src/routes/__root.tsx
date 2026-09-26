@@ -42,6 +42,27 @@ function NotFoundComponent() {
   );
 }
 
+function getErrorDetails(error: unknown) {
+  if (error instanceof Response) {
+    return {
+      message: `Response ${error.status}${error.url ? ` — ${error.url}` : ""}`,
+      stack: "",
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      message: error.message || "Error desconocido",
+      stack: error.stack || "",
+    };
+  }
+
+  return {
+    message: String(error),
+    stack: "",
+  };
+}
+
 function ErrorComponent({
   error,
   reset,
@@ -49,9 +70,11 @@ function ErrorComponent({
   error: Error;
   reset: () => void;
 }) {
-  console.error(error);
+  console.error("LULA SHOP OS — ERROR DE APLICACIÓN:", error);
 
   const router = useRouter();
+
+  const details = getErrorDetails(error);
 
   useEffect(() => {
     reportLovableError(error, {
@@ -60,35 +83,67 @@ function ErrorComponent({
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
-        <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          No se pudo cargar esta página
-        </h1>
+    <div className="min-h-screen bg-background px-4 py-8 text-foreground">
+      <div className="mx-auto w-full max-w-3xl">
+        <div className="rounded-xl border border-destructive/30 bg-card p-6 shadow-sm">
+          <div className="flex flex-col gap-2">
+            <div className="text-sm font-medium text-destructive">
+              Error de compilación o ejecución
+            </div>
 
-        <p className="mt-2 text-sm text-muted-foreground">
-          Ocurrió un problema al cargar el sistema. Puedes
-          intentar nuevamente o regresar al inicio.
-        </p>
+            <h1 className="text-xl font-semibold tracking-tight">
+              No se pudo cargar esta página
+            </h1>
 
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <button
-            type="button"
-            onClick={() => {
-              router.invalidate();
-              reset();
-            }}
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          >
-            Intentar nuevamente
-          </button>
+            <p className="text-sm text-muted-foreground">
+              El sistema detectó un error. Ahora puedes ver directamente el
+              detalle para localizar el problema.
+            </p>
+          </div>
 
-          <a
-            href="/"
-            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
-          >
-            Ir al inicio
-          </a>
+          <div className="mt-6 space-y-4">
+            <div>
+              <div className="mb-2 text-sm font-semibold">
+                Mensaje del error
+              </div>
+
+              <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg border bg-muted p-4 text-sm">
+                {details.message}
+              </pre>
+            </div>
+
+            {details.stack && (
+              <div>
+                <div className="mb-2 text-sm font-semibold">
+                  Ubicación / stack
+                </div>
+
+                <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-muted p-4 text-xs leading-5">
+                  {details.stack}
+                </pre>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                router.invalidate();
+                reset();
+              }}
+              className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              Intentar nuevamente
+            </button>
+
+            <a
+              href="/"
+              className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
+            >
+              Ir al inicio
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -106,8 +161,7 @@ export const Route =
         },
         {
           name: "viewport",
-          content:
-            "width=device-width, initial-scale=1",
+          content: "width=device-width, initial-scale=1",
         },
         {
           title: "Lula Shop OS",
@@ -156,11 +210,9 @@ export const Route =
 
     component: RootComponent,
 
-    notFoundComponent:
-      NotFoundComponent,
+    notFoundComponent: NotFoundComponent,
 
-    errorComponent:
-      ErrorComponent,
+    errorComponent: ErrorComponent,
   });
 
 function RootShell({
@@ -184,22 +236,15 @@ function RootShell({
 }
 
 function RootComponent() {
-  const {
-    queryClient,
-  } = Route.useRouteContext();
+  const { queryClient } = Route.useRouteContext();
 
   return (
-    <QueryClientProvider
-      client={queryClient}
-    >
+    <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <BranchProvider>
           <Outlet />
 
-          <Toaster
-            position="top-right"
-            richColors
-          />
+          <Toaster position="top-right" richColors />
         </BranchProvider>
       </AuthProvider>
     </QueryClientProvider>
