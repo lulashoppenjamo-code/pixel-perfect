@@ -20,6 +20,7 @@ import {
 import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useBranch } from "@/lib/branch";
 import {
   getSharedInventory,
   setSharedInventoryLimits,
@@ -139,10 +140,13 @@ const MOVEMENT_LABELS: Record<string, string> = {
 };
 
 function InventarioPage() {
-  const { isManager, profile } = useAuth();
+  const { isManager } = useAuth();
+  const { branchId, branches, loading: branchLoading } = useBranch();
   const queryClient = useQueryClient();
 
-  const branchId = profile?.branch_id ?? null;
+  const activeBranch = branches.find(
+    (branch) => branch.id === branchId,
+  );
 
   const [adjustProduct, setAdjustProduct] = useState("");
   const [adjustQuantity, setAdjustQuantity] = useState("");
@@ -414,7 +418,7 @@ function InventarioPage() {
 
       if (!branchId) {
         throw new Error(
-          "Tu usuario no tiene una sucursal asignada.",
+          "Selecciona una sucursal activa antes de continuar.",
         );
       }
 
@@ -571,7 +575,7 @@ function InventarioPage() {
 
       if (!branchId) {
         throw new Error(
-          "Tu usuario no tiene una sucursal asignada.",
+          "Selecciona una sucursal activa antes de continuar.",
         );
       }
 
