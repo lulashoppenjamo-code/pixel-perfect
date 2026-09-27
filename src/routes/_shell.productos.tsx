@@ -533,50 +533,43 @@ function ProductosPage() {
           RESUMEN
           ======================================================== */}
 
-      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5">
+            <p className="text-[11px] font-medium text-[#757575]">
               Productos
             </p>
-
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-bold text-[#1a73e8]">
               {products.length}
             </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
-              Existencia disponible
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5">
+            <p className="text-[11px] font-medium text-[#757575]">
+              Disponibles
             </p>
-
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-bold text-[#212121]">
               {inventorySummary.totalAvailable}
             </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5">
+            <p className="text-[11px] font-medium text-[#757575]">
               Reservado
             </p>
-
-            <p className="text-2xl font-bold">
+            <p className="text-2xl font-bold text-[#212121]">
               {inventorySummary.totalReserved}
             </p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-xs text-muted-foreground">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5">
+            <p className="text-[11px] font-medium text-[#757575]">
               Agotados
             </p>
-
-            <p className="text-2xl font-bold text-destructive">
+            <p className="text-2xl font-bold text-[#c2185b]">
               {inventorySummary.outOfStock}
             </p>
           </CardContent>
@@ -584,16 +577,23 @@ function ProductosPage() {
       </div>
 
       <Tabs defaultValue="lista">
-        <TabsList>
-          <TabsTrigger value="lista">
+        <TabsList className="h-11 w-full justify-start gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+          <TabsTrigger
+            value="lista"
+            className="rounded-lg data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white"
+          >
             Catálogo
           </TabsTrigger>
-
-          <TabsTrigger value="form">
-            {form.id ? "Editar" : "Nuevo"}
+          <TabsTrigger
+            value="form"
+            className="rounded-lg data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white"
+          >
+            {form.id ? "Gestionar" : "Nuevo"}
           </TabsTrigger>
-
-          <TabsTrigger value="categorias">
+          <TabsTrigger
+            value="categorias"
+            className="rounded-lg data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white"
+          >
             Categorías
           </TabsTrigger>
         </TabsList>
@@ -639,9 +639,19 @@ function ProductosPage() {
           )}
 
           {!loading && filtered.length === 0 && (
-            <p className="py-10 text-center text-muted-foreground">
-              Sin productos.
-            </p>
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-6 py-14 text-center shadow-sm">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f0fe] text-4xl">
+                📦
+              </div>
+              <div>
+                <p className="text-base font-bold text-[#212121]">
+                  Sin artículos
+                </p>
+                <p className="mt-1 text-sm text-[#757575]">
+                  Crea un producto en la pestaña Nuevo o ajusta la búsqueda
+                </p>
+              </div>
+            </div>
           )}
 
           {!loading && filtered.length > 0 && (
@@ -803,20 +813,26 @@ function ProductosPage() {
           value="form"
           className="mt-4"
         >
-          <Card className="max-w-xl">
-            <CardHeader>
-              <CardTitle className="text-base">
+          {/* Estilo GESTIONAR ARTÍCULO (Zobaze) — solo visual */}
+          <div className="mx-auto max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
+            <div className="bg-[#1a73e8] px-4 py-3.5 text-white">
+              <p className="text-[11px] font-medium uppercase tracking-wide text-white/80">
+                Gestión de inventarios
+              </p>
+              <h2 className="text-lg font-bold leading-tight">
                 {form.id
-                  ? "Editar producto"
-                  : "Nuevo producto"}
-              </CardTitle>
-            </CardHeader>
+                  ? form.name || "Gestionar artículo"
+                  : "Nuevo artículo"}
+              </h2>
+            </div>
 
-            <CardContent className="space-y-3">
+            <div className="space-y-4 p-4">
+              {/* Identidad */}
               <div className="grid grid-cols-4 gap-3">
                 <div className="space-y-1.5">
-                  <Label>Emoji</Label>
-
+                  <Label className="text-xs text-[#757575]">
+                    Emoji
+                  </Label>
                   <Input
                     value={form.emoji}
                     onChange={(e) =>
@@ -825,13 +841,13 @@ function ProductosPage() {
                         emoji: e.target.value,
                       }))
                     }
-                    className="text-center text-lg"
+                    className="h-11 rounded-xl border-[#e0e0e0] text-center text-lg"
                   />
                 </div>
-
                 <div className="col-span-3 space-y-1.5">
-                  <Label>Nombre *</Label>
-
+                  <Label className="text-xs text-[#757575]">
+                    Nombre *
+                  </Label>
                   <Input
                     value={form.name}
                     onChange={(e) =>
@@ -841,45 +857,56 @@ function ProductosPage() {
                       }))
                     }
                     placeholder="Nombre del producto"
+                    className="h-11 rounded-xl border-[#e0e0e0]"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>SKU</Label>
-
-                  <Input
-                    value={form.sku}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        sku: e.target.value,
-                      }))
-                    }
-                    placeholder="SKU-001"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Código de barras</Label>
-
-                  <Input
-                    value={form.barcode}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        barcode: e.target.value,
-                      }))
-                    }
-                    placeholder="EAN / UPC / interno"
-                  />
+              {/* Códigos */}
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Códigos
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      SKU
+                    </Label>
+                    <Input
+                      value={form.sku}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          sku: e.target.value,
+                        }))
+                      }
+                      placeholder="SKU-001"
+                      className="h-10 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Código de barras
+                    </Label>
+                    <Input
+                      value={form.barcode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          barcode: e.target.value,
+                        }))
+                      }
+                      placeholder="EAN / UPC"
+                      className="h-10 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                    />
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <Label>Descripción</Label>
-
+                <Label className="text-xs text-[#757575]">
+                  Descripción
+                </Label>
                 <Input
                   value={form.description}
                   onChange={(e) =>
@@ -888,12 +915,14 @@ function ProductosPage() {
                       description: e.target.value,
                     }))
                   }
+                  className="h-10 rounded-xl border-[#e0e0e0]"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label>Categoría</Label>
-
+                <Label className="text-xs text-[#757575]">
+                  Categoría
+                </Label>
                 <Select
                   value={form.category_id}
                   onValueChange={(v) =>
@@ -903,15 +932,13 @@ function ProductosPage() {
                     }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="h-10 rounded-xl border-[#e0e0e0]">
                     <SelectValue placeholder="Sin categoría" />
                   </SelectTrigger>
-
                   <SelectContent>
                     <SelectItem value="none">
                       Sin categoría
                     </SelectItem>
-
                     {categories.map((c) => (
                       <SelectItem
                         key={c.id}
@@ -924,64 +951,97 @@ function ProductosPage() {
                 </Select>
               </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1.5">
-                  <Label>Precio</Label>
-
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.price}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        price: e.target.value,
-                      }))
-                    }
-                  />
+              {/* Precio / Costo / IVA — estilo Zobaze */}
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Precios
+                </p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Precio venta
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.price}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          price: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white text-base font-bold text-[#1a73e8]"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Costo
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.cost}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          cost: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      IVA
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.tax_rate}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          tax_rate: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white"
+                    />
+                  </div>
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label>Costo</Label>
-
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.cost}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        cost: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>
-                    IVA (ej. 0.16)
-                  </Label>
-
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.tax_rate}
-                    onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        tax_rate: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
+                {Number(form.price) > 0 &&
+                  Number(form.cost) >= 0 && (
+                    <p className="mt-2 text-xs text-[#757575]">
+                      Margen aprox.:{" "}
+                      <span className="font-semibold text-[#34a853]">
+                        {money(
+                          Number(form.price) -
+                            Number(form.cost),
+                        )}
+                      </span>
+                      {Number(form.price) > 0 && (
+                        <span>
+                          {" "}
+                          (
+                          {(
+                            ((Number(form.price) -
+                              Number(form.cost)) /
+                              Number(form.price)) *
+                            100
+                          ).toFixed(0)}
+                          %)
+                        </span>
+                      )}
+                    </p>
+                  )}
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2 pt-1">
                 <Button
-                  className="flex-1"
+                  className="h-11 flex-1 rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0]"
                   disabled={
                     !isManager ||
                     saveProduct.isPending
@@ -993,13 +1053,14 @@ function ProductosPage() {
                   {saveProduct.isPending
                     ? "Guardando…"
                     : form.id
-                      ? "Actualizar"
-                      : "Crear"}
+                      ? "Guardar cambios"
+                      : "Crear artículo"}
                 </Button>
 
                 {form.id && (
                   <Button
                     variant="outline"
+                    className="h-11 rounded-xl border-[#e0e0e0]"
                     onClick={() =>
                       setForm(emptyProduct)
                     }
@@ -1008,8 +1069,8 @@ function ProductosPage() {
                   </Button>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         </TabsContent>
 
         {/* ======================================================
