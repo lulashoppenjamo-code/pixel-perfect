@@ -2133,138 +2133,98 @@ export function POSPanel({
           mobileStep !== "shop" && "hidden lg:flex",
         )}
       >
-        {/* Header */}
-
-        <div className="flex items-center justify-between bg-[#1a73e8] px-3 py-2.5 text-white sm:px-4">
-          <div className="min-w-0">
-            <p className="truncate text-sm font-bold leading-tight">
-              {branchName ||
-                "Counter"}
-            </p>
-
-            <p className="text-[10px] opacity-80">
-              {canSell
-                ? "Listo para vender"
-                : "Caja cerrada"}
-            </p>
-          </div>
-
-          <div className="flex items-center gap-1.5">
+        {/* Header azul estilo Zobaze — búsqueda integrada */}
+        <div className="bg-[#1a73e8] px-3 pb-3 pt-2 sm:px-4">
+          <div className="mb-2 hidden items-center justify-between text-white sm:flex">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold leading-tight">
+                {branchName || "Caja"}
+              </p>
+              <p className="text-[10px] opacity-80">
+                {canSell ? "Listo para vender" : "Caja cerrada"}
+              </p>
+            </div>
             <Button
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-full text-white hover:bg-white/15"
               title="Historial"
               onClick={() => {
-                setHistoryOpen(
-                  true,
-                );
-
+                setHistoryOpen(true);
                 void refetchHistory();
               }}
             >
               <History className="h-4 w-4" />
             </Button>
-
-            {!canSell && (
-              <span className="rounded-full bg-red-500/90 px-2.5 py-1 text-[10px] font-bold">
-                Caja cerrada
-              </span>
-            )}
           </div>
-        </div>
 
-        {/* Buscador */}
-
-        <div className="border-b border-[#e0e0e0] bg-white px-3 py-2.5 sm:px-4">
-          <div className="relative flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#757575]" />
-
+          {/* Buscador blanco + barcode — exactamente como captura */}
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
               <Input
                 ref={searchRef}
                 value={search}
                 onChange={(event) =>
-                  setSearch(
-                    event.target.value,
-                  )
+                  setSearch(event.target.value)
                 }
-                onKeyDown={
-                  handleSearchKey
-                }
-                placeholder="¿Qué quieres vender?"
-                className="h-11 rounded-full border-[#e0e0e0] bg-[#f5f5f5] pl-10 text-[15px] shadow-none focus-visible:ring-[#1a73e8]/30"
+                onKeyDown={handleSearchKey}
+                placeholder="Quiero vender..."
+                className="h-11 rounded-lg border-0 bg-white pl-10 text-[15px] text-[#212121] shadow-none placeholder:text-[#9e9e9e] focus-visible:ring-0"
                 autoComplete="off"
               />
             </div>
-
-            <Button
+            <button
               type="button"
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 shrink-0 rounded-full border-[#e0e0e0]"
               title="Escanear código de barras"
-              onClick={() =>
-                setScannerOpen(
-                  true,
-                )
-              }
+              onClick={() => setScannerOpen(true)}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
             >
-              <Camera className="h-4.5 w-4.5 text-[#1a73e8]" />
-            </Button>
+              <Camera className="h-5 w-5" />
+            </button>
           </div>
+
+          {!canSell && (
+            <p className="mt-2 rounded-lg bg-red-500/90 px-3 py-1.5 text-center text-[11px] font-bold text-white">
+              Caja cerrada — abre una sesión para vender
+            </p>
+          )}
         </div>
 
-        {/* Categorías */}
-
-        <div className="flex gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2.5 scrollbar-none sm:px-4">
+        {/* Categorías — solo desktop / tablet */}
+        <div className="hidden gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:flex sm:px-4">
           <button
             type="button"
-            onClick={() =>
-              setCategoryFilter(
-                "all",
-              )
-            }
+            onClick={() => setCategoryFilter("all")}
             className={cn(
               "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
-              categoryFilter ===
-                "all"
+              categoryFilter === "all"
                 ? "bg-[#1a73e8] text-white shadow-sm"
-                : "bg-[#eef1f8] text-[#4b5563]",
+                : "bg-[#eeeeee] text-[#616161]",
             )}
           >
-            All
+            Todas
           </button>
-
-          {categories.map(
-            (category) => (
-              <button
-                key={
-                  category.id
-                }
-                type="button"
-                onClick={() =>
-                  setCategoryFilter(
-                    category.id,
-                  )
-                }
-                className={cn(
-                  "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
-                  categoryFilter ===
-                    category.id
-                    ? "bg-[#1a73e8] text-white shadow-sm"
-                    : "bg-[#eef1f8] text-[#4b5563]",
-                )}
-              >
-                {category.name}
-              </button>
-            ),
-          )}
+          {categories.map((category) => (
+            <button
+              key={category.id}
+              type="button"
+              onClick={() => setCategoryFilter(category.id)}
+              className={cn(
+                "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
+                categoryFilter === category.id
+                  ? "bg-[#1a73e8] text-white shadow-sm"
+                  : "bg-[#eeeeee] text-[#616161]",
+              )}
+            >
+              {category.name}
+            </button>
+          ))}
         </div>
 
         {/* Productos */}
 
-        <ScrollArea className="flex-1 bg-[#f5f5f5] p-3 sm:p-4">
+        <ScrollArea className="flex-1 bg-[#f5f5f5] p-1.5 sm:p-3">
           {loadingProducts ? (
             <div className="py-16 text-center text-sm text-[#757575]">
               Cargando…
@@ -2285,7 +2245,7 @@ export function POSPanel({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {filtered.map(
                 (product) => {
                   const outOfStock =
@@ -2310,43 +2270,31 @@ export function POSPanel({
                           product,
                         )
                       }
-                      className="zb-product-card group relative flex flex-col items-center p-3 text-center disabled:cursor-not-allowed disabled:opacity-45"
+                      className="group relative flex flex-col overflow-hidden rounded-lg border border-[#eeeeee] bg-white text-left shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
                     >
                       {outOfStock && (
-                        <span className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-[#fce4ec] px-2.5 py-0.5 text-[10px] font-semibold text-[#c2185b]">
+                        <span className="absolute left-1.5 top-1.5 z-10 rounded bg-[#f8bbd0] px-1.5 py-0.5 text-[10px] font-semibold text-[#ad1457]">
                           Agotado
                         </span>
                       )}
 
-                      <div className="mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#e8eefc] text-3xl">
-                        {product.emoji ||
-                          "📦"}
+                      <div className="flex aspect-square items-center justify-center bg-[#fafafa] text-3xl">
+                        {product.emoji || "📦"}
                       </div>
 
-                      <p className="line-clamp-2 min-h-[2.25rem] text-[13px] font-semibold leading-tight text-[#212121]">
-                        {
-                          product.name
-                        }
-                      </p>
-
-                      <p className="mt-1 text-base font-bold text-[#1a73e8]">
-                        {money(
-                          product.price,
+                      <div className="flex flex-1 flex-col gap-0.5 p-1.5 sm:p-2">
+                        <p className="line-clamp-2 min-h-[2rem] text-[11px] font-bold leading-tight text-[#212121] sm:text-xs">
+                          {product.name}
+                        </p>
+                        {(product.sku || product.barcode) && (
+                          <p className="truncate text-[10px] text-[#9e9e9e]">
+                            {product.sku || product.barcode}
+                          </p>
                         )}
-                      </p>
-
-                      <p
-                        className={cn(
-                          "mt-0.5 text-[11px]",
-                          outOfStock
-                            ? "font-semibold text-[#e5484d]"
-                            : "text-[#757575]",
-                        )}
-                      >
-                        {outOfStock
-                          ? "Agotado"
-                          : `${product.stock} disp.`}
-                      </p>
+                        <p className="mt-auto text-sm font-bold text-[#1a73e8]">
+                          {money(product.price)}
+                        </p>
+                      </div>
                     </button>
                   );
                 },
