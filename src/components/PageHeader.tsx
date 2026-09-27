@@ -1,5 +1,3 @@
-
-
 /**
  * Cabecera de página unificada — estilo Zobaze POS
  * Título grande, subtítulo suave, acción opcional a la derecha.
@@ -26,26 +24,28 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+        "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
         className,
       )}
     >
       <div className="flex items-start gap-3">
         {Icon && (
-          <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Icon className="h-5 w-5" />
+          <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#e8f0fe] text-[#1a73e8]">
+            <Icon className="h-4.5 w-4.5" />
           </div>
         )}
         <div>
-          <h1 className="text-xl font-bold tracking-tight text-foreground sm:text-2xl">
+          <h1 className="text-lg font-bold tracking-tight text-[#212121] sm:text-xl">
             {title}
           </h1>
           {description && (
-            <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+            <p className="mt-0.5 text-sm text-[#757575]">{description}</p>
           )}
         </div>
       </div>
-      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+      {action && (
+        <div className="flex shrink-0 items-center gap-2">{action}</div>
+      )}
     </div>
   );
 }
@@ -59,7 +59,7 @@ export function PageShell({
   className?: string;
 }) {
   return (
-    <div className={cn("space-y-4 p-4 md:space-y-5 md:p-6", className)}>
+    <div className={cn("space-y-4 p-3 md:space-y-5 md:p-5", className)}>
       {children}
     </div>
   );
