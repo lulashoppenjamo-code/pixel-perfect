@@ -10,6 +10,8 @@
  * POS y Arqueo se remueven y montan nuevamente cuando
  * cambia la sucursal para evitar conservar estado de
  * la sucursal anterior.
+ *
+ * CAMBIOS DE ESTA SESIÓN: solo visual (estilos de tabs).
  */
 
 import { useState } from "react";
@@ -85,17 +87,13 @@ function CajaPage() {
     },
   ];
 
-  /*
-   * Nunca mostramos el POS con una sucursal
-   * todavía indefinida.
-   */
   if (loading) {
     return (
       <div className="flex h-[calc(100dvh-3rem)] items-center justify-center">
-        <div className="rounded-2xl border border-[#e2e8f0] bg-white px-6 py-5 text-center shadow-sm">
-          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#4169e2] border-t-transparent" />
+        <div className="rounded-2xl border border-[#e0e0e0] bg-white px-6 py-5 text-center shadow-sm">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
 
-          <p className="text-sm font-semibold text-[#1a1d26]">
+          <p className="text-sm font-semibold text-[#212121]">
             Cargando sucursal…
           </p>
 
@@ -110,16 +108,16 @@ function CajaPage() {
   if (!branchId || !activeBranch) {
     return (
       <div className="flex h-[calc(100dvh-3rem)] items-center justify-center">
-        <div className="max-w-md rounded-2xl border border-[#e2e8f0] bg-white p-6 text-center shadow-sm">
+        <div className="max-w-md rounded-2xl border border-[#e0e0e0] bg-white p-6 text-center shadow-sm">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f1f3f9]">
             <ShoppingBag className="h-6 w-6 text-[#9aa3b8]" />
           </div>
 
-          <h2 className="text-base font-bold text-[#1a1d26]">
+          <h2 className="text-base font-bold text-[#212121]">
             No hay una sucursal activa
           </h2>
 
-          <p className="mt-2 text-sm text-[#6b7280]">
+          <p className="mt-2 text-sm text-[#757575]">
             No se puede abrir Caja hasta que
             exista una sucursal disponible para
             este usuario.
@@ -145,17 +143,18 @@ function CajaPage() {
             Sucursal activa
           </p>
 
-          <p className="truncate text-sm font-bold text-[#1a1d26]">
+          <p className="truncate text-sm font-bold text-[#212121]">
             {activeBranch.name}
           </p>
         </div>
 
-        <div className="hidden rounded-full bg-[#eef2fe] px-3 py-1.5 text-xs font-semibold text-[#4169e2] sm:block">
+        <div className="hidden rounded-full bg-[#e8f0fe] px-3 py-1.5 text-xs font-semibold text-[#1a73e8] sm:block">
           Caja
         </div>
       </div>
 
-      <div className="flex shrink-0 gap-1.5 rounded-xl border border-[#e2e8f0] bg-white p-1">
+      {/* Tabs estilo Zobaze — solo visual */}
+      <div className="flex shrink-0 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
         {tabs.map(
           ({
             id,
@@ -169,10 +168,10 @@ function CajaPage() {
                 setTab(id)
               }
               className={cn(
-                "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-colors",
+                "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all",
                 tab === id
-                  ? "bg-[#4169e2] text-white shadow-sm"
-                  : "text-[#4b5563] hover:bg-[#eef1f8]",
+                  ? "bg-[#1a73e8] text-white shadow-sm"
+                  : "text-[#5f6368] hover:bg-[#f1f3f4]",
               )}
             >
               <Icon className="h-4 w-4" />
@@ -184,17 +183,6 @@ function CajaPage() {
 
       <div className="min-h-0 flex-1">
         {tab === "pos" ? (
-          /*
-           * IMPORTANTE:
-           * El key obliga a React a crear un POS
-           * completamente nuevo cuando cambia branchId.
-           *
-           * Esto evita:
-           * - carrito de otra sucursal
-           * - cliente seleccionado de otra operación
-           * - caja abierta visualmente de otra sucursal
-           * - historial/cache local del POS anterior
-           */
           <POSPanel
             key={`pos-${branchId}`}
             className="h-full"
