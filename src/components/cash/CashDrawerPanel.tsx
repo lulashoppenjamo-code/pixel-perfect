@@ -536,77 +536,83 @@ export function CashDrawerPanel({
   return (
     <div
       className={cn(
-        "min-h-0 max-h-full space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain pb-24 md:pb-2",
+        "min-h-0 max-h-full space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain pb-24 sm:space-y-4 md:pb-4",
         className,
       )}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[#e2e8f0] bg-white p-4">
-        <div className="flex items-center gap-3">
-          <div
-            className={cn(
-              "flex h-11 w-11 items-center justify-center rounded-2xl",
-              session
-                ? "bg-[#e8f7ee] text-[#30a46c]"
-                : "bg-[#f1f3f9] text-[#9aa3b8]",
-            )}
-          >
-            {session ? (
-              <Unlock className="h-5 w-5" />
-            ) : (
-              <Lock className="h-5 w-5" />
-            )}
+      {/* ESTADO DE CAJA */}
+      <div className="rounded-2xl border border-[#e2e8f0] bg-white p-3.5 sm:p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <div
+              className={cn(
+                "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
+                session
+                  ? "bg-[#e8f7ee] text-[#30a46c]"
+                  : "bg-[#f1f3f9] text-[#9aa3b8]",
+              )}
+            >
+              {session ? (
+                <Unlock className="h-5 w-5" />
+              ) : (
+                <Lock className="h-5 w-5" />
+              )}
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-[#1a1d26] sm:text-base">
+                {sessionLoading
+                  ? "Consultando caja…"
+                  : session
+                    ? "Caja abierta"
+                    : "Caja cerrada"}
+              </p>
+
+              <p className="mt-0.5 break-words text-xs leading-5 text-[#9aa3b8]">
+                {session
+                  ? `Abierta el ${dateTime(
+                      session.opened_at,
+                    )} · inicial ${money(
+                      Number(
+                        session.opening_amount,
+                      ),
+                    )}`
+                  : "Abre la caja para poder cobrar"}
+              </p>
+            </div>
           </div>
 
-          <div>
-            <p className="text-sm font-bold text-[#1a1d26]">
-              {sessionLoading
-                ? "Consultando caja…"
-                : session
-                  ? "Caja abierta"
-                  : "Caja cerrada"}
-            </p>
-
-            <p className="text-xs text-[#9aa3b8]">
-              {session
-                ? `Abierta el ${dateTime(
-                    session.opened_at,
-                  )} · inicial ${money(
-                    Number(
-                      session.opening_amount,
-                    ),
-                  )}`
-                : "Abre la caja para poder cobrar"}
-            </p>
-          </div>
+          {session && (
+            <Button
+              variant="outline"
+              className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d] sm:w-auto"
+              onClick={() =>
+                setCloseOpen(true)
+              }
+            >
+              <Lock className="mr-2 h-4 w-4" />
+              Cerrar caja
+            </Button>
+          )}
         </div>
-
-        {session && (
-          <Button
-            variant="outline"
-            className="rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d]"
-            onClick={() =>
-              setCloseOpen(true)
-            }
-          >
-            <Lock className="mr-2 h-4 w-4" />
-            Cerrar caja
-          </Button>
-        )}
       </div>
 
       {!session ? (
-        <div className="rounded-2xl border border-[#e2e8f0] bg-white p-5">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26]">
-            <Wallet className="h-4 w-4 text-[#4169e2]" />
+        /* ======================================================
+         * ABRIR CAJA
+         * ====================================================== */
+        <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4 sm:p-5">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26] sm:text-base">
+            <Wallet className="h-4 w-4 shrink-0 text-[#4169e2]" />
             Abrir caja
           </h2>
 
-          <p className="mt-1 text-xs text-[#9aa3b8]">
+          <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
             ¿Con cuánto efectivo arranca el
             cajón? Puedes dejarlo en 0.
           </p>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <Input
               type="number"
               min="0"
@@ -618,11 +624,11 @@ export function CashDrawerPanel({
                 )
               }
               placeholder="0.00"
-              className="h-10 w-40 rounded-xl border-[#e2e8f0]"
+              className="h-11 w-full rounded-xl border-[#e2e8f0] sm:w-40"
             />
 
             <Button
-              className="rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90"
+              className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
               disabled={
                 openBox.isPending ||
                 sessionLoading
@@ -639,7 +645,10 @@ export function CashDrawerPanel({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+          {/* ==================================================
+           * RESUMEN
+           * ================================================== */}
+          <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3">
             <Stat
               label="Efectivo inicial"
               value={money(
@@ -686,24 +695,27 @@ export function CashDrawerPanel({
               )}`}
             />
 
-            <div className="rounded-2xl border border-[#4169e2]/30 bg-[#eef2fe] p-4">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-[#4169e2]">
+            <div className="rounded-2xl border border-[#4169e2]/30 bg-[#eef2fe] p-3.5 sm:p-4">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-[#4169e2] sm:text-[11px]">
                 Debe haber
               </p>
 
-              <p className="mt-1 text-2xl font-black text-[#4169e2]">
+              <p className="mt-1 break-words text-xl font-black text-[#4169e2] sm:text-2xl">
                 {money(expected)}
               </p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
-            <h3 className="text-sm font-bold text-[#1a1d26]">
+          {/* ==================================================
+           * MOVIMIENTOS
+           * ================================================== */}
+          <div className="rounded-2xl border border-[#e2e8f0] bg-white p-3.5 sm:p-4">
+            <h3 className="text-sm font-bold text-[#1a1d26] sm:text-base">
               Movimiento de efectivo
             </h3>
 
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <div className="flex gap-1.5">
+            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-[auto_9rem_minmax(12rem,1fr)_auto] md:items-center">
+              <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="sm"
                   variant={
@@ -712,7 +724,7 @@ export function CashDrawerPanel({
                       : "outline"
                   }
                   className={cn(
-                    "rounded-xl",
+                    "min-h-11 touch-manipulation rounded-xl",
                     mvType === "deposit" &&
                       "bg-[#30a46c] hover:bg-[#30a46c]/90",
                   )}
@@ -720,7 +732,7 @@ export function CashDrawerPanel({
                     setMvType("deposit")
                   }
                 >
-                  <ArrowUpRight className="mr-1 h-3.5 w-3.5" />
+                  <ArrowUpRight className="mr-1 h-4 w-4" />
                   Entrada
                 </Button>
 
@@ -732,7 +744,7 @@ export function CashDrawerPanel({
                       : "outline"
                   }
                   className={cn(
-                    "rounded-xl",
+                    "min-h-11 touch-manipulation rounded-xl",
                     mvType ===
                       "withdrawal" &&
                       "bg-[#e5484d] hover:bg-[#e5484d]/90",
@@ -743,7 +755,7 @@ export function CashDrawerPanel({
                     )
                   }
                 >
-                  <ArrowDownLeft className="mr-1 h-3.5 w-3.5" />
+                  <ArrowDownLeft className="mr-1 h-4 w-4" />
                   Salida
                 </Button>
               </div>
@@ -759,7 +771,7 @@ export function CashDrawerPanel({
                   )
                 }
                 placeholder="Cantidad"
-                className="h-9 w-32 rounded-xl border-[#e2e8f0]"
+                className="h-11 w-full rounded-xl border-[#e2e8f0]"
               />
 
               <Input
@@ -770,12 +782,12 @@ export function CashDrawerPanel({
                   )
                 }
                 placeholder="Motivo (opcional)"
-                className="h-9 w-56 rounded-xl border-[#e2e8f0]"
+                className="h-11 w-full rounded-xl border-[#e2e8f0]"
               />
 
               <Button
                 size="sm"
-                className="rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90"
+                className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 md:w-auto"
                 disabled={
                   addMovement.isPending
                 }
@@ -792,7 +804,7 @@ export function CashDrawerPanel({
             <div className="mt-4 divide-y divide-[#eef1f8]">
               {(summary?.movements ?? [])
                 .length === 0 ? (
-                <p className="py-4 text-center text-sm text-[#9aa3b8]">
+                <p className="py-5 text-center text-sm text-[#9aa3b8]">
                   Sin entradas ni salidas
                   registradas
                 </p>
@@ -802,10 +814,10 @@ export function CashDrawerPanel({
                 ).map((movement) => (
                   <div
                     key={movement.id}
-                    className="flex items-center justify-between py-2 text-sm"
+                    className="flex min-w-0 items-center justify-between gap-3 py-3"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-[#1a1d26]">
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-sm font-medium leading-5 text-[#1a1d26]">
                         {movement.reason ||
                           (movement.type ===
                           "deposit"
@@ -813,7 +825,7 @@ export function CashDrawerPanel({
                             : "Salida de efectivo")}
                       </p>
 
-                      <p className="text-xs text-[#9aa3b8]">
+                      <p className="mt-0.5 text-xs text-[#9aa3b8]">
                         {dateTime(
                           movement.created_at,
                         )}
@@ -822,7 +834,7 @@ export function CashDrawerPanel({
 
                     <span
                       className={cn(
-                        "shrink-0 font-bold",
+                        "shrink-0 whitespace-nowrap text-sm font-bold sm:text-base",
                         movement.type ===
                           "deposit"
                           ? "text-[#30a46c]"
@@ -847,19 +859,22 @@ export function CashDrawerPanel({
         </>
       )}
 
+      {/* ======================================================
+       * CERRAR CAJA
+       * ====================================================== */}
       <Dialog
         open={closeOpen}
         onOpenChange={setCloseOpen}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="w-[calc(100%-1.5rem)] max-w-sm rounded-2xl sm:w-full">
           <DialogHeader>
-            <DialogTitle>
+            <DialogTitle className="text-base sm:text-lg">
               Cerrar caja
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3 py-1">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm leading-6 text-muted-foreground">
               Debería haber{" "}
               <span className="font-bold text-foreground">
                 {money(expected)}
@@ -879,43 +894,59 @@ export function CashDrawerPanel({
                 )
               }
               placeholder="0.00"
+              className="h-12 rounded-xl text-base"
             />
 
             {counted !== "" && (
-              <p
+              <div
                 className={cn(
-                  "text-sm font-semibold",
+                  "rounded-xl border p-3 text-sm font-semibold",
                   Math.abs(
                     countedNum - expected,
                   ) < 0.01
-                    ? "text-[#30a46c]"
+                    ? "border-[#30a46c]/30 bg-[#e8f7ee]"
                     : countedNum >
                         expected
-                      ? "text-[#4169e2]"
-                      : "text-[#e5484d]",
+                      ? "border-[#4169e2]/30 bg-[#eef2fe]"
+                      : "border-[#e5484d]/30 bg-[#fff0f0]",
                 )}
               >
-                {Math.abs(
-                  countedNum - expected,
-                ) < 0.01
-                  ? "Cuadre exacto"
-                  : countedNum >
-                      expected
-                    ? `Sobran ${money(
-                        countedNum -
-                          expected,
-                      )}`
-                    : `Faltan ${money(
-                        expected -
-                          countedNum,
-                      )}`}
-              </p>
+                <p
+                  className={cn(
+                    Math.abs(
+                      countedNum -
+                        expected,
+                    ) < 0.01
+                      ? "text-[#30a46c]"
+                      : countedNum >
+                          expected
+                        ? "text-[#4169e2]"
+                        : "text-[#e5484d]",
+                  )}
+                >
+                  {Math.abs(
+                    countedNum - expected,
+                  ) < 0.01
+                    ? "Cuadre exacto"
+                    : countedNum >
+                        expected
+                      ? `Sobran ${money(
+                          countedNum -
+                            expected,
+                        )}`
+                      : `Faltan ${money(
+                          expected -
+                            countedNum,
+                        )}`}
+                </p>
+              </div>
             )}
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="flex-col gap-2 sm:flex-row">
             <Button
               variant="outline"
+              className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
               onClick={() =>
                 setCloseOpen(false)
               }
@@ -927,6 +958,7 @@ export function CashDrawerPanel({
             </Button>
 
             <Button
+              className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
               disabled={
                 closeBox.isPending
               }
@@ -942,103 +974,215 @@ export function CashDrawerPanel({
         </DialogContent>
       </Dialog>
 
-      <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
-        <h3 className="text-sm font-bold text-[#1a1d26]">
+      {/* ======================================================
+       * ARQUEOS ANTERIORES
+       * ====================================================== */}
+      <div className="rounded-2xl border border-[#e2e8f0] bg-white p-3.5 sm:p-4">
+        <h3 className="text-sm font-bold text-[#1a1d26] sm:text-base">
           Arqueos anteriores
         </h3>
 
         {closedSessions.length === 0 ? (
-          <p className="py-4 text-center text-sm text-[#9aa3b8]">
+          <p className="py-5 text-center text-sm text-[#9aa3b8]">
             Aún no hay cajas cerradas
           </p>
         ) : (
-          <div className="mt-2 overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-[#9aa3b8]">
-                  <th className="py-2 font-semibold">
-                    Cerrada
-                  </th>
+          <>
+            {/* CELULAR / TABLET */}
+            <div className="mt-3 grid gap-2.5 lg:hidden">
+              {closedSessions.map(
+                (closedSession) => {
+                  const diff = Number(
+                    closedSession.difference ??
+                      0,
+                  );
 
-                  <th className="py-2 font-semibold">
-                    Esperado
-                  </th>
+                  return (
+                    <div
+                      key={
+                        closedSession.id
+                      }
+                      className="rounded-xl border border-[#eef1f8] bg-[#fafbfe] p-3.5"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                            Cerrada
+                          </p>
 
-                  <th className="py-2 font-semibold">
-                    Contado
-                  </th>
+                          <p className="mt-1 break-words text-sm font-semibold text-[#1a1d26]">
+                            {closedSession.closed_at
+                              ? dateTime(
+                                  closedSession.closed_at,
+                                )
+                              : "—"}
+                          </p>
+                        </div>
 
-                  <th className="py-2 font-semibold">
-                    Diferencia
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-[#eef1f8]">
-                {closedSessions.map(
-                  (closedSession) => {
-                    const diff = Number(
-                      closedSession.difference ??
-                        0,
-                    );
-
-                    return (
-                      <tr
-                        key={
-                          closedSession.id
-                        }
-                      >
-                        <td className="py-2 text-[#4b5563]">
-                          {closedSession.closed_at
-                            ? dateTime(
-                                closedSession.closed_at,
-                              )
-                            : "—"}
-                        </td>
-
-                        <td className="py-2">
-                          {money(
-                            Number(
-                              closedSession.expected_amount ??
-                                0,
-                            ),
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "shrink-0 rounded-full text-xs",
+                            Math.abs(
+                              diff,
+                            ) < 0.01
+                              ? "border-[#30a46c]/40 bg-[#e8f7ee] text-[#30a46c]"
+                              : "border-[#e5484d]/40 bg-[#fff0f0] text-[#e5484d]",
                           )}
-                        </td>
+                        >
+                          {diff > 0
+                            ? "+"
+                            : ""}
+                          {money(diff)}
+                        </Badge>
+                      </div>
 
-                        <td className="py-2">
-                          {money(
-                            Number(
-                              closedSession.closing_amount ??
-                                0,
-                            ),
-                          )}
-                        </td>
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#eef1f8] pt-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                            Esperado
+                          </p>
+                          <p className="mt-1 break-words text-sm font-bold text-[#1a1d26]">
+                            {money(
+                              Number(
+                                closedSession.expected_amount ??
+                                  0,
+                              ),
+                            )}
+                          </p>
+                        </div>
 
-                        <td className="py-2">
-                          <Badge
-                            variant="outline"
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                            Contado
+                          </p>
+                          <p className="mt-1 break-words text-sm font-bold text-[#1a1d26]">
+                            {money(
+                              Number(
+                                closedSession.closing_amount ??
+                                  0,
+                              ),
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                            Diferencia
+                          </p>
+
+                          <p
                             className={cn(
-                              "text-xs",
+                              "mt-1 break-words text-sm font-bold",
                               Math.abs(
                                 diff,
                               ) < 0.01
-                                ? "border-[#30a46c]/40 text-[#30a46c]"
-                                : "border-[#e5484d]/40 text-[#e5484d]",
+                                ? "text-[#30a46c]"
+                                : "text-[#e5484d]",
                             )}
                           >
                             {diff > 0
                               ? "+"
                               : ""}
                             {money(diff)}
-                          </Badge>
-                        </td>
-                      </tr>
-                    );
-                  },
-                )}
-              </tbody>
-            </table>
-          </div>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                },
+              )}
+            </div>
+
+            {/* DESKTOP / PANTALLAS GRANDES */}
+            <div className="mt-2 hidden overflow-x-auto lg:block">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-[#9aa3b8]">
+                    <th className="py-2 pr-4 font-semibold">
+                      Cerrada
+                    </th>
+
+                    <th className="py-2 pr-4 font-semibold">
+                      Esperado
+                    </th>
+
+                    <th className="py-2 pr-4 font-semibold">
+                      Contado
+                    </th>
+
+                    <th className="py-2 font-semibold">
+                      Diferencia
+                    </th>
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y divide-[#eef1f8]">
+                  {closedSessions.map(
+                    (closedSession) => {
+                      const diff = Number(
+                        closedSession.difference ??
+                          0,
+                      );
+
+                      return (
+                        <tr
+                          key={
+                            closedSession.id
+                          }
+                        >
+                          <td className="py-2 pr-4 text-[#4b5563]">
+                            {closedSession.closed_at
+                              ? dateTime(
+                                  closedSession.closed_at,
+                                )
+                              : "—"}
+                          </td>
+
+                          <td className="py-2 pr-4">
+                            {money(
+                              Number(
+                                closedSession.expected_amount ??
+                                  0,
+                              ),
+                            )}
+                          </td>
+
+                          <td className="py-2 pr-4">
+                            {money(
+                              Number(
+                                closedSession.closing_amount ??
+                                  0,
+                              ),
+                            )}
+                          </td>
+
+                          <td className="py-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "text-xs",
+                                Math.abs(
+                                  diff,
+                                ) < 0.01
+                                  ? "border-[#30a46c]/40 text-[#30a46c]"
+                                  : "border-[#e5484d]/40 text-[#e5484d]",
+                              )}
+                            >
+                              {diff > 0
+                                ? "+"
+                                : ""}
+                              {money(diff)}
+                            </Badge>
+                          </td>
+                        </tr>
+                      );
+                    },
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -1055,17 +1199,17 @@ function Stat({
   hint?: string | undefined;
 }) {
   return (
-    <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+    <div className="min-w-0 rounded-2xl border border-[#e2e8f0] bg-white p-3.5 sm:p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8] sm:text-[11px]">
         {label}
       </p>
 
-      <p className="mt-1 text-lg font-bold text-[#1a1d26]">
+      <p className="mt-1 break-words text-base font-bold text-[#1a1d26] sm:text-lg">
         {value}
       </p>
 
       {hint && (
-        <p className="mt-0.5 text-[11px] text-[#9aa3b8]">
+        <p className="mt-0.5 break-words text-[10px] leading-4 text-[#9aa3b8] sm:text-[11px]">
           {hint}
         </p>
       )}
