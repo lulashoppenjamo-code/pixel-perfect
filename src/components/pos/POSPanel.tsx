@@ -1,3 +1,4 @@
+```html
 /**
  * Punto de Venta — LULA OS
  * Archivo: src/components/pos/POSPanel.tsx
@@ -2189,7 +2190,7 @@ export function POSPanel({
               type="button"
               title="Escanear código de barras"
               onClick={() => setScannerOpen(true)}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
+              className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-lg bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
             >
               <Camera className="h-5 w-5" />
             </button>
@@ -2208,7 +2209,7 @@ export function POSPanel({
             type="button"
             onClick={() => setCategoryFilter("all")}
             className={cn(
-              "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
+              "min-h-10 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition-colors",
               categoryFilter === "all"
                 ? "bg-[#1a73e8] text-white shadow-sm"
                 : "bg-[#eeeeee] text-[#616161]",
@@ -2222,7 +2223,7 @@ export function POSPanel({
               type="button"
               onClick={() => setCategoryFilter(category.id)}
               className={cn(
-                "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
+                "min-h-10 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition-colors",
                 categoryFilter === category.id
                   ? "bg-[#1a73e8] text-white shadow-sm"
                   : "bg-[#eeeeee] text-[#616161]",
@@ -2256,7 +2257,7 @@ export function POSPanel({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
               {filtered.map(
                 (product) => {
                   const outOfStock =
@@ -2281,7 +2282,7 @@ export function POSPanel({
                           product,
                         )
                       }
-                      className="group relative flex flex-col overflow-hidden rounded-lg border border-[#eeeeee] bg-white text-left shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                      className="group relative flex min-h-[176px] touch-manipulation flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[190px]"
                     >
                       {outOfStock && (
                         <span className="absolute left-1.5 top-1.5 z-10 rounded bg-[#f8bbd0] px-1.5 py-0.5 text-[10px] font-semibold text-[#ad1457]">
@@ -2289,20 +2290,20 @@ export function POSPanel({
                         </span>
                       )}
 
-                      <div className="flex aspect-square items-center justify-center bg-[#fafafa] text-3xl">
+                      <div className="flex aspect-square items-center justify-center bg-[#fafafa] text-3xl sm:text-4xl">
                         {product.emoji || "📦"}
                       </div>
 
-                      <div className="flex flex-1 flex-col gap-0.5 p-1.5 sm:p-2">
-                        <p className="line-clamp-2 min-h-[2rem] text-[11px] font-bold leading-tight text-[#212121] sm:text-xs">
+                      <div className="flex flex-1 flex-col gap-0.5 p-2 sm:p-2.5">
+                        <p className="line-clamp-2 min-h-[2.25rem] text-xs font-bold leading-tight text-[#212121] sm:text-sm">
                           {product.name}
                         </p>
                         {(product.sku || product.barcode) && (
-                          <p className="truncate text-[10px] text-[#9e9e9e]">
+                          <p className="truncate text-[11px] text-[#9e9e9e]">
                             {product.sku || product.barcode}
                           </p>
                         )}
-                        <p className="mt-auto text-sm font-bold text-[#1a73e8]">
+                        <p className="mt-auto text-base font-bold text-[#1a73e8]">
                           {money(product.price)}
                         </p>
                         <p
@@ -2675,7 +2676,7 @@ export function POSPanel({
 
           {/* Métodos de pago — solo desktop; en móvil usa el paso "pay" */}
 
-          <div className="hidden grid-cols-5 gap-1.5 lg:grid">
+          <div className="hidden grid-cols-5 gap-2 lg:grid">
             {[
               {
                 id: "cash" as const,
@@ -3683,7 +3684,7 @@ export function POSPanel({
         </div>
       )}
 
-<TicketModal
+      <TicketModal
         open={
           ticketOpen
         }
@@ -3695,3 +3696,4 @@ export function POSPanel({
     </div>
   );
 }
+```
