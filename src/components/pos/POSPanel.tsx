@@ -2108,7 +2108,7 @@ export function POSPanel({
   return (
     <div
       className={cn(
-        "flex flex-col bg-[#f4f6fb] lg:flex-row",
+        "flex flex-col bg-[#f5f5f5] lg:flex-row",
         className,
       )}
     >
@@ -2119,7 +2119,7 @@ export function POSPanel({
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {/* Header */}
 
-        <div className="flex items-center justify-between bg-[#4169e2] px-3 py-2.5 text-white sm:px-4">
+        <div className="flex items-center justify-between bg-[#1a73e8] px-3 py-2.5 text-white sm:px-4">
           <div className="min-w-0">
             <p className="truncate text-sm font-bold leading-tight">
               {branchName ||
@@ -2160,10 +2160,10 @@ export function POSPanel({
 
         {/* Buscador */}
 
-        <div className="border-b border-[#e2e8f0] bg-white px-3 py-2.5 sm:px-4">
+        <div className="border-b border-[#e0e0e0] bg-white px-3 py-2.5 sm:px-4">
           <div className="relative flex items-center gap-2">
             <div className="relative flex-1">
-              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b8]" />
+              <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[#757575]" />
 
               <Input
                 ref={searchRef}
@@ -2176,8 +2176,8 @@ export function POSPanel({
                 onKeyDown={
                   handleSearchKey
                 }
-                placeholder="What do you want to sell?"
-                className="h-11 rounded-full border-[#e2e8f0] bg-[#f4f6fb] pl-10 text-[15px] shadow-none focus-visible:ring-[#4169e2]/30"
+                placeholder="¿Qué quieres vender?"
+                className="h-11 rounded-full border-[#e0e0e0] bg-[#f5f5f5] pl-10 text-[15px] shadow-none focus-visible:ring-[#1a73e8]/30"
                 autoComplete="off"
               />
             </div>
@@ -2186,7 +2186,7 @@ export function POSPanel({
               type="button"
               variant="outline"
               size="icon"
-              className="h-11 w-11 shrink-0 rounded-full border-[#e2e8f0]"
+              className="h-11 w-11 shrink-0 rounded-full border-[#e0e0e0]"
               title="Escanear código de barras"
               onClick={() =>
                 setScannerOpen(
@@ -2194,14 +2194,14 @@ export function POSPanel({
                 )
               }
             >
-              <Camera className="h-4.5 w-4.5 text-[#4169e2]" />
+              <Camera className="h-4.5 w-4.5 text-[#1a73e8]" />
             </Button>
           </div>
         </div>
 
         {/* Categorías */}
 
-        <div className="flex gap-2 overflow-x-auto border-b border-[#e2e8f0] bg-white px-3 py-2.5 scrollbar-none sm:px-4">
+        <div className="flex gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2.5 scrollbar-none sm:px-4">
           <button
             type="button"
             onClick={() =>
@@ -2213,7 +2213,7 @@ export function POSPanel({
               "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
               categoryFilter ===
                 "all"
-                ? "bg-[#4169e2] text-white shadow-sm"
+                ? "bg-[#1a73e8] text-white shadow-sm"
                 : "bg-[#eef1f8] text-[#4b5563]",
             )}
           >
@@ -2236,7 +2236,7 @@ export function POSPanel({
                   "shrink-0 whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-bold transition-colors",
                   categoryFilter ===
                     category.id
-                    ? "bg-[#4169e2] text-white shadow-sm"
+                    ? "bg-[#1a73e8] text-white shadow-sm"
                     : "bg-[#eef1f8] text-[#4b5563]",
                 )}
               >
@@ -2248,18 +2248,18 @@ export function POSPanel({
 
         {/* Productos */}
 
-        <ScrollArea className="flex-1 bg-[#f4f6fb] p-3 sm:p-4">
+        <ScrollArea className="flex-1 bg-[#f5f5f5] p-3 sm:p-4">
           {loadingProducts ? (
-            <div className="py-16 text-center text-sm text-[#9aa3b8]">
+            <div className="py-16 text-center text-sm text-[#757575]">
               Cargando…
             </div>
           ) : filtered.length ===
             0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-2 text-[#9aa3b8]">
+            <div className="flex h-40 flex-col items-center justify-center gap-2 text-[#757575]">
               <Package className="h-10 w-10 opacity-40" />
 
               <p className="text-sm font-medium">
-                No items found
+                Sin artículos
               </p>
             </div>
           ) : (
@@ -2291,7 +2291,7 @@ export function POSPanel({
                       className="zb-product-card group relative flex flex-col items-center p-3 text-center disabled:cursor-not-allowed disabled:opacity-45"
                     >
                       {outOfStock && (
-                        <span className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-[#e5484d] px-2 py-0.5 text-[10px] font-bold text-white">
+                        <span className="absolute left-1/2 top-2 z-10 -translate-x-1/2 rounded-full bg-[#fce4ec] px-2.5 py-0.5 text-[10px] font-semibold text-[#c2185b]">
                           Agotado
                         </span>
                       )}
@@ -2301,13 +2301,13 @@ export function POSPanel({
                           "📦"}
                       </div>
 
-                      <p className="line-clamp-2 min-h-[2.25rem] text-[13px] font-semibold leading-tight text-[#1a1d26]">
+                      <p className="line-clamp-2 min-h-[2.25rem] text-[13px] font-semibold leading-tight text-[#212121]">
                         {
                           product.name
                         }
                       </p>
 
-                      <p className="mt-1 text-base font-bold text-[#4169e2]">
+                      <p className="mt-1 text-base font-bold text-[#1a73e8]">
                         {money(
                           product.price,
                         )}
@@ -2318,7 +2318,7 @@ export function POSPanel({
                           "mt-0.5 text-[11px]",
                           outOfStock
                             ? "font-semibold text-[#e5484d]"
-                            : "text-[#9aa3b8]",
+                            : "text-[#757575]",
                         )}
                       >
                         {outOfStock
@@ -2338,20 +2338,20 @@ export function POSPanel({
           DERECHA — CARRITO
           ===================================================== */}
 
-      <div className="flex w-full flex-col border-t border-[#e2e8f0] bg-white lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[400px]">
-        <div className="flex items-center justify-between border-b border-[#e2e8f0] px-4 py-3">
+      <div className="flex w-full flex-col border-t border-[#e0e0e0] bg-white lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[400px]">
+        <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc]">
-              <ShoppingCart className="h-4 w-4 text-[#4169e2]" />
+              <ShoppingCart className="h-4 w-4 text-[#1a73e8]" />
             </div>
 
-            <span className="font-bold text-[#1a1d26]">
+            <span className="font-bold text-[#212121]">
               Order
             </span>
 
             {cart.length >
               0 && (
-              <span className="rounded-full bg-[#4169e2] px-2 py-0.5 text-[11px] font-bold text-white">
+              <span className="rounded-full bg-[#1a73e8] px-2 py-0.5 text-[11px] font-bold text-white">
                 {cart.reduce(
                   (
                     sum,
@@ -2382,7 +2382,7 @@ export function POSPanel({
         <ScrollArea className="flex-1 px-3 py-2">
           {cart.length ===
           0 ? (
-            <div className="flex h-36 flex-col items-center justify-center gap-2 text-[#9aa3b8]">
+            <div className="flex h-36 flex-col items-center justify-center gap-2 text-[#757575]">
               <ShoppingCart className="h-9 w-9 opacity-25" />
 
               <p className="text-sm">
@@ -2397,7 +2397,7 @@ export function POSPanel({
                     key={
                       line.key
                     }
-                    className="flex items-start gap-2 rounded-xl border border-[#e8ecf4] bg-[#fafbfe] p-2.5"
+                    className="flex items-start gap-2 rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-2.5"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e8eefc] text-base">
                       {line.emoji ||
@@ -2405,13 +2405,13 @@ export function POSPanel({
                     </div>
 
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-[#1a1d26]">
+                      <p className="truncate text-sm font-semibold text-[#212121]">
                         {
                           line.name
                         }
                       </p>
 
-                      <p className="text-[11px] text-[#9aa3b8]">
+                      <p className="text-[11px] text-[#757575]">
                         {money(
                           line.unit_price,
                         )}{" "}
@@ -2435,7 +2435,7 @@ export function POSPanel({
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 rounded-lg border-[#e2e8f0]"
+                          className="h-7 w-7 rounded-lg border-[#e0e0e0]"
                           onClick={() =>
                             updateQty(
                               line.key,
@@ -2463,13 +2463,13 @@ export function POSPanel({
                                 .value,
                             )
                           }
-                          className="h-7 w-14 rounded-lg border-[#e2e8f0] px-1 text-center text-sm"
+                          className="h-7 w-14 rounded-lg border-[#e0e0e0] px-1 text-center text-sm"
                         />
 
                         <Button
                           size="icon"
                           variant="outline"
-                          className="h-7 w-7 rounded-lg border-[#e2e8f0]"
+                          className="h-7 w-7 rounded-lg border-[#e0e0e0]"
                           onClick={() =>
                             updateQty(
                               line.key,
@@ -2482,7 +2482,7 @@ export function POSPanel({
 
                         <button
                           type="button"
-                          className="ml-auto text-[#9aa3b8] hover:text-[#4169e2]"
+                          className="ml-auto text-[#757575] hover:text-[#1a73e8]"
                           onClick={() =>
                             openEditLine(
                               line,
@@ -2494,7 +2494,7 @@ export function POSPanel({
 
                         <button
                           type="button"
-                          className="text-[#9aa3b8] hover:text-[#e5484d]"
+                          className="text-[#757575] hover:text-[#e5484d]"
                           onClick={() =>
                             removeLine(
                               line.key,
@@ -2506,7 +2506,7 @@ export function POSPanel({
                       </div>
                     </div>
 
-                    <p className="shrink-0 text-sm font-bold text-[#1a1d26]">
+                    <p className="shrink-0 text-sm font-bold text-[#212121]">
                       {money(
                         line.unit_price *
                           line.quantity -
@@ -2524,7 +2524,7 @@ export function POSPanel({
             TOTALES Y PAGO
             ================================================= */}
 
-        <div className="space-y-3 border-t border-[#e2e8f0] bg-white p-4">
+        <div className="space-y-3 border-t border-[#e0e0e0] bg-white p-4">
           {cart.length >
             0 && (
             <div className="flex items-center gap-2">
@@ -2548,7 +2548,7 @@ export function POSPanel({
                   )
                 }
                 placeholder="0.00"
-                className="h-9 rounded-xl border-[#e2e8f0] text-sm"
+                className="h-9 rounded-xl border-[#e0e0e0] text-sm"
               />
             </div>
           )}
@@ -2574,7 +2574,7 @@ export function POSPanel({
                   )
                 }
                 placeholder="Nota para el ticket (opcional)"
-                className="h-9 rounded-xl border-[#e2e8f0] text-sm"
+                className="h-9 rounded-xl border-[#e0e0e0] text-sm"
               />
             </div>
           )}
@@ -2619,12 +2619,12 @@ export function POSPanel({
               </span>
             </div>
 
-            <div className="flex items-center justify-between border-t border-[#e2e8f0] pt-2">
-              <span className="text-base font-bold text-[#1a1d26]">
+            <div className="flex items-center justify-between border-t border-[#e0e0e0] pt-2">
+              <span className="text-base font-bold text-[#212121]">
                 Total
               </span>
 
-              <span className="text-xl font-black text-[#4169e2]">
+              <span className="text-xl font-black text-[#1a73e8]">
                 {money(total)}
               </span>
             </div>
@@ -2636,31 +2636,31 @@ export function POSPanel({
             {[
               {
                 id: "cash" as const,
-                label: "Cash",
+                label: "Efectivo",
                 icon: Banknote,
               },
 
               {
                 id: "card" as const,
-                label: "Card",
+                label: "Tarjeta",
                 icon: CreditCard,
               },
 
               {
                 id: "transfer" as const,
-                label: "UPI",
+                label: "Transfer.",
                 icon: Smartphone,
               },
 
               {
                 id: "credit" as const,
-                label: "Credit",
+                label: "Crédito",
                 icon: User,
               },
 
               {
                 id: "mixed" as const,
-                label: "Split",
+                label: "Mixto",
                 icon: CreditCard,
               },
             ].map(
@@ -2681,8 +2681,8 @@ export function POSPanel({
                     "flex flex-col items-center gap-1 rounded-xl border p-2 text-[10px] font-semibold transition-all",
                     method ===
                       id
-                      ? "border-[#4169e2] bg-[#4169e2] text-white"
-                      : "border-[#e8ecf4] bg-[#fafbfe] text-[#4b5563]",
+                      ? "border-[#1a73e8] bg-[#1a73e8] text-white"
+                      : "border-[#e0e0e0] bg-[#fafbfe] text-[#4b5563]",
                   )}
                 >
                   <Icon className="h-4 w-4" />
@@ -2700,7 +2700,7 @@ export function POSPanel({
             "cash" && (
             <div className="flex items-center gap-2">
               <span className="w-20 text-xs font-medium text-[#6b7280]">
-                Received
+                Recibido
               </span>
 
               <Input
@@ -2723,7 +2723,7 @@ export function POSPanel({
                     2,
                   ),
                 )}
-                className="h-10 rounded-xl border-[#e2e8f0]"
+                className="h-10 rounded-xl border-[#e0e0e0]"
               />
             </div>
           )}
@@ -2735,7 +2735,7 @@ export function POSPanel({
             <div className="grid grid-cols-2 gap-2">
               <div>
                 <span className="text-[11px] text-[#6b7280]">
-                  Cash
+                  Efectivo
                 </span>
 
                 <Input
@@ -2753,13 +2753,13 @@ export function POSPanel({
                         .value,
                     )
                   }
-                  className="h-10 rounded-xl border-[#e2e8f0]"
+                  className="h-10 rounded-xl border-[#e0e0e0]"
                 />
               </div>
 
               <div>
                 <span className="text-[11px] text-[#6b7280]">
-                  Card
+                  Tarjeta
                 </span>
 
                 <Input
@@ -2777,7 +2777,7 @@ export function POSPanel({
                         .value,
                     )
                   }
-                  className="h-10 rounded-xl border-[#e2e8f0]"
+                  className="h-10 rounded-xl border-[#e0e0e0]"
                 />
               </div>
             </div>
@@ -2793,13 +2793,13 @@ export function POSPanel({
               setCustomerId
             }
           >
-            <SelectTrigger className="h-10 rounded-xl border-[#e2e8f0] text-sm">
-              <SelectValue placeholder="Customer" />
+            <SelectTrigger className="h-10 rounded-xl border-[#e0e0e0] text-sm">
+              <SelectValue placeholder="Cliente" />
             </SelectTrigger>
 
             <SelectContent>
               <SelectItem value="none">
-                Walk-in
+                Público general
               </SelectItem>
 
               {customers.map(
@@ -2826,8 +2826,8 @@ export function POSPanel({
             cashNum > 0 &&
             cashNum >=
               total && (
-              <p className="text-center text-sm font-semibold text-[#30a46c]">
-                Change:{" "}
+              <p className="text-center text-sm font-semibold text-[#34a853]">
+                Cambio:{" "}
                 {money(
                   cashNum -
                     total,
@@ -2851,8 +2851,8 @@ export function POSPanel({
             className="zb-pay-btn flex h-12 w-full items-center justify-center gap-2 text-base disabled:opacity-50"
           >
             {checkout.isPending
-              ? "Processing…"
-              : `CHARGE  ${money(
+              ? "Procesando…"
+              : `COBRAR  ${money(
                   total,
                 )}`}
           </button>
@@ -3002,10 +3002,10 @@ export function POSPanel({
                           variant,
                         )
                       }
-                      className="flex w-full items-center justify-between rounded-xl border border-[#e8ecf4] bg-[#fafbfe] p-3 text-left disabled:cursor-not-allowed disabled:opacity-45"
+                      className="flex w-full items-center justify-between rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-3 text-left disabled:cursor-not-allowed disabled:opacity-45"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-[#1a1d26]">
+                        <p className="text-sm font-semibold text-[#212121]">
                           {
                             variant.name
                           }
@@ -3016,7 +3016,7 @@ export function POSPanel({
                             "text-xs",
                             outOfStock
                               ? "font-semibold text-[#e5484d]"
-                              : "text-[#9aa3b8]",
+                              : "text-[#757575]",
                           )}
                         >
                           {outOfStock
@@ -3025,7 +3025,7 @@ export function POSPanel({
                         </p>
                       </div>
 
-                      <span className="text-sm font-bold text-[#4169e2]">
+                      <span className="text-sm font-bold text-[#1a73e8]">
                         {money(
                           price,
                         )}
