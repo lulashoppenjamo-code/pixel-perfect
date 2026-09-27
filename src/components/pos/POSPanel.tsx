@@ -2334,7 +2334,7 @@ export function POSPanel({
               onClick={() => setMobileStep("cart")}
               className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm active:scale-[0.98]"
             >
-              Ir al mostrador · {cart.reduce((s, l) => s + l.quantity, 0)}
+              Ir al mostrador
             </button>
           </div>
         )}
@@ -2394,7 +2394,7 @@ export function POSPanel({
             0 && (
             <button
               type="button"
-              className="text-xs font-semibold text-[#e5484d]"
+              className="hidden text-xs font-semibold text-[#e5484d] lg:inline"
               onClick={() =>
                 setCart([])
               }
@@ -2550,9 +2550,20 @@ export function POSPanel({
             ================================================= */}
 
         <div className="space-y-3 border-t border-[#e0e0e0] bg-white p-4">
+          {/* Zobaze: Añadir artículo nuevo (móvil) */}
+          {cart.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setMobileStep("shop")}
+              className="flex h-11 w-full items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8] lg:hidden"
+            >
+              Añadir artículo nuevo
+            </button>
+          )}
+
           {cart.length >
             0 && (
-            <div className="flex items-center gap-2">
+            <div className="hidden items-center gap-2 lg:flex">
               <span className="w-20 shrink-0 text-xs font-medium text-[#6b7280]">
                 Descuento
               </span>
@@ -2580,7 +2591,7 @@ export function POSPanel({
 
           {cart.length >
             0 && (
-            <div className="flex items-start gap-2">
+            <div className="hidden items-start gap-2 lg:flex">
               <span className="mt-2 w-20 shrink-0 text-xs font-medium text-[#6b7280]">
                 <StickyNote className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
                 Nota
@@ -2634,7 +2645,7 @@ export function POSPanel({
 
             <div className="flex justify-between text-[#6b7280]">
               <span>
-                Tax
+                Impuesto
               </span>
 
               <span>
@@ -2646,18 +2657,25 @@ export function POSPanel({
 
             <div className="flex items-center justify-between border-t border-[#e0e0e0] pt-2">
               <span className="text-base font-bold text-[#212121]">
-                Total
+                Total general
               </span>
 
               <span className="text-xl font-black text-[#1a73e8]">
                 {money(total)}
               </span>
             </div>
+
+            <div className="flex items-center justify-between text-xs text-[#757575] lg:hidden">
+              <span>
+                {cart.length} Artículos |{" "}
+                {cart.reduce((s, l) => s + l.quantity, 0)} Unidades
+              </span>
+            </div>
           </div>
 
-          {/* Métodos de pago */}
+          {/* Métodos de pago — solo desktop; en móvil usa el paso "pay" */}
 
-          <div className="grid grid-cols-5 gap-1.5">
+          <div className="hidden grid-cols-5 gap-1.5 lg:grid">
             {[
               {
                 id: "cash" as const,
@@ -2719,11 +2737,11 @@ export function POSPanel({
             )}
           </div>
 
-          {/* Efectivo — estilo Zobaze */}
+          {/* Efectivo — estilo Zobaze (solo desktop) */}
 
           {method ===
             "cash" && (
-            <div className="space-y-2.5">
+            <div className="hidden space-y-2.5 lg:block">
               <div className="flex items-center gap-2">
                 <span className="w-20 shrink-0 text-xs font-medium text-[#757575]">
                   Recibido
@@ -2812,7 +2830,7 @@ export function POSPanel({
 
           {method ===
             "mixed" && (
-            <div className="grid grid-cols-2 gap-2">
+            <div className="hidden grid-cols-2 gap-2 lg:grid">
               <div>
                 <span className="text-[11px] text-[#6b7280]">
                   Efectivo
@@ -2863,7 +2881,7 @@ export function POSPanel({
             </div>
           )}
 
-          {/* Cliente */}
+          {/* Cliente — desktop; en móvil va en el paso "pay" */}
 
           <Select
             value={
@@ -2873,7 +2891,7 @@ export function POSPanel({
               setCustomerId
             }
           >
-            <SelectTrigger className="h-10 rounded-xl border-[#e0e0e0] text-sm">
+            <SelectTrigger className="hidden h-10 rounded-xl border-[#e0e0e0] text-sm lg:flex">
               <SelectValue placeholder="Cliente" />
             </SelectTrigger>
 
@@ -2906,7 +2924,7 @@ export function POSPanel({
             cashNum > 0 &&
             cashNum >=
               total && (
-              <p className="text-center text-sm font-semibold text-[#34a853]">
+              <p className="hidden text-center text-sm font-semibold text-[#34a853] lg:block">
                 Cambio:{" "}
                 {money(
                   cashNum -
@@ -3424,7 +3442,7 @@ export function POSPanel({
               ← Volver
             </button>
             <p className="text-center text-sm font-bold uppercase tracking-wide">
-              Detalles del cliente (opcional)
+              DETALLES DEL CLIENTE (OPCIONAL)
             </p>
           </div>
 
@@ -3481,9 +3499,15 @@ export function POSPanel({
                       checkout.mutate(item.id);
                     }
                   }}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[#e0e0e0] bg-[#f0f0f0] px-3 py-6 text-center shadow-sm active:scale-[0.97]"
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[#e0e0e0] bg-[#eeeeee] px-3 py-7 text-center shadow-sm active:scale-[0.97]"
                 >
-                  <span className="text-2xl">{item.emoji}</span>
+                  {item.id === "transfer" || item.id === "mixed" ? (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#1a73e8] text-lg font-bold text-white">
+                      {item.emoji}
+                    </span>
+                  ) : (
+                    <span className="text-3xl">{item.emoji}</span>
+                  )}
                   <span className="text-sm font-semibold text-[#212121]">
                     {item.label}
                   </span>
@@ -3597,7 +3621,7 @@ export function POSPanel({
               type="button"
               disabled={!canSell || checkout.isPending}
               onClick={() => checkout.mutate()}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
                 ? "Procesando…"
@@ -3643,7 +3667,7 @@ export function POSPanel({
               onClick={() => setTicketOpen(true)}
               className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold uppercase tracking-wide text-white"
             >
-              Obtener recibo
+              OBTENER RECIBO
             </button>
             <button
               type="button"
@@ -3653,7 +3677,7 @@ export function POSPanel({
               }}
               className="flex h-12 w-full items-center justify-center rounded-md bg-[#1a73e8] text-base font-bold uppercase tracking-wide text-white"
             >
-              Nueva venta
+              NUEVA VENTA
             </button>
           </div>
         </div>
