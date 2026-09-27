@@ -371,7 +371,15 @@ function ShellLayout() {
 
           <div className="min-w-0 flex-1">
             <p className="truncate text-[15px] font-semibold tracking-tight text-white">
-              {activeBranchName}
+              {location.pathname.startsWith("/productos")
+                ? "Artículos"
+                : location.pathname.startsWith("/caja")
+                  ? "Caja"
+                  : location.pathname.startsWith("/reportes")
+                    ? "Informes"
+                    : location.pathname.startsWith("/ventas")
+                      ? "Hoy"
+                      : activeBranchName}
             </p>
           </div>
 
@@ -383,7 +391,13 @@ function ShellLayout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto bg-[#f5f5f5] p-3 pb-24 md:p-6 md:pb-6">
+        <main
+          className={
+            location.pathname.startsWith("/caja")
+              ? "flex-1 overflow-hidden bg-[#f5f5f5] pb-16 md:overflow-y-auto md:p-4 md:pb-4"
+              : "flex-1 overflow-y-auto bg-[#f5f5f5] p-3 pb-24 md:p-6 md:pb-6"
+          }
+        >
           <Outlet />
         </main>
       </div>
@@ -413,13 +427,13 @@ function ShellLayout() {
               }`}
             >
               <div
-                className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                  isActive ? "bg-[#e8f0fe]" : ""
+                className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                  isActive ? "bg-[#1a73e8]" : ""
                 }`}
               >
                 <Icon
                   className={`h-5 w-5 ${
-                    isActive ? "text-[#1a73e8]" : ""
+                    isActive ? "text-white" : ""
                   }`}
                 />
               </div>
