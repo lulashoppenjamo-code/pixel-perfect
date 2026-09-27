@@ -3485,7 +3485,7 @@ export function POSPanel({
                 ] as const
               ).map((item, i) => (
                 <button
-                  key={item.key ?? item.id + String(i)}
+                key={`${item.id}-${i}`}
                   type="button"
                   onClick={() => {
                     setMethod(item.id);
