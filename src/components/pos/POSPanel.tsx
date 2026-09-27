@@ -2694,37 +2694,92 @@ export function POSPanel({
             )}
           </div>
 
-          {/* Efectivo */}
+          {/* Efectivo — estilo Zobaze */}
 
           {method ===
             "cash" && (
-            <div className="flex items-center gap-2">
-              <span className="w-20 text-xs font-medium text-[#6b7280]">
-                Recibido
-              </span>
+            <div className="space-y-2.5">
+              <div className="flex items-center gap-2">
+                <span className="w-20 shrink-0 text-xs font-medium text-[#757575]">
+                  Recibido
+                </span>
 
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={
-                  cashReceived
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setCashReceived(
-                    event.target
-                      .value,
-                  )
-                }
-                placeholder={String(
-                  total.toFixed(
-                    2,
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={
+                    cashReceived
+                  }
+                  onChange={(
+                    event,
+                  ) =>
+                    setCashReceived(
+                      event.target
+                        .value,
+                    )
+                  }
+                  placeholder={String(
+                    total.toFixed(
+                      2,
+                    ),
+                  )}
+                  className="h-11 rounded-xl border-[#e0e0e0] text-base font-semibold"
+                />
+              </div>
+
+              {/* Botones de billetes rápidos */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {[20, 50, 100, 200, 500, 1000].map(
+                  (amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => {
+                        const current =
+                          Number(
+                            cashReceived,
+                          ) || 0;
+                        setCashReceived(
+                          String(
+                            current +
+                              amount,
+                          ),
+                        );
+                      }}
+                      className="rounded-lg border border-[#e0e0e0] bg-white py-2 text-xs font-bold text-[#212121] shadow-sm transition active:scale-95 active:bg-[#e8f5e9]"
+                    >
+                      +${amount}
+                    </button>
                   ),
                 )}
-                className="h-10 rounded-xl border-[#e0e0e0]"
-              />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCashReceived(
+                      String(
+                        total.toFixed(
+                          2,
+                        ),
+                      ),
+                    )
+                  }
+                  className="rounded-lg border border-[#34a853] bg-[#e8f5e9] py-2 text-xs font-bold text-[#34a853] shadow-sm transition active:scale-95"
+                >
+                  Exacto
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCashReceived(
+                      "",
+                    )
+                  }
+                  className="rounded-lg border border-[#e0e0e0] bg-[#f5f5f5] py-2 text-xs font-semibold text-[#757575] transition active:scale-95"
+                >
+                  Borrar
+                </button>
+              </div>
             </div>
           )}
 
@@ -2848,13 +2903,18 @@ export function POSPanel({
             onClick={() =>
               checkout.mutate()
             }
-            className="zb-pay-btn flex h-12 w-full items-center justify-center gap-2 text-base disabled:opacity-50"
+            className={cn(
+              "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50",
+              method === "cash"
+                ? "bg-[#34a853] hover:bg-[#2d9249]"
+                : "bg-[#1a73e8] hover:bg-[#1557b0]",
+            )}
           >
             {checkout.isPending
               ? "Procesando…"
-              : `COBRAR  ${money(
-                  total,
-                )}`}
+              : method === "cash"
+                ? `Recibido por Efectivo  ${money(total)}`
+                : `COBRAR  ${money(total)}`}
           </button>
         </div>
       </div>
