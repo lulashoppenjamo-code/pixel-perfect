@@ -14,8 +14,6 @@ import { Button } from "@/components/ui/button";
 import {
   Sheet,
   SheetContent,
-  SheetHeader,
-  SheetTitle,
 } from "@/components/ui/sheet";
 
 import {
@@ -61,22 +59,25 @@ function ShellErrorComponent({
   reset: () => void;
 }) {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-6 text-center">
-      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-        <AlertTriangle className="h-8 w-8" />
+    <div className="flex min-h-screen min-w-0 flex-col items-center justify-center overflow-x-hidden bg-background p-4 text-center sm:p-6">
+      <div className="mb-4 flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-destructive/10 text-destructive sm:h-16 sm:w-16">
+        <AlertTriangle className="h-7 w-7 sm:h-8 sm:w-8" />
       </div>
 
-      <h2 className="mb-2 text-2xl font-bold">
+      <h2 className="mb-2 break-words text-xl font-bold sm:text-2xl">
         Error al cargar la sección
       </h2>
 
-      <p className="mb-6 max-w-md text-sm text-muted-foreground">
+      <p className="mb-6 w-full max-w-md break-words text-sm leading-5 text-muted-foreground">
         {error?.message ||
           "Ocurrió un problema al inicializar el módulo o la sesión de usuario."}
       </p>
 
-      <div className="flex gap-3">
-        <Button onClick={() => reset()}>
+      <div className="flex w-full max-w-md flex-col gap-2 sm:flex-row sm:justify-center sm:gap-3">
+        <Button
+          onClick={() => reset()}
+          className="min-h-11 w-full sm:w-auto"
+        >
           <RotateCcw className="mr-2 h-4 w-4" />
           Reintentar
         </Button>
@@ -86,6 +87,7 @@ function ShellErrorComponent({
             window.location.href = "/auth";
           }}
           variant="outline"
+          className="min-h-11 w-full sm:w-auto"
         >
           Ir al Login
         </Button>
@@ -192,15 +194,15 @@ function ShellLayout() {
     },
   ];
 
-  const navItems = filterNavByRoles(
-    allNavItems,
-    roles,
-  );
+  const navItems = filterNavByRoles(allNavItems, roles);
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Bottom nav estilo Zobaze: Informes · Hoy · Caja · Artículos · Más
+  /*
+   * Navegación inferior para celular/tablet.
+   * Se mantiene exactamente la misma lógica de permisos/rutas.
+   */
   const bottomNavItems = [
     {
       label: "Informes",
@@ -254,26 +256,30 @@ function ShellLayout() {
     "Lula Shop";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* ========== DESKTOP SIDEBAR ========== */}
-      <aside className="hidden w-64 select-none flex-col justify-between border-r bg-card p-4 md:flex">
-        <div className="space-y-6">
-          <div className="flex items-center gap-3 px-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a73e8] text-xl font-bold text-white shadow-sm">
+    <div className="flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
+      {/* =====================================================
+          SIDEBAR
+          Se conserva para pantallas grandes.
+          Celular/tablet utilizan navegación táctil.
+          ===================================================== */}
+      <aside className="hidden w-64 shrink-0 select-none flex-col justify-between border-r bg-card p-4 lg:flex">
+        <div className="min-h-0 space-y-6 overflow-y-auto overflow-x-hidden">
+          <div className="flex min-w-0 items-center gap-3 px-2">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1a73e8] text-xl font-bold text-white shadow-sm">
               L
             </div>
 
-            <div>
-              <h1 className="text-lg font-bold leading-tight text-[#212121]">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold leading-tight text-[#212121]">
                 Lula OS
               </h1>
 
-              <p className="text-xs text-[#757575]">
+              <p className="truncate text-xs text-[#757575]">
                 Punto de Venta
               </p>
             </div>
 
-            <div className="ml-auto">
+            <div className="ml-auto shrink-0">
               <InventoryAlerts
                 compact
                 onOpenInventory={openInventory}
@@ -291,7 +297,7 @@ function ShellLayout() {
               onChange={(event) =>
                 setBranchId(event.target.value)
               }
-              className="w-full cursor-pointer rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
+              className="min-h-11 w-full cursor-pointer rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
             >
               {branches && branches.length > 0 ? (
                 branches.map((branch) => (
@@ -300,7 +306,9 @@ function ShellLayout() {
                   </option>
                 ))
               ) : (
-                <option value="">Cargando sucursales...</option>
+                <option value="">
+                  Cargando sucursales...
+                </option>
               )}
             </select>
           </div>
@@ -321,14 +329,16 @@ function ShellLayout() {
                       to: item.path,
                     })
                   }
-                  className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     isActive
                       ? "bg-[#1a73e8] text-white shadow-sm"
                       : "text-[#212121] hover:bg-[#e8f0fe]"
                   }`}
                 >
-                  <Icon className="h-4 w-4" />
-                  {item.label}
+                  <Icon className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 truncate">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
@@ -349,28 +359,30 @@ function ShellLayout() {
           <Button
             onClick={() => signOut()}
             variant="ghost"
-            className="w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
+            className="min-h-11 w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
           >
-            <LogOut className="mr-2 h-4 w-4" />
+            <LogOut className="mr-2 h-4 w-4 shrink-0" />
             Cerrar Sesión
           </Button>
         </div>
       </aside>
 
-      {/* ========== MAIN CONTENT ========== */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* ===== MOBILE TOP BAR (estilo Zobaze) ===== */}
-        <header className="zb-topbar flex items-center gap-3 px-3 md:hidden">
+      {/* =====================================================
+          CONTENIDO PRINCIPAL
+          ===================================================== */}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* ===== MOBILE / TABLET TOP BAR ===== */}
+        <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
-            className="flex h-10 w-10 items-center justify-center rounded-full text-white/90 active:bg-white/10"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/90 active:bg-white/10"
             aria-label="Menú"
           >
             <Menu className="h-6 w-6" />
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-[15px] font-semibold tracking-tight text-white">
+            <p className="truncate text-sm font-semibold tracking-tight text-white sm:text-[15px]">
               {location.pathname.startsWith("/productos")
                 ? "Artículos"
                 : location.pathname.startsWith("/caja")
@@ -383,7 +395,7 @@ function ShellLayout() {
             </p>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex shrink-0 items-center gap-1">
             <InventoryAlerts
               compact
               onOpenInventory={openInventory}
@@ -394,19 +406,22 @@ function ShellLayout() {
         <main
           className={
             location.pathname.startsWith("/caja")
-              ? "flex-1 overflow-hidden bg-[#f5f5f5] pb-16 md:overflow-y-auto md:p-4 md:pb-4"
-              : "flex-1 overflow-y-auto bg-[#f5f5f5] p-3 pb-24 md:p-6 md:pb-6"
+              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:p-4 lg:pb-4"
+              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-5 md:pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6"
           }
         >
           <Outlet />
         </main>
       </div>
 
-      {/* ===== MOBILE BOTTOM NAV (estilo Zobaze) ===== */}
+      {/* =====================================================
+          MOBILE / TABLET BOTTOM NAV
+          ===================================================== */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white lg:hidden"
         style={{
-          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+          paddingBottom:
+            "env(safe-area-inset-bottom, 0px)",
         }}
       >
         {bottomNavItems.map((item) => {
@@ -420,14 +435,14 @@ function ShellLayout() {
             <button
               key={item.path}
               onClick={() => goTo(item.path)}
-              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors ${
+              className={`flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors sm:text-[11px] ${
                 isActive
                   ? "text-[#1a73e8]"
                   : "text-[#757575]"
               }`}
             >
               <div
-                className={`flex h-8 w-8 items-center justify-center rounded-md ${
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
                   isActive ? "bg-[#1a73e8]" : ""
                 }`}
               >
@@ -437,7 +452,8 @@ function ShellLayout() {
                   }`}
                 />
               </div>
-              <span className="max-w-[64px] truncate">
+
+              <span className="max-w-[72px] truncate">
                 {item.label}
               </span>
             </button>
@@ -447,73 +463,84 @@ function ShellLayout() {
         {moreItems.length > 0 && (
           <button
             onClick={() => setMoreOpen(true)}
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium text-[#757575]"
+            className="flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium text-[#757575] sm:text-[11px]"
           >
-            <div className="flex h-7 w-7 items-center justify-center rounded-lg">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
               <MoreHorizontal className="h-5 w-5" />
             </div>
+
             <span>Más</span>
           </button>
         )}
       </nav>
 
-      {/* ===== MOBILE SIDE MENU (hamburguesa) — estilo Zobaze ===== */}
+      {/* =====================================================
+          MOBILE / TABLET SIDE MENU
+          ===================================================== */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="w-[300px] max-w-[88vw] overflow-y-auto p-0 md:hidden"
+          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0 lg:hidden"
         >
-          <div className="flex h-full flex-col">
-            {/* Header azul con negocio */}
-            <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white">
-              <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+          <div className="flex min-h-full flex-col">
+            <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white sm:px-5">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
                   L
                 </div>
+
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-base font-semibold">
                     {activeBranchName}
                   </p>
-                  <p className="text-xs text-white/80">
+
+                  <p className="truncate text-xs text-white/80">
                     Lula Shop OS
                   </p>
                 </div>
               </div>
 
-              {/* Badge visual tipo PREMIUM (solo diseño) */}
-              <div className="mt-4 flex items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
-                <Crown className="h-4 w-4 text-white" />
+              <div className="mt-4 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
+                <Crown className="h-4 w-4 shrink-0 text-white" />
+
                 <div className="min-w-0">
-                  <p className="text-xs font-bold uppercase tracking-wide text-white">
+                  <p className="truncate text-xs font-bold uppercase tracking-wide text-white">
                     Lula Shop OS
                   </p>
-                  <p className="text-[11px] text-white/90">
+
+                  <p className="truncate text-[11px] text-white/90">
                     Sistema propio · v1.0
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="flex-1 space-y-0.5 p-3">
+            <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3 sm:p-4">
               <div className="mb-3">
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Sucursal Activa
                 </label>
+
                 <select
                   value={branchId ?? ""}
                   onChange={(event) =>
                     setBranchId(event.target.value)
                   }
-                  className="w-full rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
+                  className="min-h-11 w-full rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
                 >
                   {branches && branches.length > 0 ? (
                     branches.map((branch) => (
-                      <option key={branch.id} value={branch.id}>
+                      <option
+                        key={branch.id}
+                        value={branch.id}
+                      >
                         {branch.name}
                       </option>
                     ))
                   ) : (
-                    <option value="">Cargando...</option>
+                    <option value="">
+                      Cargando...
+                    </option>
                   )}
                 </select>
               </div>
@@ -524,22 +551,25 @@ function ShellLayout() {
 
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname.startsWith(
-                  item.path,
-                );
+
+                const isActive =
+                  location.pathname.startsWith(item.path);
 
                 return (
                   <button
                     key={item.path}
                     onClick={() => goTo(item.path)}
-                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                    className={`flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
                       isActive
                         ? "bg-[#1a73e8] text-white"
                         : "text-[#212121] hover:bg-[#e8f0fe]"
                     }`}
                   >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
+                    <Icon className="h-4 w-4 shrink-0" />
+
+                    <span className="min-w-0 truncate">
+                      {item.label}
+                    </span>
                   </button>
                 );
               })}
@@ -549,15 +579,17 @@ function ShellLayout() {
               <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
+
               <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
+
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
-                className="w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
+                className="min-h-11 w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
               >
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="mr-2 h-4 w-4 shrink-0" />
                 Cerrar Sesión
               </Button>
             </div>
@@ -565,85 +597,94 @@ function ShellLayout() {
         </SheetContent>
       </Sheet>
 
-      {/* ===== MÁS (bottom sheet) — estilo Zobaze ===== */}
+      {/* =====================================================
+          MÁS
+          ===================================================== */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[88vh] overflow-y-auto rounded-t-2xl border-0 p-0 md:hidden"
+          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0 lg:hidden"
         >
-          {/* Handle visual */}
           <div className="flex justify-center pt-3">
             <div className="h-1 w-10 rounded-full bg-[#e0e0e0]" />
           </div>
 
-          <div className="px-4 pb-6 pt-3">
+          <div className="px-4 pb-6 pt-3 sm:px-6">
             <h2 className="mb-4 text-lg font-bold text-[#212121]">
               Más opciones
             </h2>
 
-            {/* Sucursal */}
             <div className="mb-4">
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                 Sucursal Activa
               </label>
+
               <select
                 value={branchId ?? ""}
                 onChange={(event) =>
                   setBranchId(event.target.value)
                 }
-                className="w-full rounded-xl border border-[#e0e0e0] bg-white p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
+                className="min-h-12 w-full rounded-xl border border-[#e0e0e0] bg-white p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
               >
                 {branches && branches.length > 0 ? (
                   branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
+                    <option
+                      key={branch.id}
+                      value={branch.id}
+                    >
                       {branch.name}
                     </option>
                   ))
                 ) : (
-                  <option value="">Cargando sucursales...</option>
+                  <option value="">
+                    Cargando sucursales...
+                  </option>
                 )}
               </select>
             </div>
 
-            {/* Alertas */}
-            <div className="mb-4 flex items-center justify-between rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm">
-              <div>
-                <p className="text-sm font-semibold text-[#212121]">
+            <div className="mb-4 flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-semibold text-[#212121]">
                   Alertas de inventario
                 </p>
-                <p className="text-xs text-[#757575]">
+
+                <p className="truncate text-xs text-[#757575]">
                   Stock agotado o bajo mínimo
                 </p>
               </div>
-              <InventoryAlerts
-                compact
-                onOpenInventory={openInventory}
-              />
+
+              <div className="shrink-0">
+                <InventoryAlerts
+                  compact
+                  onOpenInventory={openInventory}
+                />
+              </div>
             </div>
 
-            {/* Grid de módulos estilo Zobaze */}
             <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
               Gestión
             </p>
-            <div className="grid grid-cols-3 gap-2.5">
+
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
               {moreItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname.startsWith(
-                  item.path,
-                );
+
+                const isActive =
+                  location.pathname.startsWith(item.path);
 
                 return (
                   <button
                     key={item.path}
                     onClick={() => goTo(item.path)}
-                    className={`flex flex-col items-center justify-center gap-2 rounded-xl border p-3.5 text-xs font-medium shadow-sm transition active:scale-[0.97] ${
+                    className={`flex min-h-28 min-w-0 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-xs font-medium shadow-sm transition active:scale-[0.97] ${
                       isActive
                         ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
                         : "border-[#e0e0e0] bg-white text-[#212121]"
                     }`}
                   >
                     <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
                         isActive
                           ? "bg-[#1a73e8] text-white"
                           : "bg-[#e8f0fe] text-[#1a73e8]"
@@ -651,7 +692,8 @@ function ShellLayout() {
                     >
                       <Icon className="h-5 w-5" />
                     </div>
-                    <span className="text-center leading-tight">
+
+                    <span className="max-w-full break-words text-center leading-tight">
                       {item.label}
                     </span>
                   </button>
@@ -659,20 +701,21 @@ function ShellLayout() {
               })}
             </div>
 
-            {/* Usuario */}
             <div className="mt-5 border-t border-[#e0e0e0] pt-4">
               <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
+
               <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
+
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
-                className="w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
+                className="min-h-11 w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
               >
-                <LogOut className="mr-2 h-4 w-4" />
+                <LogOut className="mr-2 h-4 w-4 shrink-0" />
                 Cerrar Sesión
               </Button>
             </div>
