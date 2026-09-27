@@ -1480,7 +1480,12 @@ export function POSPanel({
 
   const checkout = useMutation({
     mutationFn:
-      async () => {
+      async (
+        paymentMethodOverride?: PaymentMethod,
+      ) => {
+        const activeMethod =
+          paymentMethodOverride ?? method;
+
         if (!branchId) {
           throw new Error(
             "Sin sucursal",
@@ -1503,7 +1508,7 @@ export function POSPanel({
         }
 
         if (
-          method === "cash" &&
+          activeMethod === "cash" &&
           cashNum > 0 &&
           cashNum < total
         ) {
@@ -1513,7 +1518,7 @@ export function POSPanel({
         }
 
         if (
-          method === "mixed"
+          activeMethod === "mixed"
         ) {
           const mixedCashValue =
             Number(
@@ -1537,7 +1542,7 @@ export function POSPanel({
         }
 
         if (
-          method === "credit" &&
+          activeMethod === "credit" &&
           customerId ===
             "none"
         ) {
@@ -1583,7 +1588,7 @@ export function POSPanel({
                 items,
 
               _payment_method:
-                method,
+                activeMethod,
 
               _discount:
                 disc,
@@ -1603,14 +1608,14 @@ export function POSPanel({
                   }
                 : {}),
 
-              ...(method ===
+              ...(activeMethod ===
               "cash"
                 ? {
                     _cash_received:
                       cashNum ||
                       total,
                   }
-                : method ===
+                : activeMethod ===
                       "mixed" &&
                     Number(
                       mixedCash,
@@ -1636,7 +1641,13 @@ export function POSPanel({
       },
 
     onSuccess:
-      (sale) => {
+      (
+        sale,
+        paymentMethodOverride,
+      ) => {
+        const activeMethod =
+          paymentMethodOverride ?? method;
+
         const customerName =
           customerId !==
           "none"
@@ -1648,7 +1659,7 @@ export function POSPanel({
             : undefined;
 
         const paymentLabel =
-          method === "mixed"
+          activeMethod === "mixed"
             ? `Mixto (Efectivo ${money(
                 Number(
                   mixedCash,
@@ -1658,7 +1669,7 @@ export function POSPanel({
                   mixedCard,
                 ) || 0,
               )})`
-            : method;
+            : activeMethod;
 
         setTicket({
           companyName:
@@ -1718,10 +1729,10 @@ export function POSPanel({
           total,
 
           cashReceived:
-            method === "cash"
+            activeMethod === "cash"
               ? cashNum ||
                 total
-              : method ===
+              : activeMethod ===
                   "mixed"
                 ? Number(
                     mixedCash,
@@ -1729,7 +1740,7 @@ export function POSPanel({
                 : null,
 
           changeGiven:
-            method === "cash"
+            activeMethod === "cash"
               ? change
               : null,
 
@@ -3455,7 +3466,7 @@ export function POSPanel({
                       );
                       setMobileStep("cash");
                     } else {
-                      checkout.mutate();
+                      checkout.mutate(item.id);
                     }
                   }}
                   className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[#e0e0e0] bg-[#f0f0f0] px-3 py-6 text-center shadow-sm active:scale-[0.97]"
