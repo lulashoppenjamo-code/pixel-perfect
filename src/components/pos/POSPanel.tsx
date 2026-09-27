@@ -1,4 +1,3 @@
-```html
 /**
  * Punto de Venta — LULA OS
  * Archivo: src/components/pos/POSPanel.tsx
@@ -799,7 +798,7 @@ export function POSPanel({
       return [
         ...previous,
         {
-          key: `${product.id}-${Date.now()}`,
+          key: `\( {product.id}- \){Date.now()}`,
 
           product_id:
             product.id,
@@ -916,7 +915,7 @@ export function POSPanel({
       return [
         ...previous,
         {
-          key: `${product.id}-${variant.id}-${Date.now()}`,
+          key: `\( {product.id}- \){variant.id}-${Date.now()}`,
 
           product_id:
             product.id,
@@ -3485,7 +3484,7 @@ export function POSPanel({
                 ] as const
               ).map((item, i) => (
                 <button
-                key={`${item.id}-${i}`}
+                  key={item.key ?? item.id + String(i)}
                   type="button"
                   onClick={() => {
                     setMethod(item.id);
@@ -3696,4 +3695,3 @@ export function POSPanel({
     </div>
   );
 }
-```
