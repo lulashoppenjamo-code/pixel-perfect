@@ -27,6 +27,7 @@ import {
   Boxes,
   AlertTriangle,
   Users,
+  ChevronRight,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -1087,8 +1088,8 @@ function ReportesPage() {
     <PageShell className="space-y-5">
       <PageHeader
         icon={BarChart3}
-        title="Reportes"
-        description="Ventas, utilidad real, clientes, costos históricos e inventario compartido."
+        title="Informes"
+        description="Resumen de ventas, utilidad e inventario."
         action={
           <Select
             value={rangeDays}
@@ -1096,7 +1097,7 @@ function ReportesPage() {
               setRangeDays
             }
           >
-            <SelectTrigger className="w-[180px] rounded-xl">
+            <SelectTrigger className="w-[180px] rounded-xl border-[#e0e0e0]">
               <SelectValue />
             </SelectTrigger>
 
@@ -1121,6 +1122,81 @@ function ReportesPage() {
           </Select>
         }
       />
+
+      {/* Lista estilo Zobaze — métricas principales */}
+      <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <ReportRow
+          label="RECUENTO TOTAL DE RECIBOS"
+          value={
+            loadingSales
+              ? "…"
+              : String(ticketCount)
+          }
+        />
+        <ReportRow
+          label="VENTAS TOTALES"
+          value={
+            loadingSales
+              ? "…"
+              : money(totalSales)
+          }
+          highlight
+        />
+        <ReportRow
+          label="VALOR MEDIO DE LAS VENTAS"
+          value={
+            loadingSales
+              ? "…"
+              : money(averageTicket)
+          }
+        />
+        <ReportRow
+          label="DESCUENTO"
+          value={
+            loadingSales
+              ? "…"
+              : money(
+                  sales.reduce(
+                    (s, sale) =>
+                      s +
+                      Number(
+                        sale.discount ??
+                          0,
+                      ),
+                    0,
+                  ),
+                )
+          }
+        />
+        <ReportRow
+          label="IMPUESTO"
+          value={
+            loadingSales
+              ? "…"
+              : money(
+                  sales.reduce(
+                    (s, sale) =>
+                      s +
+                      Number(
+                        sale.tax ?? 0,
+                      ),
+                    0,
+                  ),
+                )
+          }
+        />
+        <ReportRow
+          label="UTILIDAD BRUTA"
+          value={
+            loadingSaleItems ||
+            loadingSales
+              ? "…"
+              : money(grossProfit)
+          }
+          highlight
+          last
+        />
+      </div>
 
       {/* ======================================================
           KPI PRINCIPALES
@@ -1810,6 +1886,45 @@ function SummaryRow({
       <span>{label}</span>
 
       <span>{value}</span>
+    </div>
+  );
+}
+
+/** Fila de métrica estilo Zobaze (lista densa) */
+function ReportRow({
+  label,
+  value,
+  highlight,
+  last,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  last?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex items-center justify-between gap-3 px-4 py-3.5",
+        !last && "border-b border-[#f0f0f0]",
+      )}
+    >
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+        {label}
+      </span>
+      <div className="flex items-center gap-1.5">
+        <span
+          className={cn(
+            "text-base font-bold tabular-nums",
+            highlight
+              ? "text-[#1a73e8]"
+              : "text-[#212121]",
+          )}
+        >
+          {value}
+        </span>
+        <ChevronRight className="h-4 w-4 text-[#bdbdbd]" />
+      </div>
     </div>
   );
 }
