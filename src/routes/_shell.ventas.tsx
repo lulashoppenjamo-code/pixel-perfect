@@ -933,12 +933,18 @@ function VentasPage() {
           </p>
         ) : visible.length ===
           0 ? (
-          <div className="flex flex-col items-center gap-2 py-12 text-[#9aa3b8]">
-            <Receipt className="h-9 w-9 opacity-30" />
-
-            <p className="text-sm">
-              Sin tickets en este filtro
-            </p>
+          <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f0fe] text-4xl">
+              📭
+            </div>
+            <div>
+              <p className="text-base font-bold text-[#212121]">
+                No hay transacciones hoy
+              </p>
+              <p className="mt-1 text-sm text-[#757575]">
+                Ajusta el filtro de fechas o realiza una venta en Caja
+              </p>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
