@@ -2202,8 +2202,8 @@ export function POSPanel({
           )}
         </div>
 
-        {/* Categorías — solo desktop / tablet */}
-        <div className="hidden gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:flex sm:px-4">
+        {/* Categorías — chips con scroll horizontal (móvil + desktop) */}
+        <div className="flex gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:px-4">
           <button
             type="button"
             onClick={() => setCategoryFilter("all")}
@@ -2304,6 +2304,18 @@ export function POSPanel({
                         )}
                         <p className="mt-auto text-sm font-bold text-[#1a73e8]">
                           {money(product.price)}
+                        </p>
+                        <p
+                          className={cn(
+                            "text-[10px] leading-tight",
+                            outOfStock
+                              ? "font-semibold text-[#c2185b]"
+                              : "text-[#757575]",
+                          )}
+                        >
+                          {outOfStock
+                            ? "Sin stock"
+                            : `${product.stock} disp.`}
                         </p>
                       </div>
                     </button>
