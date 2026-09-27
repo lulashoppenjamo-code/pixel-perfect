@@ -192,6 +192,14 @@ export function POSPanel({
   const [ticketOpen, setTicketOpen] =
     useState(false);
 
+  /* Flujo visual móvil estilo Zobaze:
+     shop = productos | cart = carrito | pay = métodos | cash = efectivo | success = venta ok */
+  const [mobileStep, setMobileStep] = useState<
+    "shop" | "cart" | "pay" | "cash" | "success"
+  >("shop");
+  const [lastSaleTotal, setLastSaleTotal] = useState(0);
+  const [lastSaleFolio, setLastSaleFolio] = useState<string | number>("");
+
   const branchName =
     branches.find((b) => b.id === branchId)?.name ?? "";
 
@@ -1731,6 +1739,9 @@ export function POSPanel({
               : settings?.ticketFooter,
         });
 
+        setLastSaleTotal(total);
+        setLastSaleFolio(sale.folio ?? "");
+        setMobileStep("success");
         setTicketOpen(
           true,
         );
@@ -2116,7 +2127,12 @@ export function POSPanel({
           IZQUIERDA — PRODUCTOS
           ===================================================== */}
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col overflow-hidden",
+          mobileStep !== "shop" && "hidden lg:flex",
+        )}
+      >
         {/* Header */}
 
         <div className="flex items-center justify-between bg-[#1a73e8] px-3 py-2.5 text-white sm:px-4">
@@ -2328,8 +2344,8 @@ export function POSPanel({
                         )}
                       >
                         {outOfStock
-                          ? "Out of stock"
-                          : `Available: ${product.stock}`}
+                          ? "Agotado"
+                          : `${product.stock} disp.`}
                       </p>
                     </button>
                   );
@@ -2338,21 +2354,53 @@ export function POSPanel({
             </div>
           )}
         </ScrollArea>
+
+        {/* Barra Ir al mostrador (móvil, estilo Zobaze) */}
+        {cart.length > 0 && (
+          <div className="border-t border-[#e0e0e0] bg-white p-3 lg:hidden">
+            <button
+              type="button"
+              onClick={() => setMobileStep("cart")}
+              className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm active:scale-[0.98]"
+            >
+              Ir al mostrador · {cart.reduce((s, l) => s + l.quantity, 0)}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* =====================================================
           DERECHA — CARRITO
           ===================================================== */}
 
-      <div className="flex w-full flex-col border-t border-[#e0e0e0] bg-white lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[400px]">
+      <div
+        className={cn(
+          "flex w-full flex-col border-t border-[#e0e0e0] bg-white lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[400px]",
+          mobileStep === "shop" && cart.length === 0 && "hidden lg:flex",
+          mobileStep === "shop" && cart.length > 0 && "hidden lg:flex",
+          mobileStep === "cart" && "fixed inset-0 z-40 lg:static lg:z-auto",
+          (mobileStep === "pay" ||
+            mobileStep === "cash" ||
+            mobileStep === "success") &&
+            "hidden lg:flex",
+        )}
+      >
         <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc]">
+            <button
+              type="button"
+              className="flex h-8 w-8 items-center justify-center rounded-full text-[#1a73e8] lg:hidden"
+              onClick={() => setMobileStep("shop")}
+              aria-label="Volver"
+            >
+              ←
+            </button>
+            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc] lg:flex">
               <ShoppingCart className="h-4 w-4 text-[#1a73e8]" />
             </div>
 
             <span className="font-bold text-[#212121]">
-              Order
+              Caja
             </span>
 
             {cart.length >
@@ -2380,7 +2428,7 @@ export function POSPanel({
                 setCart([])
               }
             >
-              Clear
+              Borrar
             </button>
           )}
         </div>
@@ -2392,7 +2440,7 @@ export function POSPanel({
               <ShoppingCart className="h-9 w-9 opacity-25" />
 
               <p className="text-sm">
-                Tap items to add
+                Añade artículos para vender
               </p>
             </div>
           ) : (
@@ -2898,6 +2946,26 @@ export function POSPanel({
 
           {/* Cobrar */}
 
+          {/* Botones estilo Zobaze: Borrar | Guardar + Cobrar */}
+          <div className="flex gap-2 lg:hidden">
+            <button
+              type="button"
+              disabled={cart.length === 0}
+              onClick={() => setCart([])}
+              className="h-11 flex-1 rounded-xl bg-[#ef5350] text-sm font-bold text-white disabled:opacity-40"
+            >
+              Borrar
+            </button>
+            <button
+              type="button"
+              disabled={cart.length === 0}
+              onClick={() => setMobileStep("shop")}
+              className="h-11 flex-1 rounded-xl bg-[#ffa726] text-sm font-bold text-white disabled:opacity-40"
+            >
+              Guardar para más
+            </button>
+          </div>
+
           <button
             type="button"
             disabled={
@@ -2906,21 +2974,22 @@ export function POSPanel({
                 0 ||
               checkout.isPending
             }
-            onClick={() =>
-              checkout.mutate()
-            }
-            className={cn(
-              "flex h-12 w-full items-center justify-center gap-2 rounded-xl text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50",
-              method === "cash"
-                ? "bg-[#34a853] hover:bg-[#2d9249]"
-                : "bg-[#1a73e8] hover:bg-[#1557b0]",
-            )}
+            onClick={() => {
+              // Móvil: ir a métodos de pago. Desktop: cobrar directo
+              if (
+                typeof window !== "undefined" &&
+                window.matchMedia("(max-width: 1023px)").matches
+              ) {
+                setMobileStep("pay");
+              } else {
+                checkout.mutate();
+              }
+            }}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#2d9249] disabled:opacity-50"
           >
             {checkout.isPending
               ? "Procesando…"
-              : method === "cash"
-                ? `Recibido por Efectivo  ${money(total)}`
-                : `COBRAR  ${money(total)}`}
+              : `Cobrar: ${money(total)}`}
           </button>
         </div>
       </div>
@@ -3369,7 +3438,257 @@ export function POSPanel({
           TICKET
           ===================================================== */}
 
-      <TicketModal
+      
+      {/* =====================================================
+          FLUJO MÓVIL ZOBAZE: métodos de pago
+          ===================================================== */}
+      {mobileStep === "pay" && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+          <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileStep("cart")}
+              className="mb-2 flex items-center gap-1 text-sm font-medium text-white/90"
+            >
+              ← Volver
+            </button>
+            <p className="text-center text-sm font-bold uppercase tracking-wide">
+              Detalles del cliente (opcional)
+            </p>
+          </div>
+
+          <div className="space-y-3 overflow-y-auto p-3 pb-8">
+            <div className="rounded-xl border border-[#e0e0e0] bg-white p-4 shadow-sm">
+              <Select
+                value={customerId}
+                onValueChange={setCustomerId}
+              >
+                <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
+                  <SelectValue placeholder="Cliente (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    Público general
+                  </SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <p className="px-1 text-center text-sm font-semibold text-[#1a73e8]">
+              Seleccione el método de pago
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {(
+                [
+                  { id: "cash" as const, label: "Efectivo", emoji: "💵" },
+                  { id: "card" as const, label: "Tarjeta de débito", emoji: "💳" },
+                  { id: "card" as const, label: "Tarjeta de crédito", emoji: "💳", key: "card2" },
+                  { id: "credit" as const, label: "Crédito", emoji: "📅" },
+                  { id: "transfer" as const, label: "Transferencia", emoji: "T" },
+                  { id: "mixed" as const, label: "Mixto", emoji: "🔀" },
+                ] as const
+              ).map((item, i) => (
+                <button
+                  key={item.key ?? item.id + String(i)}
+                  type="button"
+                  onClick={() => {
+                    setMethod(item.id);
+                    if (item.id === "cash") {
+                      setCashReceived(
+                        total > 0
+                          ? String(total.toFixed(2))
+                          : "",
+                      );
+                      setMobileStep("cash");
+                    } else {
+                      checkout.mutate();
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[#e0e0e0] bg-[#f0f0f0] px-3 py-6 text-center shadow-sm active:scale-[0.97]"
+                >
+                  <span className="text-2xl">{item.emoji}</span>
+                  <span className="text-sm font-semibold text-[#212121]">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          FLUJO MÓVIL ZOBAZE: efectivo
+          ===================================================== */}
+      {mobileStep === "cash" && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+          <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileStep("pay")}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
+            >
+              ←
+            </button>
+            <h1 className="flex-1 text-lg font-bold">Efectivo</h1>
+          </div>
+
+          <div className="flex-1 space-y-0 overflow-y-auto p-3">
+            <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
+                <span className="text-sm text-[#757575]">
+                  Gran total
+                </span>
+                <span className="text-sm font-semibold text-[#212121]">
+                  {money(total)}
+                </span>
+              </div>
+
+              <div className="px-4 py-5 text-center">
+                <p className="text-sm text-[#9e9e9e]">
+                  Efectivo recibido (opcional)
+                </p>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cashReceived}
+                  onChange={(e) =>
+                    setCashReceived(e.target.value)
+                  }
+                  className="mx-auto mt-2 h-14 max-w-[200px] border-0 bg-transparent text-center text-4xl font-bold text-[#212121] shadow-none focus-visible:ring-0"
+                  placeholder={String(total.toFixed(0))}
+                />
+              </div>
+
+              <div
+                className={cn(
+                  "px-4 py-4 text-center",
+                  cashNum > 0 && cashNum >= total
+                    ? "bg-[#e8f5e9]"
+                    : "bg-[#e3f2fd]",
+                )}
+              >
+                <p
+                  className={cn(
+                    "text-sm",
+                    cashNum > 0 && cashNum >= total
+                      ? "text-[#2e7d32]"
+                      : "text-[#64b5f6]",
+                  )}
+                >
+                  {cashNum > 0 && cashNum >= total
+                    ? "Cambio a Dar"
+                    : "Cambio"}
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-3xl font-bold",
+                    cashNum > 0 && cashNum >= total
+                      ? "text-[#2e7d32]"
+                      : "text-[#90caf9]",
+                  )}
+                >
+                  {money(
+                    cashNum > 0 && cashNum >= total
+                      ? cashNum - total
+                      : 0,
+                  )}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-3 px-2">
+              {[20, 50, 100, 200, 500, 1000].map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => {
+                    const current = Number(cashReceived) || 0;
+                    setCashReceived(String(current + amount));
+                  }}
+                  className="rounded-full border border-[#bdbdbd] bg-white py-2.5 text-sm font-medium text-[#424242] shadow-sm active:bg-[#f5f5f5]"
+                >
+                  +${amount}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              disabled={!canSell || checkout.isPending}
+              onClick={() => checkout.mutate()}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
+            >
+              {checkout.isPending
+                ? "Procesando…"
+                : "Recibido por Efectivo"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          FLUJO MÓVIL ZOBAZE: éxito
+          ===================================================== */}
+      {mobileStep === "success" && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-white lg:hidden">
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]">
+              <svg
+                viewBox="0 0 24 24"
+                className="h-8 w-8"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+              >
+                <path
+                  d="M5 13l4 4L19 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <p className="text-4xl font-bold text-[#1a73e8]">
+              {money(lastSaleTotal)}
+            </p>
+          </div>
+
+          <div className="space-y-2 border-t border-[#eee] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+            <p className="mb-2 text-center text-xs text-[#9e9e9e]">
+              ID DE RECIBO: LULA-{lastSaleFolio} · ARTÍCULOS
+              cobrados
+            </p>
+            <button
+              type="button"
+              onClick={() => setTicketOpen(true)}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold uppercase tracking-wide text-white"
+            >
+              Obtener recibo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileStep("shop");
+                setTicketOpen(false);
+              }}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#1a73e8] text-base font-bold uppercase tracking-wide text-white"
+            >
+              Nueva venta
+            </button>
+          </div>
+        </div>
+      )}
+
+<TicketModal
         open={
           ticketOpen
         }
