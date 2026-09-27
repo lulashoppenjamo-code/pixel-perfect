@@ -42,6 +42,9 @@ import {
   RotateCcw,
   MoreHorizontal,
   ShoppingCart,
+  Menu,
+  BarChart3,
+  CalendarDays,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_shell")({
@@ -194,26 +197,48 @@ function ShellLayout() {
   );
 
   const [moreOpen, setMoreOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const primaryKeys: NavKey[] = [
-    "caja",
-    "ventas",
-    "inventario",
-    "clientes",
-  ];
-
-  const primaryItems = navItems.filter(
-    (item) =>
-      primaryKeys.includes(item.key),
+  // Bottom nav estilo Zobaze: Informes · Hoy · Caja · Artículos · Más
+  const bottomNavItems = [
+    {
+      label: "Informes",
+      path: "/reportes",
+      icon: BarChart3,
+      key: "reportes" as NavKey,
+    },
+    {
+      label: "Hoy",
+      path: "/ventas",
+      icon: CalendarDays,
+      key: "ventas" as NavKey,
+    },
+    {
+      label: "Caja",
+      path: "/caja",
+      icon: ShoppingBag,
+      key: "caja" as NavKey,
+    },
+    {
+      label: "Artículos",
+      path: "/productos",
+      icon: Package,
+      key: "productos" as NavKey,
+    },
+  ].filter((item) =>
+    navItems.some((n) => n.key === item.key),
   );
 
   const moreItems = navItems.filter(
     (item) =>
-      !primaryKeys.includes(item.key),
+      !["reportes", "ventas", "caja", "productos"].includes(
+        item.key,
+      ),
   );
 
   const goTo = (path: string) => {
     setMoreOpen(false);
+    setSidebarOpen(false);
     navigate({ to: path });
   };
 
@@ -223,8 +248,13 @@ function ShellLayout() {
     });
   };
 
+  const activeBranchName =
+    branches.find((b) => b.id === branchId)?.name ||
+    "Lula Shop";
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      {/* ========== DESKTOP SIDEBAR ========== */}
       <aside className="hidden w-64 select-none flex-col justify-between border-r bg-card p-4 md:flex">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
@@ -245,9 +275,7 @@ function ShellLayout() {
             <div className="ml-auto">
               <InventoryAlerts
                 compact
-                onOpenInventory={
-                  openInventory
-                }
+                onOpenInventory={openInventory}
               />
             </div>
           </div>
@@ -264,20 +292,14 @@ function ShellLayout() {
               }
               className="w-full cursor-pointer rounded-lg border bg-background p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
             >
-              {branches &&
-              branches.length > 0 ? (
+              {branches && branches.length > 0 ? (
                 branches.map((branch) => (
-                  <option
-                    key={branch.id}
-                    value={branch.id}
-                  >
+                  <option key={branch.id} value={branch.id}>
                     {branch.name}
                   </option>
                 ))
               ) : (
-                <option value="">
-                  Cargando sucursales...
-                </option>
+                <option value="">Cargando sucursales...</option>
               )}
             </select>
           </div>
@@ -286,10 +308,9 @@ function ShellLayout() {
             {navItems.map((item) => {
               const Icon = item.icon;
 
-              const isActive =
-                location.pathname.startsWith(
-                  item.path,
-                );
+              const isActive = location.pathname.startsWith(
+                item.path,
+              );
 
               return (
                 <button
@@ -320,8 +341,7 @@ function ShellLayout() {
             </p>
 
             <p className="text-xs capitalize text-muted-foreground">
-              {roles[0] ||
-                "Sin rol asignado"}
+              {roles[0] || "Sin rol asignado"}
             </p>
           </div>
 
@@ -336,48 +356,72 @@ function ShellLayout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-y-auto bg-slate-50/50 p-4 pb-20 md:p-6 md:pb-6">
-        <div className="mb-3 flex items-center justify-end md:hidden">
-          <InventoryAlerts
-            compact
-            onOpenInventory={
-              openInventory
-            }
-          />
-        </div>
+      {/* ========== MAIN CONTENT ========== */}
+      <div className="flex flex-1 flex-col overflow-hidden">
+        {/* ===== MOBILE TOP BAR (estilo Zobaze) ===== */}
+        <header className="zb-topbar flex items-center gap-3 px-3 md:hidden">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-full text-white/90 active:bg-white/10"
+            aria-label="Menú"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
 
-        <Outlet />
-      </main>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[15px] font-semibold tracking-tight text-white">
+              {activeBranchName}
+            </p>
+          </div>
 
+          <div className="flex items-center gap-1">
+            <InventoryAlerts
+              compact
+              onOpenInventory={openInventory}
+            />
+          </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto bg-[#f5f5f5] p-3 pb-24 md:p-6 md:pb-6">
+          <Outlet />
+        </main>
+      </div>
+
+      {/* ===== MOBILE BOTTOM NAV (estilo Zobaze) ===== */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t bg-card md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white md:hidden"
         style={{
-          paddingBottom:
-            "env(safe-area-inset-bottom, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}
       >
-        {primaryItems.map((item) => {
+        {bottomNavItems.map((item) => {
           const Icon = item.icon;
 
-          const isActive =
-            location.pathname.startsWith(
-              item.path,
-            );
+          const isActive = location.pathname.startsWith(
+            item.path,
+          );
 
           return (
             <button
               key={item.path}
-              onClick={() =>
-                goTo(item.path)
-              }
-              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium ${
+              onClick={() => goTo(item.path)}
+              className={`flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium transition-colors ${
                 isActive
-                  ? "text-primary"
-                  : "text-muted-foreground"
+                  ? "text-[#1a73e8]"
+                  : "text-[#757575]"
               }`}
             >
-              <Icon className="h-5 w-5" />
-
+              <div
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ${
+                  isActive ? "bg-[#e8f0fe]" : ""
+                }`}
+              >
+                <Icon
+                  className={`h-5 w-5 ${
+                    isActive ? "text-[#1a73e8]" : ""
+                  }`}
+                />
+              </div>
               <span className="max-w-[64px] truncate">
                 {item.label}
               </span>
@@ -387,29 +431,115 @@ function ShellLayout() {
 
         {moreItems.length > 0 && (
           <button
-            onClick={() =>
-              setMoreOpen(true)
-            }
-            className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2 text-[11px] font-medium text-muted-foreground"
+            onClick={() => setMoreOpen(true)}
+            className="flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-medium text-[#757575]"
           >
-            <MoreHorizontal className="h-5 w-5" />
+            <div className="flex h-7 w-7 items-center justify-center rounded-lg">
+              <MoreHorizontal className="h-5 w-5" />
+            </div>
             <span>Más</span>
           </button>
         )}
       </nav>
 
-      <Sheet
-        open={moreOpen}
-        onOpenChange={setMoreOpen}
-      >
+      {/* ===== MOBILE SIDE MENU (hamburguesa) ===== */}
+      <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+        <SheetContent
+          side="left"
+          className="w-[280px] max-w-[85vw] overflow-y-auto p-0 md:hidden"
+        >
+          <div className="flex h-full flex-col">
+            <div className="bg-[#1a73e8] px-4 py-5 text-white">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+                  L
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-base font-semibold">
+                    {activeBranchName}
+                  </p>
+                  <p className="text-xs text-white/80">
+                    Lula Shop OS
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-1 p-3">
+              <div className="mb-3">
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Sucursal Activa
+                </label>
+                <select
+                  value={branchId ?? ""}
+                  onChange={(event) =>
+                    setBranchId(event.target.value)
+                  }
+                  className="w-full rounded-lg border bg-background p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
+                >
+                  {branches && branches.length > 0 ? (
+                    branches.map((branch) => (
+                      <option key={branch.id} value={branch.id}>
+                        {branch.name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">Cargando...</option>
+                  )}
+                </select>
+              </div>
+
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname.startsWith(
+                  item.path,
+                );
+
+                return (
+                  <button
+                    key={item.path}
+                    onClick={() => goTo(item.path)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                      isActive
+                        ? "bg-primary text-primary-foreground"
+                        : "text-foreground hover:bg-accent"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="border-t p-4">
+              <p className="truncate text-sm font-semibold">
+                {user?.email || "Operador"}
+              </p>
+              <p className="mb-3 text-xs capitalize text-muted-foreground">
+                {roles[0] || "Sin rol asignado"}
+              </p>
+              <Button
+                onClick={() => signOut()}
+                variant="ghost"
+                className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Cerrar Sesión
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* ===== MÁS (bottom sheet) ===== */}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
           className="max-h-[85vh] overflow-y-auto rounded-t-2xl md:hidden"
         >
           <SheetHeader>
-            <SheetTitle>
-              Más opciones
-            </SheetTitle>
+            <SheetTitle>Más opciones</SheetTitle>
           </SheetHeader>
 
           <div className="mt-4 space-y-4">
@@ -421,28 +551,18 @@ function ShellLayout() {
               <select
                 value={branchId ?? ""}
                 onChange={(event) =>
-                  setBranchId(
-                    event.target.value,
-                  )
+                  setBranchId(event.target.value)
                 }
                 className="w-full rounded-lg border bg-background p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
               >
-                {branches &&
-                branches.length > 0 ? (
-                  branches.map(
-                    (branch) => (
-                      <option
-                        key={branch.id}
-                        value={branch.id}
-                      >
-                        {branch.name}
-                      </option>
-                    ),
-                  )
+                {branches && branches.length > 0 ? (
+                  branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))
                 ) : (
-                  <option value="">
-                    Cargando sucursales...
-                  </option>
+                  <option value="">Cargando sucursales...</option>
                 )}
               </select>
             </div>
@@ -452,35 +572,27 @@ function ShellLayout() {
                 <p className="text-sm font-semibold">
                   Alertas de inventario
                 </p>
-
                 <p className="text-xs text-muted-foreground">
                   Stock agotado o bajo mínimo
                 </p>
               </div>
-
               <InventoryAlerts
                 compact
-                onOpenInventory={
-                  openInventory
-                }
+                onOpenInventory={openInventory}
               />
             </div>
 
             <div className="grid grid-cols-3 gap-2">
               {moreItems.map((item) => {
                 const Icon = item.icon;
-
-                const isActive =
-                  location.pathname.startsWith(
-                    item.path,
-                  );
+                const isActive = location.pathname.startsWith(
+                  item.path,
+                );
 
                 return (
                   <button
                     key={item.path}
-                    onClick={() =>
-                      goTo(item.path)
-                    }
+                    onClick={() => goTo(item.path)}
                     className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-medium ${
                       isActive
                         ? "border-primary bg-primary/10 text-primary"
@@ -488,7 +600,6 @@ function ShellLayout() {
                     }`}
                   >
                     <Icon className="h-5 w-5" />
-
                     <span className="text-center leading-tight">
                       {item.label}
                     </span>
@@ -499,15 +610,11 @@ function ShellLayout() {
 
             <div className="border-t pt-3">
               <p className="truncate text-sm font-semibold">
-                {user?.email ||
-                  "Operador"}
+                {user?.email || "Operador"}
               </p>
-
               <p className="mb-2 text-xs capitalize text-muted-foreground">
-                {roles[0] ||
-                  "Sin rol asignado"}
+                {roles[0] || "Sin rol asignado"}
               </p>
-
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
