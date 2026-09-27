@@ -45,6 +45,7 @@ import {
   Menu,
   BarChart3,
   CalendarDays,
+  Crown,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_shell")({
@@ -258,16 +259,16 @@ function ShellLayout() {
       <aside className="hidden w-64 select-none flex-col justify-between border-r bg-card p-4 md:flex">
         <div className="space-y-6">
           <div className="flex items-center gap-3 px-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-xl font-bold text-primary-foreground shadow-sm">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1a73e8] text-xl font-bold text-white shadow-sm">
               L
             </div>
 
             <div>
-              <h1 className="text-lg font-bold leading-tight">
+              <h1 className="text-lg font-bold leading-tight text-[#212121]">
                 Lula OS
               </h1>
 
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-[#757575]">
                 Punto de Venta
               </p>
             </div>
@@ -281,7 +282,7 @@ function ShellLayout() {
           </div>
 
           <div className="px-2">
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
               Sucursal Activa
             </label>
 
@@ -290,7 +291,7 @@ function ShellLayout() {
               onChange={(event) =>
                 setBranchId(event.target.value)
               }
-              className="w-full cursor-pointer rounded-lg border bg-background p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
+              className="w-full cursor-pointer rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
             >
               {branches && branches.length > 0 ? (
                 branches.map((branch) => (
@@ -322,8 +323,8 @@ function ShellLayout() {
                   }
                   className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                     isActive
-                      ? "bg-primary text-primary-foreground shadow-sm"
-                      : "text-foreground hover:bg-accent"
+                      ? "bg-[#1a73e8] text-white shadow-sm"
+                      : "text-[#212121] hover:bg-[#e8f0fe]"
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -334,13 +335,13 @@ function ShellLayout() {
           </nav>
         </div>
 
-        <div className="space-y-2 border-t pt-4">
+        <div className="space-y-2 border-t border-[#e0e0e0] pt-4">
           <div className="px-2 py-1">
-            <p className="truncate text-sm font-semibold">
+            <p className="truncate text-sm font-semibold text-[#212121]">
               {user?.email || "Operador"}
             </p>
 
-            <p className="text-xs capitalize text-muted-foreground">
+            <p className="text-xs capitalize text-[#757575]">
               {roles[0] || "Sin rol asignado"}
             </p>
           </div>
@@ -348,7 +349,7 @@ function ShellLayout() {
           <Button
             onClick={() => signOut()}
             variant="ghost"
-            className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+            className="w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
           >
             <LogOut className="mr-2 h-4 w-4" />
             Cerrar Sesión
@@ -442,19 +443,20 @@ function ShellLayout() {
         )}
       </nav>
 
-      {/* ===== MOBILE SIDE MENU (hamburguesa) ===== */}
+      {/* ===== MOBILE SIDE MENU (hamburguesa) — estilo Zobaze ===== */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="w-[280px] max-w-[85vw] overflow-y-auto p-0 md:hidden"
+          className="w-[300px] max-w-[88vw] overflow-y-auto p-0 md:hidden"
         >
           <div className="flex h-full flex-col">
-            <div className="bg-[#1a73e8] px-4 py-5 text-white">
+            {/* Header azul con negocio */}
+            <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
                   L
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="truncate text-base font-semibold">
                     {activeBranchName}
                   </p>
@@ -463,11 +465,24 @@ function ShellLayout() {
                   </p>
                 </div>
               </div>
+
+              {/* Badge visual tipo PREMIUM (solo diseño) */}
+              <div className="mt-4 flex items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
+                <Crown className="h-4 w-4 text-white" />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold uppercase tracking-wide text-white">
+                    Lula Shop OS
+                  </p>
+                  <p className="text-[11px] text-white/90">
+                    Sistema propio · v1.0
+                  </p>
+                </div>
+              </div>
             </div>
 
-            <div className="flex-1 space-y-1 p-3">
+            <div className="flex-1 space-y-0.5 p-3">
               <div className="mb-3">
-                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Sucursal Activa
                 </label>
                 <select
@@ -475,7 +490,7 @@ function ShellLayout() {
                   onChange={(event) =>
                     setBranchId(event.target.value)
                   }
-                  className="w-full rounded-lg border bg-background p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
                 >
                   {branches && branches.length > 0 ? (
                     branches.map((branch) => (
@@ -489,6 +504,10 @@ function ShellLayout() {
                 </select>
               </div>
 
+              <p className="mb-1 px-1 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                Gestión
+              </p>
+
               {navItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname.startsWith(
@@ -501,8 +520,8 @@ function ShellLayout() {
                     onClick={() => goTo(item.path)}
                     className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
                       isActive
-                        ? "bg-primary text-primary-foreground"
-                        : "text-foreground hover:bg-accent"
+                        ? "bg-[#1a73e8] text-white"
+                        : "text-[#212121] hover:bg-[#e8f0fe]"
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -512,17 +531,17 @@ function ShellLayout() {
               })}
             </div>
 
-            <div className="border-t p-4">
-              <p className="truncate text-sm font-semibold">
+            <div className="border-t border-[#e0e0e0] p-4">
+              <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
-              <p className="mb-3 text-xs capitalize text-muted-foreground">
+              <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
-                className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Cerrar Sesión
@@ -532,28 +551,33 @@ function ShellLayout() {
         </SheetContent>
       </Sheet>
 
-      {/* ===== MÁS (bottom sheet) ===== */}
+      {/* ===== MÁS (bottom sheet) — estilo Zobaze ===== */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[85vh] overflow-y-auto rounded-t-2xl md:hidden"
+          className="max-h-[88vh] overflow-y-auto rounded-t-2xl border-0 p-0 md:hidden"
         >
-          <SheetHeader>
-            <SheetTitle>Más opciones</SheetTitle>
-          </SheetHeader>
+          {/* Handle visual */}
+          <div className="flex justify-center pt-3">
+            <div className="h-1 w-10 rounded-full bg-[#e0e0e0]" />
+          </div>
 
-          <div className="mt-4 space-y-4">
-            <div>
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="px-4 pb-6 pt-3">
+            <h2 className="mb-4 text-lg font-bold text-[#212121]">
+              Más opciones
+            </h2>
+
+            {/* Sucursal */}
+            <div className="mb-4">
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                 Sucursal Activa
               </label>
-
               <select
                 value={branchId ?? ""}
                 onChange={(event) =>
                   setBranchId(event.target.value)
                 }
-                className="w-full rounded-lg border bg-background p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-primary"
+                className="w-full rounded-xl border border-[#e0e0e0] bg-white p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
               >
                 {branches && branches.length > 0 ? (
                   branches.map((branch) => (
@@ -567,12 +591,13 @@ function ShellLayout() {
               </select>
             </div>
 
-            <div className="flex items-center justify-between rounded-xl border bg-muted/30 p-3">
+            {/* Alertas */}
+            <div className="mb-4 flex items-center justify-between rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm">
               <div>
-                <p className="text-sm font-semibold">
+                <p className="text-sm font-semibold text-[#212121]">
                   Alertas de inventario
                 </p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-[#757575]">
                   Stock agotado o bajo mínimo
                 </p>
               </div>
@@ -582,7 +607,11 @@ function ShellLayout() {
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-2">
+            {/* Grid de módulos estilo Zobaze */}
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+              Gestión
+            </p>
+            <div className="grid grid-cols-3 gap-2.5">
               {moreItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = location.pathname.startsWith(
@@ -593,13 +622,21 @@ function ShellLayout() {
                   <button
                     key={item.path}
                     onClick={() => goTo(item.path)}
-                    className={`flex flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-xs font-medium ${
+                    className={`flex flex-col items-center justify-center gap-2 rounded-xl border p-3.5 text-xs font-medium shadow-sm transition active:scale-[0.97] ${
                       isActive
-                        ? "border-primary bg-primary/10 text-primary"
-                        : "text-foreground"
+                        ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
+                        : "border-[#e0e0e0] bg-white text-[#212121]"
                     }`}
                   >
-                    <Icon className="h-5 w-5" />
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-full ${
+                        isActive
+                          ? "bg-[#1a73e8] text-white"
+                          : "bg-[#e8f0fe] text-[#1a73e8]"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" />
+                    </div>
                     <span className="text-center leading-tight">
                       {item.label}
                     </span>
@@ -608,17 +645,18 @@ function ShellLayout() {
               })}
             </div>
 
-            <div className="border-t pt-3">
-              <p className="truncate text-sm font-semibold">
+            {/* Usuario */}
+            <div className="mt-5 border-t border-[#e0e0e0] pt-4">
+              <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
-              <p className="mb-2 text-xs capitalize text-muted-foreground">
+              <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
-                className="w-full justify-start text-destructive hover:bg-destructive/10 hover:text-destructive"
+                className="w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 Cerrar Sesión
