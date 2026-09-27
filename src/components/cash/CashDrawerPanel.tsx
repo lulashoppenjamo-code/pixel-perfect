@@ -536,7 +536,7 @@ export function CashDrawerPanel({
   return (
     <div
       className={cn(
-        "space-y-4 overflow-y-auto pb-2",
+        "min-h-0 max-h-full space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain pb-24 md:pb-2",
         className,
       )}
     >
