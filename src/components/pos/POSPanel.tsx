@@ -798,7 +798,7 @@ export function POSPanel({
       return [
         ...previous,
         {
-          key: `\( {product.id}- \){Date.now()}`,
+          key: `${product.id}-${Date.now()}`,
 
           product_id:
             product.id,
@@ -915,7 +915,7 @@ export function POSPanel({
       return [
         ...previous,
         {
-          key: `\( {product.id}- \){variant.id}-${Date.now()}`,
+          key: `${product.id}-${variant.id}-${Date.now()}`,
 
           product_id:
             product.id,
@@ -3484,7 +3484,7 @@ export function POSPanel({
                 ] as const
               ).map((item, i) => (
                 <button
-                  key={item.key ?? item.id + String(i)}
+                  key={`${item.id}-${i}`}
                   type="button"
                   onClick={() => {
                     setMethod(item.id);
