@@ -525,7 +525,7 @@ function ProductosPage() {
     <PageShell>
       <PageHeader
         icon={Package}
-        title="Items"
+        title="Artículos"
         description="Catálogo, precios, costos, impuestos y códigos de barras."
       />
 
@@ -645,7 +645,7 @@ function ProductosPage() {
           )}
 
           {!loading && filtered.length > 0 && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
 
@@ -674,7 +674,7 @@ function ProductosPage() {
                   <Card
                     key={p.id}
                     className={cn(
-                      "relative cursor-pointer overflow-hidden transition hover:shadow-md",
+                      "relative cursor-pointer overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm transition hover:border-[#1a73e8] hover:shadow-md",
                       !p.is_active &&
                         "opacity-50",
                     )}
@@ -686,7 +686,7 @@ function ProductosPage() {
                     {/* ESTADO */}
 
                     {agotado && (
-                      <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-destructive/10 px-3 py-1 text-xs font-medium text-destructive">
+                      <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 rounded-full bg-[#fce4ec] px-2.5 py-0.5 text-[11px] font-semibold text-[#c2185b]">
                         Agotado
                       </div>
                     )}
@@ -700,7 +700,7 @@ function ProductosPage() {
                           row.stock_status ===
                             "low_stock",
                       ) && (
-                        <div className="absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full bg-yellow-500/10 px-3 py-1 text-xs font-medium text-yellow-700">
+                        <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 rounded-full bg-[#fff3e0] px-2.5 py-0.5 text-[11px] font-semibold text-[#e65100]">
                           Stock bajo
                         </div>
                       )}
@@ -739,7 +739,7 @@ function ProductosPage() {
                         </p>
                       )}
 
-                      <p className="text-base font-bold text-primary">
+                      <p className="text-base font-bold text-[#1a73e8]">
                         {money(
                           Number(p.price),
                         )}
