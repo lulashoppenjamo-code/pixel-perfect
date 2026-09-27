@@ -1830,7 +1830,7 @@ function KpiCard({
   loading?: boolean;
 }) {
   return (
-    <Card>
+    <Card className="border-[#e0e0e0] shadow-sm">
       <CardContent className="pt-4">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -1838,7 +1838,7 @@ function KpiCard({
               {title}
             </p>
 
-            <p className="mt-1 text-2xl font-bold tracking-tight">
+            <p className="mt-1 text-2xl font-bold tracking-tight text-[#1a73e8]">
               {loading
                 ? "…"
                 : value}
@@ -1884,8 +1884,8 @@ function KpiCard({
               )}
           </div>
 
-          <div className="rounded-lg bg-primary/10 p-2">
-            <Icon className="h-5 w-5 text-primary" />
+          <div className="rounded-lg bg-[#e8f0fe] p-2">
+            <Icon className="h-5 w-5 text-[#1a73e8]" />
           </div>
         </div>
       </CardContent>
