@@ -2255,12 +2255,18 @@ export function POSPanel({
             </div>
           ) : filtered.length ===
             0 ? (
-            <div className="flex h-40 flex-col items-center justify-center gap-2 text-[#757575]">
-              <Package className="h-10 w-10 opacity-40" />
-
-              <p className="text-sm font-medium">
-                Sin artículos
-              </p>
+            <div className="flex h-48 flex-col items-center justify-center gap-3 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-3xl">
+                🔍
+              </div>
+              <div>
+                <p className="text-sm font-bold text-[#212121]">
+                  Sin artículos
+                </p>
+                <p className="mt-1 text-xs text-[#757575]">
+                  Prueba otra búsqueda o categoría
+                </p>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -3374,4 +3380,4 @@ export function POSPanel({
       />
     </div>
   );
-} 
+}
