@@ -11,14 +11,23 @@
  * cambia la sucursal para evitar conservar estado de
  * la sucursal anterior.
  *
- * CAMBIOS DE ESTA SESIÓN: solo visual (estilos de tabs).
+ * CAMBIOS VISUALES:
+ * - Pantalla de entrada móvil estilo Zobaze (botón NUEVA VENTA).
+ * - Estilos de tabs.
+ * No se toca el motor del POS ni de caja.
  */
 
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RequireNavAccess } from "@/components/RequireNavAccess";
-import { ShoppingBag, Wallet } from "lucide-react";
+import {
+  ShoppingBag,
+  Wallet,
+  Plus,
+  ArrowLeft,
+  Receipt,
+} from "lucide-react";
 import { POSPanel } from "@/components/pos/POSPanel";
 import { CashDrawerPanel } from "@/components/cash/CashDrawerPanel";
 import { cn } from "@/lib/utils";
@@ -57,10 +66,13 @@ export const Route = createFileRoute(
 });
 
 type Tab = "pos" | "arqueo";
+type MobileView = "home" | "pos" | "arqueo";
 
 function CajaPage() {
-  const [tab, setTab] =
-    useState<Tab>("pos");
+  const [tab, setTab] = useState<Tab>("pos");
+  // Solo afecta la UI móvil: home estilo Zobaze vs POS/Arqueo
+  const [mobileView, setMobileView] =
+    useState<MobileView>("home");
 
   const {
     branchId,
@@ -135,17 +147,122 @@ function CajaPage() {
     );
   }
 
-  return (
-    <div className="flex h-[calc(100dvh-3rem)] flex-col gap-3">
-      <div className="flex shrink-0 items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
-            Sucursal activa
-          </p>
+  /* =========================================================
+     MÓVIL — Pantalla de entrada estilo Zobaze
+     ========================================================= */
+  const mobileHome = (
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 md:hidden">
+      {/* Botón grande NUEVA VENTA */}
+      <button
+        type="button"
+        onClick={() => {
+          setTab("pos");
+          setMobileView("pos");
+        }}
+        className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-6 py-10 shadow-sm transition active:scale-[0.98]"
+      >
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#34a853] text-white shadow-md">
+          <Plus className="h-8 w-8" strokeWidth={2.5} />
+        </div>
+        <span className="text-base font-bold tracking-wide text-[#212121]">
+          NUEVA VENTA
+        </span>
+      </button>
 
-          <p className="truncate text-sm font-bold text-[#212121]">
-            {activeBranch.name}
+      {/* Botón Agregar gasto / Arqueo */}
+      <button
+        type="button"
+        onClick={() => {
+          setTab("arqueo");
+          setMobileView("arqueo");
+        }}
+        className="flex items-center justify-center gap-2.5 rounded-xl border border-[#e0e0e0] bg-white px-4 py-3.5 text-sm font-semibold text-[#212121] shadow-sm transition active:scale-[0.98]"
+      >
+        <Wallet className="h-5 w-5 text-[#34a853]" />
+        ARQUEO / CAJA
+      </button>
+
+      {/* Sección tipo historial (solo visual) */}
+      <div className="mt-2">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm font-semibold text-[#212121]">
+            Accesos rápidos
           </p>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <button
+            type="button"
+            onClick={() => {
+              setTab("pos");
+              setMobileView("pos");
+            }}
+            className="flex w-full items-center gap-3 border-b border-[#f0f0f0] px-4 py-3.5 text-left active:bg-[#f8f9fa]"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8]">
+              <ShoppingBag className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[#212121]">
+                Abrir punto de venta
+              </p>
+              <p className="text-xs text-[#757575]">
+                Vender productos y cobrar
+              </p>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setTab("arqueo");
+              setMobileView("arqueo");
+            }}
+            className="flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-[#f8f9fa]"
+          >
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f5e9] text-[#34a853]">
+              <Receipt className="h-4 w-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-[#212121]">
+                Ver arqueo de caja
+              </p>
+              <p className="text-xs text-[#757575]">
+                Apertura, movimientos y cierre
+              </p>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  /* =========================================================
+     CONTENIDO PRINCIPAL (desktop siempre, móvil según vista)
+     ========================================================= */
+  const mainContent = (
+    <div className="flex h-[calc(100dvh-3rem)] flex-col gap-3">
+      {/* Header sucursal — desktop / cuando ya está en POS o Arqueo */}
+      <div className="flex shrink-0 items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* Botón volver solo en móvil cuando no está en home */}
+          <button
+            type="button"
+            onClick={() => setMobileView("home")}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8] md:hidden"
+            aria-label="Volver"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </button>
+
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+              Sucursal activa
+            </p>
+            <p className="truncate text-sm font-bold text-[#212121]">
+              {activeBranch.name}
+            </p>
+          </div>
         </div>
 
         <div className="hidden rounded-full bg-[#e8f0fe] px-3 py-1.5 text-xs font-semibold text-[#1a73e8] sm:block">
@@ -153,8 +270,14 @@ function CajaPage() {
         </div>
       </div>
 
-      {/* Tabs estilo Zobaze — solo visual */}
-      <div className="flex shrink-0 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+      {/* Tabs — visibles en desktop siempre; en móvil solo cuando ya entró a POS/Arqueo */}
+      <div
+        className={cn(
+          "flex shrink-0 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm",
+          "md:flex",
+          mobileView === "home" ? "hidden" : "flex",
+        )}
+      >
         {tabs.map(
           ({
             id,
@@ -164,9 +287,10 @@ function CajaPage() {
             <button
               key={id}
               type="button"
-              onClick={() =>
-                setTab(id)
-              }
+              onClick={() => {
+                setTab(id);
+                setMobileView(id);
+              }}
               className={cn(
                 "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all",
                 tab === id
@@ -195,5 +319,19 @@ function CajaPage() {
         )}
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {/* Móvil: home o contenido */}
+      <div className="md:hidden">
+        {mobileView === "home" ? mobileHome : mainContent}
+      </div>
+
+      {/* Desktop: siempre el contenido completo */}
+      <div className="hidden md:block">
+        {mainContent}
+      </div>
+    </>
   );
 }
