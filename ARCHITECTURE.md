@@ -113,7 +113,7 @@ No eliminar estas funciones durante cambios visuales.
 
 Componente principal:
 
-"src/components/CashDrawerPanel.tsx"
+"src/components/cash/CashDrawerPanel.tsx"
 
 La caja depende de las operaciones de venta y del "branchId".
 
