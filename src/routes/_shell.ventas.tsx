@@ -720,20 +720,19 @@ function VentasPage() {
       {/* Encabezado */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-[#1a1d26]">
-            Historial de ventas
+          <h1 className="text-xl font-bold text-[#212121]">
+            Hoy
           </h1>
 
-          <p className="text-sm text-[#9aa3b8]">
-            Tickets de la sucursal activa.
-            Para vender usa la Caja.
+          <p className="text-sm text-[#757575]">
+            Tickets de la sucursal activa. Para vender usa la Caja.
           </p>
         </div>
 
         <div className="flex gap-2">
           <Button
             variant="outline"
-            className="rounded-xl border-[#e2e8f0]"
+            className="rounded-xl border-[#e0e0e0]"
             onClick={() =>
               navigate({
                 to: "/devoluciones",
@@ -747,7 +746,7 @@ function VentasPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#e2e8f0] bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#e0e0e0] bg-white p-3">
         <div className="flex items-center gap-1.5">
           <Input
             type="date"
@@ -757,7 +756,7 @@ function VentasPage() {
                 event.target.value,
               )
             }
-            className="h-9 w-36 rounded-xl border-[#e2e8f0]"
+            className="h-9 w-36 rounded-xl border-[#e0e0e0]"
           />
 
           <span className="text-xs text-[#9aa3b8]">
@@ -772,7 +771,7 @@ function VentasPage() {
                 event.target.value,
               )
             }
-            className="h-9 w-36 rounded-xl border-[#e2e8f0]"
+            className="h-9 w-36 rounded-xl border-[#e0e0e0]"
           />
         </div>
 
@@ -782,7 +781,7 @@ function VentasPage() {
             setMethod
           }
         >
-          <SelectTrigger className="h-9 w-36 rounded-xl border-[#e2e8f0] text-sm">
+          <SelectTrigger className="h-9 w-36 rounded-xl border-[#e0e0e0] text-sm">
             <SelectValue placeholder="Método" />
           </SelectTrigger>
 
@@ -819,7 +818,7 @@ function VentasPage() {
             setStatus
           }
         >
-          <SelectTrigger className="h-9 w-40 rounded-xl border-[#e2e8f0] text-sm">
+          <SelectTrigger className="h-9 w-40 rounded-xl border-[#e0e0e0] text-sm">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
 
@@ -857,14 +856,14 @@ function VentasPage() {
               )
             }
             placeholder="Buscar folio o cliente"
-            className="h-9 rounded-xl border-[#e2e8f0] pl-9"
+            className="h-9 rounded-xl border-[#e0e0e0] pl-9"
           />
         </div>
 
         <Button
           variant="outline"
           size="sm"
-          className="rounded-xl border-[#e2e8f0]"
+          className="rounded-xl border-[#e0e0e0]"
           onClick={() => {
             setFrom(
               dayInput(
@@ -927,7 +926,7 @@ function VentasPage() {
       </div>
 
       {/* Lista */}
-      <div className="overflow-hidden rounded-2xl border border-[#e2e8f0] bg-white">
+      <div className="overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white">
         {isLoading ? (
           <p className="py-10 text-center text-sm text-[#9aa3b8]">
             Cargando…
@@ -983,7 +982,7 @@ function VentasPage() {
                       }
                       className="hover:bg-[#fafbfe]"
                     >
-                      <td className="px-4 py-2.5 font-bold text-[#1a1d26]">
+                      <td className="px-4 py-2.5 font-bold text-[#212121]">
                         #
                         {
                           row.folio
@@ -1040,7 +1039,7 @@ function VentasPage() {
                         </Badge>
                       </td>
 
-                      <td className="px-4 py-2.5 text-right font-bold text-[#1a1d26]">
+                      <td className="px-4 py-2.5 text-right font-bold text-[#212121]">
                         {money(
                           row.total,
                         )}
@@ -1050,7 +1049,7 @@ function VentasPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 rounded-lg border-[#e2e8f0]"
+                          className="h-8 rounded-lg border-[#e0e0e0]"
                           disabled={
                             reprint.isPending
                           }
@@ -1095,12 +1094,12 @@ function Card({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4">
+    <div className="rounded-2xl border border-[#e0e0e0] bg-white p-4">
       <p className="text-[11px] font-bold uppercase tracking-wide text-[#9aa3b8]">
         {label}
       </p>
 
-      <p className="mt-1 text-lg font-bold text-[#1a1d26]">
+      <p className="mt-1 text-lg font-bold text-[#212121]">
         {value}
       </p>
     </div>
