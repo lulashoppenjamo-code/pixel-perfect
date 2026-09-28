@@ -17,7 +17,7 @@
  * No se toca el motor del POS ni de caja.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RequireNavAccess } from "@/components/RequireNavAccess";
@@ -70,9 +70,29 @@ type MobileView = "home" | "pos" | "arqueo";
 
 function CajaPage() {
   const [tab, setTab] = useState<Tab>("pos");
-  // Solo afecta la UI móvil: home estilo Zobaze vs POS/Arqueo
+  // Solo afecta la UI móvil/tablet: home estilo Zobaze vs POS/Arqueo
   const [mobileView, setMobileView] =
     useState<MobileView>("home");
+
+  // Tablet (cualquier orientación) y teléfono: flujo secuencial con home
+  const [isCompact, setIsCompact] = useState(true);
+  useEffect(() => {
+    const update = () => {
+      if (typeof window === "undefined") return;
+      const coarse =
+        window.matchMedia("(pointer: coarse)").matches ||
+        window.matchMedia("(hover: none)").matches;
+      const narrow = window.innerWidth < 1400;
+      setIsCompact(coarse || narrow);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
 
   const {
     branchId,
@@ -249,7 +269,7 @@ function CajaPage() {
           <button
             type="button"
             onClick={() => setMobileView("home")}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8] xl:hidden"
+            className={cn("flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8]", !isCompact && "hidden")}
             aria-label="Volver"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -323,15 +343,12 @@ function CajaPage() {
 
   return (
     <>
-      {/* Teléfono y tablet (incl. horizontal): home estilo Zobaze o contenido */}
-      <div className="xl:hidden">
-        {mobileView === "home" ? mobileHome : mainContent}
-      </div>
-
-      {/* Desktop grande (≥1280px): siempre el contenido completo */}
-      <div className="hidden xl:block">
-        {mainContent}
-      </div>
+      {/* Teléfono y tablet (cualquier orientación): home o flujo secuencial */}
+      {isCompact ? (
+        mobileView === "home" ? mobileHome : mainContent
+      ) : (
+        mainContent
+      )}
     </>
   );
 }
