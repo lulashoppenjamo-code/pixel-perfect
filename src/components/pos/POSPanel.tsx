@@ -2130,7 +2130,7 @@ export function POSPanel({
   return (
     <div
       className={cn(
-        "flex flex-col bg-[#f5f5f5] lg:flex-row",
+        "flex flex-col bg-[#f5f5f5] md:flex-row",
         className,
       )}
     >
@@ -2141,7 +2141,7 @@ export function POSPanel({
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col overflow-hidden",
-          mobileStep !== "shop" && "hidden lg:flex",
+          mobileStep !== "shop" && "hidden md:flex",
         )}
       >
         {/* Header azul estilo Zobaze — búsqueda integrada */}
@@ -2256,7 +2256,7 @@ export function POSPanel({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map(
                 (product) => {
                   const outOfStock =
@@ -2328,11 +2328,11 @@ export function POSPanel({
 
         {/* Barra Ir al mostrador (móvil, estilo Zobaze) */}
         {cart.length > 0 && (
-          <div className="border-t border-[#e0e0e0] bg-white p-3 lg:hidden">
+          <div className="border-t border-[#e0e0e0] bg-white p-3 md:hidden">
             <button
               type="button"
               onClick={() => setMobileStep("cart")}
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm active:scale-[0.98]"
+              className="flex h-12 min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm active:scale-[0.98]"
             >
               Ir al mostrador
             </button>
@@ -2346,27 +2346,28 @@ export function POSPanel({
 
       <div
         className={cn(
-          "flex w-full flex-col border-t border-[#e0e0e0] bg-white lg:w-[380px] lg:border-l lg:border-t-0 xl:w-[400px]",
-          mobileStep === "shop" && cart.length === 0 && "hidden lg:flex",
-          mobileStep === "shop" && cart.length > 0 && "hidden lg:flex",
-          mobileStep === "cart" && "fixed inset-0 z-40 lg:static lg:z-auto",
+          "flex w-full min-w-0 flex-col border-t border-[#e0e0e0] bg-white md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
+          mobileStep === "shop" && cart.length === 0 && "hidden md:flex",
+          mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
+          mobileStep === "cart" && "fixed inset-0 z-40 md:static md:z-auto",
           (mobileStep === "pay" ||
             mobileStep === "cash" ||
+            mobileStep === "mixed" ||
             mobileStep === "success") &&
-            "hidden lg:flex",
+            "hidden md:flex",
         )}
       >
         <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-[#1a73e8] lg:hidden"
+              className="flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8] md:hidden"
               onClick={() => setMobileStep("shop")}
               aria-label="Volver"
             >
               ←
             </button>
-            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc] lg:flex">
+            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc] md:flex">
               <ShoppingCart className="h-4 w-4 text-[#1a73e8]" />
             </div>
 
@@ -2563,7 +2564,7 @@ export function POSPanel({
 
           {cart.length >
             0 && (
-            <div className="hidden items-center gap-2 lg:flex">
+            <div className="hidden items-center gap-2 md:flex">
               <span className="w-20 shrink-0 text-xs font-medium text-[#6b7280]">
                 Descuento
               </span>
@@ -2591,7 +2592,7 @@ export function POSPanel({
 
           {cart.length >
             0 && (
-            <div className="hidden items-start gap-2 lg:flex">
+            <div className="hidden items-start gap-2 md:flex">
               <span className="mt-2 w-20 shrink-0 text-xs font-medium text-[#6b7280]">
                 <StickyNote className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
                 Nota
@@ -2665,7 +2666,7 @@ export function POSPanel({
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-xs text-[#757575] lg:hidden">
+            <div className="flex items-center justify-between text-xs text-[#757575] md:hidden">
               <span>
                 {cart.length} Artículos |{" "}
                 {cart.reduce((s, l) => s + l.quantity, 0)} Unidades
@@ -2675,7 +2676,7 @@ export function POSPanel({
 
           {/* Métodos de pago — solo desktop; en móvil usa el paso "pay" */}
 
-          <div className="hidden grid-cols-5 gap-2 lg:grid">
+          <div className="hidden grid-cols-3 gap-2 md:grid lg:grid-cols-5">
             {[
               {
                 id: "cash" as const,
@@ -2830,7 +2831,7 @@ export function POSPanel({
 
           {method ===
             "mixed" && (
-            <div className="hidden grid-cols-2 gap-2 lg:grid">
+            <div className="hidden grid-cols-2 gap-2 md:grid">
               <div>
                 <span className="text-[11px] text-[#6b7280]">
                   Efectivo
@@ -2891,7 +2892,7 @@ export function POSPanel({
               setCustomerId
             }
           >
-            <SelectTrigger className="hidden h-10 rounded-xl border-[#e0e0e0] text-sm lg:flex">
+            <SelectTrigger className="hidden h-10 rounded-xl border-[#e0e0e0] text-sm md:flex">
               <SelectValue placeholder="Cliente" />
             </SelectTrigger>
 
@@ -2936,7 +2937,7 @@ export function POSPanel({
           {/* Cobrar */}
 
           {/* Botones estilo Zobaze: Borrar | Guardar + Cobrar */}
-          <div className="flex gap-2 lg:hidden">
+          <div className="flex gap-2 md:hidden">
             <button
               type="button"
               disabled={cart.length === 0}
@@ -3432,7 +3433,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: métodos de pago
           ===================================================== */}
       {mobileStep === "pay" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] md:hidden">
           <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
             <button
               type="button"
@@ -3526,7 +3527,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: efectivo
           ===================================================== */}
       {mobileStep === "cash" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] md:hidden">
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3639,7 +3640,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: pago mixto
           ===================================================== */}
       {mobileStep === "mixed" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] md:hidden">
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3773,7 +3774,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: éxito
           ===================================================== */}
       {mobileStep === "success" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-white md:hidden">
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
             <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]">
               <svg
@@ -3832,4 +3833,4 @@ export function POSPanel({
       />
     </div>
   );
-} 
+}
