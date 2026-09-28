@@ -2804,12 +2804,16 @@ export function POSPanel({
                           Number(
                             cashReceived,
                           ) || 0;
-                        setCashReceived(
-                          String(
-                            current +
-                              amount,
-                          ),
-                        );
+                        const prefilled =
+                          total > 0 &&
+                          Math.abs(current - total) < 0.001;
+                        if (current === 0 || prefilled) {
+                          setCashReceived(String(amount));
+                        } else {
+                          setCashReceived(
+                            String(current + amount),
+                          );
+                        }
                       }}
                       className="rounded-lg border border-[#e0e0e0] bg-white py-2 text-xs font-bold text-[#212121] shadow-sm transition active:scale-95 active:bg-[#e8f5e9]"
                     >
@@ -3631,7 +3635,17 @@ export function POSPanel({
                   type="button"
                   onClick={() => {
                     const current = Number(cashReceived) || 0;
-                    setCashReceived(String(current + amount));
+                    // Si está vacío o aún es el total prellenado, el billete
+                    // REEMPLAZA el monto (pago con ese billete). Si ya hay
+                    // otro monto, se SUMA (varios billetes).
+                    const prefilled =
+                      total > 0 &&
+                      Math.abs(current - total) < 0.001;
+                    if (current === 0 || prefilled) {
+                      setCashReceived(String(amount));
+                    } else {
+                      setCashReceived(String(current + amount));
+                    }
                   }}
                   className="rounded-full border border-[#bdbdbd] bg-white py-2.5 text-sm font-medium text-[#424242] shadow-sm active:bg-[#f5f5f5]"
                 >
@@ -3796,13 +3810,23 @@ export function POSPanel({
       {mobileStep === "success" && (
         <div className="fixed inset-0 z-50 flex flex-col bg-white lg:hidden">
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]">
+            <div
+              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
+              style={{
+                animation: "lulaCheckPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+              }}
+            >
               <svg
                 viewBox="0 0 24 24"
-                className="h-8 w-8"
+                className="h-10 w-10"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="3"
+                style={{
+                  strokeDasharray: 30,
+                  strokeDashoffset: 30,
+                  animation: "lulaCheckDraw 0.35s ease-out 0.15s forwards",
+                }}
               >
                 <path
                   d="M5 13l4 4L19 7"
@@ -3811,9 +3835,27 @@ export function POSPanel({
                 />
               </svg>
             </div>
-            <p className="text-4xl font-bold text-[#1a73e8]">
+            <p
+              className="text-4xl font-bold text-[#1a73e8]"
+              style={{
+                animation: "lulaFadeUp 0.4s ease-out 0.2s both",
+              }}
+            >
               {money(lastSaleTotal)}
             </p>
+            <style>{`
+              @keyframes lulaCheckPop {
+                0% { transform: scale(0.3); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+              @keyframes lulaCheckDraw {
+                to { stroke-dashoffset: 0; }
+              }
+              @keyframes lulaFadeUp {
+                0% { opacity: 0; transform: translateY(8px); }
+                100% { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
           </div>
 
           <div className="space-y-2 border-t border-[#eee] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
