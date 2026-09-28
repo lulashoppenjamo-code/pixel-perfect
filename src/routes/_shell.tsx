@@ -45,6 +45,8 @@ import {
   BarChart3,
   CalendarDays,
   Crown,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_shell")({
@@ -210,6 +212,10 @@ function ShellLayout() {
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  /* Colapso del sidebar (tablet/escritorio). Vive en el shell
+     para no resetearse al cambiar de sección. */
+  const [sidebarCollapsed, setSidebarCollapsed] =
+    useState(false);
 
   /*
    * Navegación inferior solo para celular (< md).
@@ -281,93 +287,142 @@ function ShellLayout() {
         - Tablet (md–lg): sidebar fija, sin bottom nav
         - Escritorio (lg+): sidebar fija ancha
       */}
-      <aside className="hidden w-56 shrink-0 select-none flex-col justify-between border-r bg-card p-3 md:flex lg:w-64 lg:p-4">
-        <div className="min-h-0 space-y-4 overflow-y-auto overflow-x-hidden lg:space-y-6">
-          <div className="flex min-w-0 items-center gap-3 px-2">
+      <aside
+        className={`hidden shrink-0 select-none flex-col justify-between border-r bg-card transition-[width] duration-200 ease-out md:flex ${
+          sidebarCollapsed
+            ? "w-[4.5rem] p-2"
+            : "w-56 p-3 lg:w-64 lg:p-4"
+        }`}
+      >
+        <div
+          className={`min-h-0 overflow-y-auto overflow-x-hidden ${
+            sidebarCollapsed
+              ? "space-y-2"
+              : "space-y-4 lg:space-y-6"
+          }`}
+        >
+          {/* Header + toggle */}
+          <div
+            className={`flex items-center gap-2 ${
+              sidebarCollapsed
+                ? "flex-col px-0"
+                : "min-w-0 gap-3 px-2"
+            }`}
+          >
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1a73e8] text-xl font-bold text-white shadow-sm">
               L
             </div>
 
-            <div className="min-w-0">
-              <h1 className="truncate text-lg font-bold leading-tight text-[#212121]">
-                Lula OS
-              </h1>
+            {!sidebarCollapsed && (
+              <>
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-lg font-bold leading-tight text-[#212121]">
+                    Lula OS
+                  </h1>
+                  <p className="truncate text-xs text-[#757575]">
+                    Punto de Venta
+                  </p>
+                </div>
+                <div className="shrink-0">
+                  <InventoryAlerts
+                    compact
+                    onOpenInventory={openInventory}
+                  />
+                </div>
+              </>
+            )}
 
-              <p className="truncate text-xs text-[#757575]">
-                Punto de Venta
-              </p>
-            </div>
-
-            <div className="ml-auto shrink-0">
-              <InventoryAlerts
-                compact
-                onOpenInventory={openInventory}
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() =>
+                setSidebarCollapsed((value) => !value)
+              }
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-[#424242] shadow-sm transition hover:bg-[#f5f5f5]"
+              aria-label={
+                sidebarCollapsed
+                  ? "Expandir menú"
+                  : "Contraer menú"
+              }
+              title={
+                sidebarCollapsed
+                  ? "Expandir menú"
+                  : "Contraer menú"
+              }
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-4 w-4" />
+              ) : (
+                <ChevronLeft className="h-4 w-4" />
+              )}
+            </button>
           </div>
 
-          {/* Marca visible en tablet y escritorio */}
-          <div className="mx-2 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
-            <Crown className="h-4 w-4 shrink-0 text-white" />
-            <div className="min-w-0">
-              <p className="truncate text-xs font-bold uppercase tracking-wide text-white">
-                Lula Shop OS
-              </p>
-              <p className="truncate text-[11px] text-white/90">
-                Sistema propio · v1.0
-              </p>
+          {/* Marca — solo expandido */}
+          {!sidebarCollapsed && (
+            <div className="mx-2 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
+              <Crown className="h-4 w-4 shrink-0 text-white" />
+              <div className="min-w-0">
+                <p className="truncate text-xs font-bold uppercase tracking-wide text-white">
+                  Lula Shop OS
+                </p>
+                <p className="truncate text-[11px] text-white/90">
+                  Sistema propio · v1.0
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Acceso claro a Vender (Caja/POS) en tablet/escritorio */}
+          {/* Vender — siempre visible */}
           {navItems.some((item) => item.key === "caja") && (
-            <div className="px-2">
+            <div className={sidebarCollapsed ? "px-0" : "px-2"}>
               <button
                 type="button"
+                title="Vender"
                 onPointerDown={() => preloadRoute("/caja")}
                 onClick={() => navigate({ to: "/caja" })}
-                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold shadow-sm transition-colors ${
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-2 py-2.5 text-sm font-bold shadow-sm transition-colors ${
                   location.pathname.startsWith("/caja")
                     ? "bg-[#34a853] text-white"
                     : "bg-[#1a73e8] text-white hover:bg-[#1557b0]"
                 }`}
               >
                 <ShoppingBag className="h-4 w-4 shrink-0" />
-                Vender
+                {!sidebarCollapsed && <span>Vender</span>}
               </button>
             </div>
           )}
 
-          <div className="px-2">
-            <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
-              Sucursal Activa
-            </label>
-
-            <select
-              value={branchId ?? ""}
-              onChange={(event) =>
-                setBranchId(event.target.value)
-              }
-              className="min-h-11 w-full cursor-pointer rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
-            >
-              {branches && branches.length > 0 ? (
-                branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
+          {/* Sucursal — solo expandido */}
+          {!sidebarCollapsed && (
+            <div className="px-2">
+              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                Sucursal Activa
+              </label>
+              <select
+                value={branchId ?? ""}
+                onChange={(event) =>
+                  setBranchId(event.target.value)
+                }
+                className="min-h-11 w-full cursor-pointer rounded-lg border border-[#e0e0e0] bg-white p-2.5 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
+              >
+                {branches && branches.length > 0 ? (
+                  branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">
+                    Cargando sucursales...
                   </option>
-                ))
-              ) : (
-                <option value="">
-                  Cargando sucursales...
-                </option>
-              )}
-            </select>
-          </div>
+                )}
+              </select>
+            </div>
+          )}
 
           <nav className="space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
-
               const isActive = location.pathname.startsWith(
                 item.path,
               );
@@ -376,46 +431,67 @@ function ShellLayout() {
                 <button
                   key={item.path}
                   type="button"
+                  title={item.label}
                   onPointerDown={() => preloadRoute(item.path)}
                   onClick={() =>
                     navigate({
                       to: item.path,
                     })
                   }
-                  className={`flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+                  className={`flex min-h-11 w-full items-center rounded-lg text-sm font-medium transition-colors ${
+                    sidebarCollapsed
+                      ? "justify-center px-0 py-2.5"
+                      : "gap-3 px-3 py-2.5"
+                  } ${
                     isActive
                       ? "bg-[#1a73e8] text-white shadow-sm"
                       : "text-[#212121] hover:bg-[#e8f0fe]"
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span className="min-w-0 truncate">
-                    {item.label}
-                  </span>
+                  {!sidebarCollapsed && (
+                    <span className="min-w-0 truncate">
+                      {item.label}
+                    </span>
+                  )}
                 </button>
               );
             })}
           </nav>
         </div>
 
-        <div className="space-y-2 border-t border-[#e0e0e0] pt-4">
-          <div className="px-2 py-1">
-            <p className="truncate text-sm font-semibold text-[#212121]">
-              {user?.email || "Operador"}
-            </p>
-
-            <p className="text-xs capitalize text-[#757575]">
-              {roles[0] || "Sin rol asignado"}
-            </p>
-          </div>
+        <div
+          className={`border-t border-[#e0e0e0] pt-3 ${
+            sidebarCollapsed ? "space-y-1" : "space-y-2 pt-4"
+          }`}
+        >
+          {!sidebarCollapsed && (
+            <div className="px-2 py-1">
+              <p className="truncate text-sm font-semibold text-[#212121]">
+                {user?.email || "Operador"}
+              </p>
+              <p className="text-xs capitalize text-[#757575]">
+                {roles[0] || "Sin rol asignado"}
+              </p>
+            </div>
+          )}
 
           <Button
             onClick={() => signOut()}
             variant="ghost"
-            className="min-h-11 w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
+            title="Cerrar sesión"
+            className={`min-h-11 text-[#f44336] hover:bg-red-50 hover:text-[#f44336] ${
+              sidebarCollapsed
+                ? "w-full justify-center px-0"
+                : "w-full justify-start"
+            }`}
           >
-            <LogOut className="mr-2 h-4 w-4 shrink-0" />
-            Cerrar Sesión
+            <LogOut
+              className={`h-4 w-4 shrink-0 ${
+                sidebarCollapsed ? "" : "mr-2"
+              }`}
+            />
+            {!sidebarCollapsed && "Cerrar Sesión"}
           </Button>
         </div>
       </aside>
