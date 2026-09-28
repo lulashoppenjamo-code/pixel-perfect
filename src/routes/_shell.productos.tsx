@@ -2,11 +2,13 @@
  * Productos y categorías — LULA OS
  * Ruta: src/routes/_shell.productos.tsx
  *
- * IMPORTANTE:
- * El stock operativo YA NO se obtiene de la tabla legacy "inventory".
- * La fuente oficial es "shared_inventory".
+ * RESPONSIVE:
+ * - Mobile first para celular y tablet.
+ * - Sin cambiar la lógica del motor.
  *
- * El inventario es único y compartido entre las sucursales.
+ * INVENTARIO:
+ * - La fuente oficial es shared_inventory.
+ * - El inventario es único y compartido entre sucursales.
  *
  * Para productos con variantes:
  * - shared_inventory puede tener varias filas con el mismo product_id.
@@ -16,7 +18,6 @@
 
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { RequireNavAccess } from "@/components/RequireNavAccess";
 import {
   useMutation,
   useQuery,
@@ -198,14 +199,6 @@ function ProductosPage() {
   /*
    * ============================================================
    * INVENTARIO COMPARTIDO
-   *
-   * ESTA ES LA FUENTE OFICIAL.
-   *
-   * NO usamos:
-   *   inventory
-   *   branch_id
-   *
-   * El stock pertenece al inventario central compartido.
    * ============================================================
    */
 
@@ -221,15 +214,6 @@ function ProductosPage() {
   /*
    * ============================================================
    * MAPA DE STOCK POR PRODUCTO
-   *
-   * Producto simple:
-   *   una fila sin variant_id.
-   *
-   * Producto con variantes:
-   *   varias filas con el mismo product_id.
-   *
-   * En la tarjeta del catálogo mostramos el total disponible
-   * sumando las variantes.
    * ============================================================
    */
 
@@ -533,43 +517,46 @@ function ProductosPage() {
           RESUMEN
           ======================================================== */}
 
-      <div className="mb-4 grid grid-cols-2 gap-2.5 md:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4">
         <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5">
-            <p className="text-[11px] font-medium text-[#757575]">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
               Productos
             </p>
-            <p className="text-2xl font-bold text-[#1a73e8]">
+            <p className="text-xl font-bold text-[#1a73e8] sm:text-2xl">
               {products.length}
             </p>
           </CardContent>
         </Card>
+
         <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5">
-            <p className="text-[11px] font-medium text-[#757575]">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
               Disponibles
             </p>
-            <p className="text-2xl font-bold text-[#212121]">
+            <p className="text-xl font-bold text-[#212121] sm:text-2xl">
               {inventorySummary.totalAvailable}
             </p>
           </CardContent>
         </Card>
+
         <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5">
-            <p className="text-[11px] font-medium text-[#757575]">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
               Reservado
             </p>
-            <p className="text-2xl font-bold text-[#212121]">
+            <p className="text-xl font-bold text-[#212121] sm:text-2xl">
               {inventorySummary.totalReserved}
             </p>
           </CardContent>
         </Card>
+
         <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5">
-            <p className="text-[11px] font-medium text-[#757575]">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
               Agotados
             </p>
-            <p className="text-2xl font-bold text-[#c2185b]">
+            <p className="text-xl font-bold text-[#c2185b] sm:text-2xl">
               {inventorySummary.outOfStock}
             </p>
           </CardContent>
@@ -577,26 +564,30 @@ function ProductosPage() {
       </div>
 
       <Tabs defaultValue="lista">
-        <TabsList className="h-11 w-full justify-start gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
-          <TabsTrigger
-            value="lista"
-            className="rounded-lg data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white"
-          >
-            Catálogo
-          </TabsTrigger>
-          <TabsTrigger
-            value="form"
-            className="rounded-lg data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white"
-          >
-            {form.id ? "Gestionar" : "Nuevo"}
-          </TabsTrigger>
-          <TabsTrigger
-            value="categorias"
-            className="rounded-lg data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white"
-          >
-            Categorías
-          </TabsTrigger>
-        </TabsList>
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm sm:w-full">
+            <TabsTrigger
+              value="lista"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+            >
+              Catálogo
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="form"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+            >
+              {form.id ? "Gestionar" : "Nuevo"}
+            </TabsTrigger>
+
+            <TabsTrigger
+              value="categorias"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+            >
+              Categorías
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
         {/* ======================================================
             CATÁLOGO
@@ -604,14 +595,14 @@ function ProductosPage() {
 
         <TabsContent
           value="lista"
-          className="mt-4 space-y-4"
+          className="mt-3 space-y-3 sm:mt-4 sm:space-y-4"
         >
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full max-w-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
               <Input
-                className="rounded-xl bg-muted/30 pl-9 shadow-none"
+                className="h-11 rounded-xl bg-muted/30 pl-9 shadow-none"
                 placeholder="Buscar nombre, SKU o barcode…"
                 value={search}
                 onChange={(e) =>
@@ -623,39 +614,43 @@ function ProductosPage() {
             <Button
               variant="outline"
               size="icon"
+              className="h-11 w-11 shrink-0 touch-manipulation rounded-xl"
               onClick={() => {
                 void refetchInventory();
               }}
               title="Actualizar existencias"
+              aria-label="Actualizar existencias"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
 
           {loading && (
-            <p className="py-10 text-center text-muted-foreground">
+            <div className="rounded-xl border p-10 text-center text-sm text-muted-foreground">
               Cargando...
-            </p>
+            </div>
           )}
 
           {!loading && filtered.length === 0 && (
-            <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-6 py-14 text-center shadow-sm">
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm sm:px-6 sm:py-14">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f0fe] text-4xl">
                 📦
               </div>
+
               <div>
                 <p className="text-base font-bold text-[#212121]">
                   Sin artículos
                 </p>
-                <p className="mt-1 text-sm text-[#757575]">
-                  Crea un producto en la pestaña Nuevo o ajusta la búsqueda
+
+                <p className="mt-1 max-w-sm text-sm leading-5 text-[#757575]">
+                  Crea un producto en la pestaña Nuevo o ajusta la búsqueda.
                 </p>
               </div>
             </div>
           )}
 
           {!loading && filtered.length > 0 && (
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-2.5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
 
@@ -684,7 +679,7 @@ function ProductosPage() {
                   <Card
                     key={p.id}
                     className={cn(
-                      "relative cursor-pointer overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm transition hover:border-[#1a73e8] hover:shadow-md",
+                      "relative min-h-[188px] cursor-pointer touch-manipulation overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm transition active:scale-[0.99] hover:border-[#1a73e8] hover:shadow-md sm:min-h-[205px]",
                       !p.is_active &&
                         "opacity-50",
                     )}
@@ -696,7 +691,7 @@ function ProductosPage() {
                     {/* ESTADO */}
 
                     {agotado && (
-                      <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 rounded-full bg-[#fce4ec] px-2.5 py-0.5 text-[11px] font-semibold text-[#c2185b]">
+                      <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#fce4ec] px-2.5 py-1 text-[10px] font-semibold text-[#c2185b] sm:text-[11px]">
                         Agotado
                       </div>
                     )}
@@ -710,7 +705,7 @@ function ProductosPage() {
                           row.stock_status ===
                             "low_stock",
                       ) && (
-                        <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 rounded-full bg-[#fff3e0] px-2.5 py-0.5 text-[11px] font-semibold text-[#e65100]">
+                        <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#fff3e0] px-2.5 py-1 text-[10px] font-semibold text-[#e65100] sm:text-[11px]">
                           Stock bajo
                         </div>
                       )}
@@ -721,7 +716,7 @@ function ProductosPage() {
                       p.is_active && (
                         <button
                           type="button"
-                          className="absolute right-1.5 top-1.5 z-10 rounded-full bg-background/80 p-1 text-destructive hover:bg-background"
+                          className="absolute right-1.5 top-1.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-background active:scale-95"
                           onClick={(e) => {
                             e.stopPropagation();
 
@@ -729,27 +724,28 @@ function ProductosPage() {
                               p.id,
                             );
                           }}
+                          aria-label={`Desactivar ${p.name}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 className="h-4 w-4" />
                         </button>
                       )}
 
-                    <CardContent className="flex flex-col items-center gap-1.5 p-3 pt-5 text-center">
-                      <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-3xl">
+                    <CardContent className="flex h-full min-h-[188px] flex-col items-center gap-1.5 p-2.5 pt-7 text-center sm:min-h-[205px] sm:p-3 sm:pt-7">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted text-2xl sm:h-16 sm:w-16 sm:text-3xl">
                         {p.emoji ?? "📦"}
                       </div>
 
-                      <p className="line-clamp-2 min-h-[2.5rem] text-sm font-semibold leading-tight">
+                      <p className="line-clamp-2 min-h-[2.25rem] text-xs font-semibold leading-tight sm:text-sm">
                         {p.name}
                       </p>
 
                       {p.sku && (
-                        <p className="font-mono text-xs text-muted-foreground">
+                        <p className="max-w-full truncate font-mono text-[10px] text-muted-foreground sm:text-xs">
                           {p.sku}
                         </p>
                       )}
 
-                      <p className="text-base font-bold text-[#1a73e8]">
+                      <p className="text-base font-bold text-[#1a73e8] sm:text-lg">
                         {money(
                           Number(p.price),
                         )}
@@ -764,36 +760,41 @@ function ProductosPage() {
                               ? "destructive"
                               : "secondary"
                           }
+                          className="rounded-full px-2 text-[10px] sm:text-xs"
                         >
                           {available} disponibles
                         </Badge>
 
                         {reserved > 0 && (
-                          <Badge variant="outline">
+                          <Badge
+                            variant="outline"
+                            className="rounded-full px-2 text-[10px] sm:text-xs"
+                          >
                             {reserved} reservados
                           </Badge>
                         )}
 
                         {hasVariants && (
-                          <Badge variant="outline">
+                          <Badge
+                            variant="outline"
+                            className="rounded-full px-2 text-[10px] sm:text-xs"
+                          >
                             {stock?.variants ?? 0}{" "}
                             variantes
                           </Badge>
                         )}
                       </div>
 
-                      {/* EXISTENCIA TOTAL */}
-
                       {totalStock !==
                         available && (
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-[10px] text-muted-foreground sm:text-[11px]">
                           Existencia:{" "}
                           {totalStock}
                         </p>
                       )}
 
                       {p.categories?.name && (
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="max-w-full truncate text-[10px] text-muted-foreground sm:text-[11px]">
                           {p.categories.name}
                         </p>
                       )}
@@ -811,28 +812,31 @@ function ProductosPage() {
 
         <TabsContent
           value="form"
-          className="mt-4"
+          className="mt-3 sm:mt-4"
         >
-          {/* Estilo GESTIONAR ARTÍCULO (Zobaze) — solo visual */}
-          <div className="mx-auto max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
-            <div className="bg-[#1a73e8] px-4 py-3.5 text-white">
-              <p className="text-[11px] font-medium uppercase tracking-wide text-white/80">
+          <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
+            <div className="bg-[#1a73e8] px-4 py-3.5 text-white sm:px-5">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-white/80 sm:text-[11px]">
                 Gestión de inventarios
               </p>
-              <h2 className="text-lg font-bold leading-tight">
+
+              <h2 className="break-words text-lg font-bold leading-tight sm:text-xl">
                 {form.id
-                  ? form.name || "Gestionar artículo"
+                  ? form.name ||
+                    "Gestionar artículo"
                   : "Nuevo artículo"}
               </h2>
             </div>
 
-            <div className="space-y-4 p-4">
+            <div className="space-y-4 p-3.5 sm:p-5">
               {/* Identidad */}
-              <div className="grid grid-cols-4 gap-3">
+
+              <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[76px_minmax(0,1fr)]">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-[#757575]">
                     Emoji
                   </Label>
+
                   <Input
                     value={form.emoji}
                     onChange={(e) =>
@@ -844,10 +848,12 @@ function ProductosPage() {
                     className="h-11 rounded-xl border-[#e0e0e0] text-center text-lg"
                   />
                 </div>
-                <div className="col-span-3 space-y-1.5">
+
+                <div className="min-w-0 space-y-1.5">
                   <Label className="text-xs text-[#757575]">
                     Nombre *
                   </Label>
+
                   <Input
                     value={form.name}
                     onChange={(e) =>
@@ -863,15 +869,18 @@ function ProductosPage() {
               </div>
 
               {/* Códigos */}
-              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3">
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Códigos
                 </p>
-                <div className="grid grid-cols-2 gap-3">
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-[#757575]">
                       SKU
                     </Label>
+
                     <Input
                       value={form.sku}
                       onChange={(e) =>
@@ -881,13 +890,15 @@ function ProductosPage() {
                         }))
                       }
                       placeholder="SKU-001"
-                      className="h-10 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
                     />
                   </div>
+
                   <div className="space-y-1.5">
                     <Label className="text-xs text-[#757575]">
                       Código de barras
                     </Label>
+
                     <Input
                       value={form.barcode}
                       onChange={(e) =>
@@ -897,7 +908,7 @@ function ProductosPage() {
                         }))
                       }
                       placeholder="EAN / UPC"
-                      className="h-10 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
                     />
                   </div>
                 </div>
@@ -907,6 +918,7 @@ function ProductosPage() {
                 <Label className="text-xs text-[#757575]">
                   Descripción
                 </Label>
+
                 <Input
                   value={form.description}
                   onChange={(e) =>
@@ -915,7 +927,7 @@ function ProductosPage() {
                       description: e.target.value,
                     }))
                   }
-                  className="h-10 rounded-xl border-[#e0e0e0]"
+                  className="h-11 rounded-xl border-[#e0e0e0]"
                 />
               </div>
 
@@ -923,6 +935,7 @@ function ProductosPage() {
                 <Label className="text-xs text-[#757575]">
                   Categoría
                 </Label>
+
                 <Select
                   value={form.category_id}
                   onValueChange={(v) =>
@@ -932,13 +945,15 @@ function ProductosPage() {
                     }))
                   }
                 >
-                  <SelectTrigger className="h-10 rounded-xl border-[#e0e0e0]">
+                  <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
                     <SelectValue placeholder="Sin categoría" />
                   </SelectTrigger>
+
                   <SelectContent>
                     <SelectItem value="none">
                       Sin categoría
                     </SelectItem>
+
                     {categories.map((c) => (
                       <SelectItem
                         key={c.id}
@@ -951,16 +966,19 @@ function ProductosPage() {
                 </Select>
               </div>
 
-              {/* Precio / Costo / IVA — estilo Zobaze */}
-              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3">
+              {/* Precio / Costo / IVA */}
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Precios
                 </p>
-                <div className="grid grid-cols-3 gap-3">
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-[#757575]">
                       Precio venta
                     </Label>
+
                     <Input
                       type="number"
                       min="0"
@@ -975,10 +993,12 @@ function ProductosPage() {
                       className="h-11 rounded-xl border-[#e0e0e0] bg-white text-base font-bold text-[#1a73e8]"
                     />
                   </div>
+
                   <div className="space-y-1.5">
                     <Label className="text-xs text-[#757575]">
                       Costo
                     </Label>
+
                     <Input
                       type="number"
                       min="0"
@@ -993,10 +1013,12 @@ function ProductosPage() {
                       className="h-11 rounded-xl border-[#e0e0e0] bg-white"
                     />
                   </div>
+
                   <div className="space-y-1.5">
                     <Label className="text-xs text-[#757575]">
                       IVA
                     </Label>
+
                     <Input
                       type="number"
                       min="0"
@@ -1012,9 +1034,10 @@ function ProductosPage() {
                     />
                   </div>
                 </div>
+
                 {Number(form.price) > 0 &&
                   Number(form.cost) >= 0 && (
-                    <p className="mt-2 text-xs text-[#757575]">
+                    <p className="mt-2 break-words text-xs text-[#757575]">
                       Margen aprox.:{" "}
                       <span className="font-semibold text-[#34a853]">
                         {money(
@@ -1022,6 +1045,7 @@ function ProductosPage() {
                             Number(form.cost),
                         )}
                       </span>
+
                       {Number(form.price) > 0 && (
                         <span>
                           {" "}
@@ -1039,9 +1063,9 @@ function ProductosPage() {
                   )}
               </div>
 
-              <div className="flex gap-2 pt-1">
+              <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                 <Button
-                  className="h-11 flex-1 rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0]"
+                  className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0] sm:flex-1"
                   disabled={
                     !isManager ||
                     saveProduct.isPending
@@ -1060,7 +1084,7 @@ function ProductosPage() {
                 {form.id && (
                   <Button
                     variant="outline"
-                    className="h-11 rounded-xl border-[#e0e0e0]"
+                    className="min-h-11 w-full touch-manipulation rounded-xl border-[#e0e0e0] sm:w-auto"
                     onClick={() =>
                       setForm(emptyProduct)
                     }
@@ -1079,11 +1103,11 @@ function ProductosPage() {
 
         <TabsContent
           value="categorias"
-          className="mt-4"
+          className="mt-3 sm:mt-4"
         >
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">
                   Nueva categoría
                 </CardTitle>
@@ -1098,6 +1122,7 @@ function ProductosPage() {
                     onChange={(e) =>
                       setCatName(e.target.value)
                     }
+                    className="h-11 rounded-xl"
                   />
                 </div>
 
@@ -1110,7 +1135,7 @@ function ProductosPage() {
                     value={catParent}
                     onValueChange={setCatParent}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
 
@@ -1132,7 +1157,7 @@ function ProductosPage() {
                 </div>
 
                 <Button
-                  className="w-full"
+                  className="min-h-11 w-full touch-manipulation rounded-xl"
                   disabled={
                     !isManager ||
                     saveCategory.isPending
@@ -1149,7 +1174,7 @@ function ProductosPage() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <CardTitle className="text-base">
                   Listado
                 </CardTitle>
@@ -1161,18 +1186,18 @@ function ProductosPage() {
                     Cargando categorías…
                   </p>
                 ) : (
-                  <ul className="space-y-1 text-sm">
+                  <ul className="space-y-1.5 text-sm">
                     {categories.map((c) => (
                       <li
                         key={c.id}
-                        className="rounded border px-3 py-2"
+                        className="min-h-11 rounded-xl border px-3 py-2.5"
                       >
                         {c.name}
                       </li>
                     ))}
 
                     {!categories.length && (
-                      <li className="text-muted-foreground">
+                      <li className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
                         Sin categorías.
                       </li>
                     )}
@@ -1185,4 +1210,4 @@ function ProductosPage() {
       </Tabs>
     </PageShell>
   );
-} 
+}
