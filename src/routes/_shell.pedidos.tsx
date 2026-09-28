@@ -661,9 +661,10 @@ function PedidosPage() {
         title="Pedidos online"
         description="Pedidos conectados al catálogo e inventario central de Lula OS."
         action={
-          <div className="flex gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button
               variant="outline"
+              className="min-h-11 touch-manipulation"
               onClick={() => {
                 void invalidateOperationalQueries();
               }}
@@ -673,6 +674,7 @@ function PedidosPage() {
             </Button>
 
             <Button
+              className="min-h-11 touch-manipulation"
               disabled={
                 !isManager ||
                 loadingInventory ||
@@ -687,7 +689,7 @@ function PedidosPage() {
         }
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
@@ -729,7 +731,8 @@ function PedidosPage() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent className="px-3 sm:px-6">
+          <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -854,6 +857,7 @@ function PedidosPage() {
                 )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -867,7 +871,7 @@ function PedidosPage() {
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Nuevo pedido online
