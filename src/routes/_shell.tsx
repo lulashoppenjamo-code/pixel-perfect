@@ -215,7 +215,7 @@ function ShellLayout() {
   /* Colapso del sidebar (tablet/escritorio). Vive en el shell
      para no resetearse al cambiar de sección. */
   const [sidebarCollapsed, setSidebarCollapsed] =
-    useState(false);
+    useState(true);
 
   /*
    * Navegación inferior solo para celular (< md).
@@ -337,22 +337,22 @@ function ShellLayout() {
               onClick={() =>
                 setSidebarCollapsed((value) => !value)
               }
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-[#424242] shadow-sm transition hover:bg-[#f5f5f5]"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-[#424242] shadow-sm transition hover:bg-[#f5f5f5]"
               aria-label={
                 sidebarCollapsed
-                  ? "Expandir menú"
-                  : "Contraer menú"
+                  ? "Abrir menú"
+                  : "Cerrar menú"
               }
               title={
                 sidebarCollapsed
-                  ? "Expandir menú"
-                  : "Contraer menú"
+                  ? "Abrir menú"
+                  : "Cerrar menú"
               }
             >
               {sidebarCollapsed ? (
-                <ChevronRight className="h-4 w-4" />
+                <Menu className="h-5 w-5" />
               ) : (
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-5 w-5" />
               )}
             </button>
           </div>
