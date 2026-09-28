@@ -639,7 +639,7 @@ function ClientesPage() {
         </Card>
       )}
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
         <Card>
           <CardContent className="flex items-center justify-between p-4">
             <div>
@@ -721,7 +721,7 @@ function ClientesPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-3">
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">
@@ -744,6 +744,7 @@ function ClientesPage() {
                   }))
                 }
                 placeholder="Nombre del cliente"
+                className="h-11"
               />
             </div>
 
@@ -760,6 +761,7 @@ function ClientesPage() {
                   }))
                 }
                 placeholder="Opcional"
+                className="h-11"
               />
             </div>
 
@@ -777,6 +779,7 @@ function ClientesPage() {
                   }))
                 }
                 placeholder="Opcional"
+                className="h-11"
               />
             </div>
 
@@ -793,6 +796,7 @@ function ClientesPage() {
                   }))
                 }
                 placeholder="Opcional"
+                className="h-11"
               />
             </div>
 
@@ -809,6 +813,7 @@ function ClientesPage() {
                   }))
                 }
                 placeholder="Opcional"
+                className="h-11"
               />
             </div>
 
@@ -816,7 +821,7 @@ function ClientesPage() {
               {form.id && (
                 <Button
                   variant="outline"
-                  className="flex-1"
+                  className="min-h-11 flex-1 touch-manipulation"
                   onClick={() =>
                     setForm(empty)
                   }
@@ -826,7 +831,7 @@ function ClientesPage() {
               )}
 
               <Button
-                className="flex-1"
+                className="min-h-11 flex-1 touch-manipulation"
                 disabled={
                   save.isPending ||
                   !form.name.trim()
@@ -857,11 +862,11 @@ function ClientesPage() {
               </p>
             </div>
 
-            <div className="relative w-full sm:w-56">
-              <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
               <Input
-                className="h-9 pl-7"
+                className="h-11 pl-9"
                 placeholder="Buscar cliente…"
                 value={search}
                 onChange={(event) =>
@@ -873,8 +878,153 @@ function ClientesPage() {
             </div>
           </CardHeader>
 
-          <CardContent>
-            <div className="overflow-x-auto">
+          <CardContent className="px-3 sm:px-6">
+            {/* Móvil / tablet: tarjetas */}
+            <div className="grid gap-2.5 lg:hidden">
+              {filtered.map((customer) => {
+                const stat = stats.get(customer.id);
+                const balance = stat?.credit ?? 0;
+
+                return (
+                  <div
+                    key={customer.id}
+                    className="rounded-xl border bg-card p-3.5 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm font-bold leading-5">
+                          {customer.name}
+                        </p>
+                        {customer.email && (
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {customer.email}
+                          </p>
+                        )}
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {customer.phone ?? "Sin teléfono"}
+                        </p>
+                      </div>
+                      {balance > 0 ? (
+                        <Badge
+                          variant="destructive"
+                          className="shrink-0 rounded-full"
+                        >
+                          {money(balance)}
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 rounded-full"
+                        >
+                          $0
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          Compras
+                        </p>
+                        <p className="mt-1 text-sm font-semibold">
+                          {stat?.count ?? 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                          Total
+                        </p>
+                        <p className="mt-1 text-sm font-semibold">
+                          {money(stat?.total ?? 0)}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-11 w-11 touch-manipulation"
+                        title="Ver historial de crédito"
+                        onClick={() =>
+                          setHistoryCustomerId(customer.id)
+                        }
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
+
+                      {balance > 0 && (
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-11 w-11 touch-manipulation"
+                          title="Registrar abono"
+                          onClick={() => {
+                            setPayCustomerId(customer.id);
+                            setPayAmount(balance.toFixed(2));
+                            setPayMethod("cash");
+                            setPayNotes("");
+                          }}
+                        >
+                          <Wallet className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-11 w-11 touch-manipulation"
+                        title="Editar cliente"
+                        onClick={() =>
+                          setForm({
+                            id: customer.id,
+                            name: customer.name,
+                            phone: customer.phone ?? "",
+                            email: customer.email ?? "",
+                            notes: customer.notes ?? "",
+                            address: customer.address ?? "",
+                          })
+                        }
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+
+                      {isManager && (
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="h-11 w-11 touch-manipulation text-destructive"
+                          title={
+                            balance > 0
+                              ? "No se puede eliminar con saldo pendiente"
+                              : "Eliminar cliente"
+                          }
+                          disabled={
+                            remove.isPending || balance > 0
+                          }
+                          onClick={() =>
+                            remove.mutate(customer.id)
+                          }
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+
+              {!isLoading && filtered.length === 0 && (
+                <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
+                  {search.trim()
+                    ? "No se encontraron clientes."
+                    : "Sin clientes."}
+                </div>
+              )}
+            </div>
+
+            {/* Escritorio: tabla */}
+            <div className="hidden overflow-x-auto lg:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -966,7 +1116,7 @@ function ClientesPage() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8"
+                                className="h-9 w-9"
                                 title="Ver historial de crédito"
                                 onClick={() =>
                                   setHistoryCustomerId(
@@ -981,7 +1131,7 @@ function ClientesPage() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-8 w-8"
+                                  className="h-9 w-9"
                                   title="Registrar abono"
                                   onClick={() => {
                                     setPayCustomerId(
@@ -1010,7 +1160,7 @@ function ClientesPage() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8"
+                                className="h-9 w-9"
                                 title="Editar cliente"
                                 onClick={() =>
                                   setForm({
@@ -1039,7 +1189,7 @@ function ClientesPage() {
                                 <Button
                                   size="icon"
                                   variant="ghost"
-                                  className="h-8 w-8 text-destructive"
+                                  className="h-9 w-9 text-destructive"
                                   title={
                                     balance > 0
                                       ? "No se puede eliminar con saldo pendiente"
@@ -1096,7 +1246,7 @@ function ClientesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-sm overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Registrar abono
