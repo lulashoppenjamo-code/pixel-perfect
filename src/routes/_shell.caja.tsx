@@ -151,7 +151,7 @@ function CajaPage() {
      MÓVIL — Pantalla de entrada estilo Zobaze
      ========================================================= */
   const mobileHome = (
-    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4 md:hidden">
+    <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-4">
       {/* Botón grande NUEVA VENTA */}
       <button
         type="button"
@@ -249,7 +249,7 @@ function CajaPage() {
           <button
             type="button"
             onClick={() => setMobileView("home")}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8] md:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8] lg:hidden"
             aria-label="Volver"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -323,13 +323,13 @@ function CajaPage() {
 
   return (
     <>
-      {/* Móvil: home o contenido */}
-      <div className="md:hidden">
+      {/* Teléfono y tablet: home estilo Zobaze o contenido */}
+      <div className="lg:hidden">
         {mobileView === "home" ? mobileHome : mainContent}
       </div>
 
-      {/* Desktop: siempre el contenido completo */}
-      <div className="hidden md:block">
+      {/* Desktop grande: siempre el contenido completo */}
+      <div className="hidden lg:block">
         {mainContent}
       </div>
     </>
