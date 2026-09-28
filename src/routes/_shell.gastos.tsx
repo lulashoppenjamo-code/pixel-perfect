@@ -601,7 +601,7 @@ function GastosPage() {
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">
@@ -641,7 +641,7 @@ function GastosPage() {
         </Card>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+      <div className="grid max-w-full gap-6 overflow-x-hidden lg:grid-cols-[360px_1fr]">
         <Card className="h-fit">
           <CardHeader>
             <CardTitle className="text-base">
@@ -665,6 +665,7 @@ function GastosPage() {
                   }))
                 }
                 placeholder="Ej. Luz del local"
+                className="h-11"
                 disabled={
                   save.isPending ||
                   tableMissing
@@ -723,6 +724,7 @@ function GastosPage() {
                   }))
                 }
                 placeholder="0.00"
+                className="h-11"
                 disabled={
                   save.isPending ||
                   tableMissing
@@ -1017,7 +1019,7 @@ function GastosPage() {
             </div>
           </CardHeader>
 
-          <CardContent className="overflow-x-auto">
+          <CardContent className="overflow-x-auto -mx-1 px-1">
             {isLoading ? (
               <div className="py-10 text-center text-sm text-muted-foreground">
                 Cargando gastos...
