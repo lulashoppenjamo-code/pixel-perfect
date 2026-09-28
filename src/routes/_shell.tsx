@@ -4,6 +4,7 @@ import {
   Outlet,
   useNavigate,
   useLocation,
+  useRouter,
 } from "@tanstack/react-router";
 
 import { useAuth } from "@/lib/auth";
@@ -107,6 +108,17 @@ function ShellLayout() {
 
   const navigate = useNavigate();
   const location = useLocation();
+  const router = useRouter();
+
+  const preloadRoute = (path: string) => {
+    void router
+      .preloadRoute({
+        to: path,
+      })
+      .catch(() => {
+        // La navegación normal continúa aunque la precarga falle.
+      });
+  };
 
   const allNavItems: {
     label: string;
@@ -324,6 +336,8 @@ function ShellLayout() {
               return (
                 <button
                   key={item.path}
+                  type="button"
+                  onPointerDown={() => preloadRoute(item.path)}
                   onClick={() =>
                     navigate({
                       to: item.path,
@@ -434,6 +448,8 @@ function ShellLayout() {
           return (
             <button
               key={item.path}
+              type="button"
+              onPointerDown={() => preloadRoute(item.path)}
               onClick={() => goTo(item.path)}
               className={`flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors sm:text-[11px] ${
                 isActive
@@ -558,6 +574,8 @@ function ShellLayout() {
                 return (
                   <button
                     key={item.path}
+                    type="button"
+                    onPointerDown={() => preloadRoute(item.path)}
                     onClick={() => goTo(item.path)}
                     className={`flex min-h-11 w-full min-w-0 items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition-colors ${
                       isActive
@@ -676,6 +694,8 @@ function ShellLayout() {
                 return (
                   <button
                     key={item.path}
+                    type="button"
+                    onPointerDown={() => preloadRoute(item.path)}
                     onClick={() => goTo(item.path)}
                     className={`flex min-h-28 min-w-0 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-xs font-medium shadow-sm transition active:scale-[0.97] ${
                       isActive
