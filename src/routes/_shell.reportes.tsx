@@ -1652,7 +1652,7 @@ function ReportesPage() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent className="max-w-full overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -1777,7 +1777,7 @@ function ReportesPage() {
           </CardTitle>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent className="max-w-full overflow-x-auto">
           {lowStock.length ===
           0 ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
