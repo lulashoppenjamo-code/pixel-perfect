@@ -2142,7 +2142,7 @@ export function POSPanel({
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col overflow-hidden",
-          mobileStep !== "shop" && "hidden md:flex",
+          mobileStep !== "shop" && "hidden xl:flex",
         )}
       >
         {/* Header azul estilo Zobaze — búsqueda integrada */}
@@ -2367,14 +2367,14 @@ export function POSPanel({
       <div
         className={cn(
           "flex w-full min-w-0 flex-col border-t border-[#e0e0e0] bg-white md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
-          mobileStep === "shop" && cart.length === 0 && "hidden md:flex",
-          mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
-          mobileStep === "cart" && "fixed inset-0 z-50 md:static md:z-auto",
+          mobileStep === "shop" && cart.length === 0 && "hidden xl:flex",
+          mobileStep === "shop" && cart.length > 0 && "hidden xl:flex",
+          mobileStep === "cart" && "fixed inset-0 z-50 xl:static xl:z-auto",
           (mobileStep === "pay" ||
             mobileStep === "cash" ||
             mobileStep === "mixed" ||
             mobileStep === "success") &&
-            "hidden lg:flex",
+            "hidden xl:flex",
         )}
       >
         <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
@@ -2576,7 +2576,7 @@ export function POSPanel({
             <button
               type="button"
               onClick={() => setMobileStep("shop")}
-              className="flex h-11 w-full items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8] lg:hidden"
+              className="flex h-11 w-full items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8] xl:hidden"
             >
               Añadir artículo nuevo
             </button>
@@ -2961,7 +2961,7 @@ export function POSPanel({
           {/* Cobrar */}
 
           {/* Botones estilo Zobaze: Borrar | Guardar + Cobrar */}
-          <div className="flex gap-2 md:hidden">
+          <div className="flex gap-2 xl:hidden">
             <button
               type="button"
               disabled={cart.length === 0}
@@ -2992,7 +2992,7 @@ export function POSPanel({
               // Móvil: ir a métodos de pago. Desktop: cobrar directo
               if (
                 typeof window !== "undefined" &&
-                window.matchMedia("(max-width: 1023px)").matches
+                window.matchMedia("(max-width: 1279px)").matches
               ) {
                 setMobileStep("pay");
               } else {
@@ -3457,7 +3457,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: métodos de pago
           ===================================================== */}
       {mobileStep === "pay" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] xl:hidden">
           <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
             <button
               type="button"
@@ -3551,7 +3551,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: efectivo
           ===================================================== */}
       {mobileStep === "cash" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] xl:hidden">
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3674,7 +3674,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: pago mixto
           ===================================================== */}
       {mobileStep === "mixed" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] xl:hidden">
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3808,7 +3808,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: éxito
           ===================================================== */}
       {mobileStep === "success" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white lg:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-white xl:hidden">
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
             <div
               className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
