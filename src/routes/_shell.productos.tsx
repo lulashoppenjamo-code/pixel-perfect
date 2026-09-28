@@ -692,4 +692,523 @@ function ProductosPage() {
                     {/* ESTADO */}
 
                     {agotado && (
-                      <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded
+                      <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#fce4ec] px-2.5 py-1 text-[10px] font-semibold text-[#c2185b] sm:text-[11px]">
+                        Agotado
+                      </div>
+                    )}
+
+                    {!agotado &&
+                      stock &&
+                      sharedInventory.some(
+                        (row) =>
+                          row.product_id ===
+                            p.id &&
+                          row.stock_status ===
+                            "low_stock",
+                      ) && (
+                        <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#fff3e0] px-2.5 py-1 text-[10px] font-semibold text-[#e65100] sm:text-[11px]">
+                          Stock bajo
+                        </div>
+                      )}
+
+                    {/* ELIMINAR */}
+
+                    {isManager &&
+                      p.is_active && (
+                        <button
+                          type="button"
+                          className="absolute right-1.5 top-1.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-background active:scale-95"
+                          onClick={(e) => {
+                            e.stopPropagation();
+
+                            removeProduct.mutate(
+                              p.id,
+                            );
+                          }}
+                          aria-label={`Desactivar ${p.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+
+                    <CardContent className="flex h-full min-h-[188px] flex-col items-center gap-1.5 p-2.5 pt-7 text-center sm:min-h-[205px] sm:p-3 sm:pt-7">
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted text-2xl sm:h-16 sm:w-16 sm:text-3xl">
+                        {p.emoji ?? "📦"}
+                      </div>
+
+                      <p className="line-clamp-2 min-h-[2.25rem] text-xs font-semibold leading-tight sm:text-sm">
+                        {p.name}
+                      </p>
+
+                      {p.sku && (
+                        <p className="max-w-full truncate font-mono text-[10px] text-muted-foreground sm:text-xs">
+                          {p.sku}
+                        </p>
+                      )}
+
+                      <p className="text-base font-bold text-[#1a73e8] sm:text-lg">
+                        {money(
+                          Number(p.price),
+                        )}
+                      </p>
+
+                      {/* STOCK CENTRAL */}
+
+                      <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
+                        <Badge
+                          variant={
+                            agotado
+                              ? "destructive"
+                              : "secondary"
+                          }
+                          className="rounded-full px-2 text-[10px] sm:text-xs"
+                        >
+                          {available} disponibles
+                        </Badge>
+
+                        {reserved > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full px-2 text-[10px] sm:text-xs"
+                          >
+                            {reserved} reservados
+                          </Badge>
+                        )}
+
+                        {hasVariants && (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full px-2 text-[10px] sm:text-xs"
+                          >
+                            {stock?.variants ?? 0}{" "}
+                            variantes
+                          </Badge>
+                        )}
+                      </div>
+
+                      {totalStock !==
+                        available && (
+                        <p className="text-[10px] text-muted-foreground sm:text-[11px]">
+                          Existencia:{" "}
+                          {totalStock}
+                        </p>
+                      )}
+
+                      {p.categories?.name && (
+                        <p className="max-w-full truncate text-[10px] text-muted-foreground sm:text-[11px]">
+                          {p.categories.name}
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* ======================================================
+            FORMULARIO PRODUCTO
+            ====================================================== */}
+
+        <TabsContent
+          value="form"
+          className="mt-3 sm:mt-4"
+        >
+          <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
+            <div className="bg-[#1a73e8] px-4 py-3.5 text-white sm:px-5">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-white/80 sm:text-[11px]">
+                Gestión de inventarios
+              </p>
+
+              <h2 className="break-words text-lg font-bold leading-tight sm:text-xl">
+                {form.id
+                  ? form.name ||
+                    "Gestionar artículo"
+                  : "Nuevo artículo"}
+              </h2>
+            </div>
+
+            <div className="space-y-4 p-3.5 sm:p-5">
+              {/* Identidad */}
+
+              <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[76px_minmax(0,1fr)]">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-[#757575]">
+                    Emoji
+                  </Label>
+
+                  <Input
+                    value={form.emoji}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        emoji: e.target.value,
+                      }))
+                    }
+                    className="h-11 rounded-xl border-[#e0e0e0] text-center text-lg"
+                  />
+                </div>
+
+                <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs text-[#757575]">
+                    Nombre *
+                  </Label>
+
+                  <Input
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm((f) => ({
+                        ...f,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Nombre del producto"
+                    className="h-11 rounded-xl border-[#e0e0e0]"
+                  />
+                </div>
+              </div>
+
+              {/* Códigos */}
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Códigos
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      SKU
+                    </Label>
+
+                    <Input
+                      value={form.sku}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          sku: e.target.value,
+                        }))
+                      }
+                      placeholder="SKU-001"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Código de barras
+                    </Label>
+
+                    <Input
+                      value={form.barcode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          barcode: e.target.value,
+                        }))
+                      }
+                      placeholder="EAN / UPC"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-[#757575]">
+                  Descripción
+                </Label>
+
+                <Input
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      description: e.target.value,
+                    }))
+                  }
+                  className="h-11 rounded-xl border-[#e0e0e0]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-[#757575]">
+                  Categoría
+                </Label>
+
+                <Select
+                  value={form.category_id}
+                  onValueChange={(v) =>
+                    setForm((f) => ({
+                      ...f,
+                      category_id: v,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
+                    <SelectValue placeholder="Sin categoría" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value="none">
+                      Sin categoría
+                    </SelectItem>
+
+                    {categories.map((c) => (
+                      <SelectItem
+                        key={c.id}
+                        value={c.id}
+                      >
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Precio / Costo / IVA */}
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Precios
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Precio venta
+                    </Label>
+
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.price}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          price: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white text-base font-bold text-[#1a73e8]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Costo
+                    </Label>
+
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.cost}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          cost: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      IVA
+                    </Label>
+
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.tax_rate}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          tax_rate: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white"
+                    />
+                  </div>
+                </div>
+
+                {Number(form.price) > 0 &&
+                  Number(form.cost) >= 0 && (
+                    <p className="mt-2 break-words text-xs text-[#757575]">
+                      Margen aprox.:{" "}
+                      <span className="font-semibold text-[#34a853]">
+                        {money(
+                          Number(form.price) -
+                            Number(form.cost),
+                        )}
+                      </span>
+
+                      {Number(form.price) > 0 && (
+                        <span>
+                          {" "}
+                          (
+                          {(
+                            ((Number(form.price) -
+                              Number(form.cost)) /
+                              Number(form.price)) *
+                            100
+                          ).toFixed(0)}
+                          %)
+                        </span>
+                      )}
+                    </p>
+                  )}
+              </div>
+
+              <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+                <Button
+                  className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0] sm:flex-1"
+                  disabled={
+                    !isManager ||
+                    saveProduct.isPending
+                  }
+                  onClick={() =>
+                    saveProduct.mutate()
+                  }
+                >
+                  {saveProduct.isPending
+                    ? "Guardando…"
+                    : form.id
+                      ? "Guardar cambios"
+                      : "Crear artículo"}
+                </Button>
+
+                {form.id && (
+                  <Button
+                    variant="outline"
+                    className="min-h-11 w-full touch-manipulation rounded-xl border-[#e0e0e0] sm:w-auto"
+                    onClick={() =>
+                      setForm(emptyProduct)
+                    }
+                  >
+                    Cancelar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ======================================================
+            CATEGORÍAS
+            ====================================================== */}
+
+        <TabsContent
+          value="categorias"
+          className="mt-3 sm:mt-4"
+        >
+          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  Nueva categoría
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Nombre</Label>
+
+                  <Input
+                    value={catName}
+                    onChange={(e) =>
+                      setCatName(e.target.value)
+                    }
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>
+                    Padre (opcional)
+                  </Label>
+
+                  <Select
+                    value={catParent}
+                    onValueChange={setCatParent}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      <SelectItem value="none">
+                        Ninguno
+                      </SelectItem>
+
+                      {categories.map((c) => (
+                        <SelectItem
+                          key={c.id}
+                          value={c.id}
+                        >
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button
+                  className="min-h-11 w-full touch-manipulation rounded-xl"
+                  disabled={
+                    !isManager ||
+                    saveCategory.isPending
+                  }
+                  onClick={() =>
+                    saveCategory.mutate()
+                  }
+                >
+                  {saveCategory.isPending
+                    ? "Creando…"
+                    : "Crear categoría"}
+                </Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  Listado
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent>
+                {categoriesLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Cargando categorías…
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5 text-sm">
+                    {categories.map((c) => (
+                      <li
+                        key={c.id}
+                        className="min-h-11 rounded-xl border px-3 py-2.5"
+                      >
+                        {c.name}
+                      </li>
+                    ))}
+
+                    {!categories.length && (
+                      <li className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+                        Sin categorías.
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </PageShell>
+  );
+}
