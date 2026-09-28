@@ -1257,7 +1257,7 @@ function ReposicionPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="max-w-full overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1477,7 +1477,7 @@ function ReposicionPage() {
                       event.target.value,
                     )
                   }
-                  placeholder="Buscar producto..."
+                  className="h-11" placeholder="Buscar producto..."
                   className="pl-9"
                 />
               </div>
@@ -1522,7 +1522,7 @@ function ReposicionPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent className="max-w-full overflow-x-auto">
           {requestsLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Cargando solicitudes...
