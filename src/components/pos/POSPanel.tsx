@@ -195,7 +195,7 @@ export function POSPanel({
   /* Flujo visual móvil estilo Zobaze:
      shop = productos | cart = carrito | pay = métodos | cash = efectivo | success = venta ok */
   const [mobileStep, setMobileStep] = useState<
-    "shop" | "cart" | "pay" | "cash" | "success"
+    "shop" | "cart" | "pay" | "cash" | "mixed" | "success"
   >("shop");
   const [lastSaleTotal, setLastSaleTotal] = useState(0);
   const [lastSaleFolio, setLastSaleFolio] = useState<string | number>("");
@@ -3495,6 +3495,10 @@ export function POSPanel({
                           : "",
                       );
                       setMobileStep("cash");
+                    } else if (item.id === "mixed") {
+                      setMixedCash("");
+                      setMixedCard("");
+                      setMobileStep("mixed");
                     } else {
                       checkout.mutate(item.id);
                     }
@@ -3626,6 +3630,140 @@ export function POSPanel({
               {checkout.isPending
                 ? "Procesando…"
                 : "Recibido por Efectivo"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          FLUJO MÓVIL ZOBAZE: pago mixto
+          ===================================================== */}
+      {mobileStep === "mixed" && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
+          <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileStep("pay")}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
+            >
+              ←
+            </button>
+            <h1 className="flex-1 text-lg font-bold">Pago mixto</h1>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
+                <span className="text-sm text-[#757575]">
+                  Gran total
+                </span>
+                <span className="text-sm font-semibold text-[#212121]">
+                  {money(total)}
+                </span>
+              </div>
+
+              <div className="space-y-4 px-4 py-4">
+                <div>
+                  <label className="text-sm text-[#757575]">
+                    Efectivo
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={mixedCash}
+                    onChange={(e) =>
+                      setMixedCash(e.target.value)
+                    }
+                    className="mt-1 h-12 rounded-xl border-[#e0e0e0] text-lg font-semibold"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-[#757575]">
+                    Tarjeta
+                  </label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={mixedCard}
+                    onChange={(e) =>
+                      setMixedCard(e.target.value)
+                    }
+                    className="mt-1 h-12 rounded-xl border-[#e0e0e0] text-lg font-semibold"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-[#f0f0f0] px-4 py-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#757575]">
+                    Total aplicado
+                  </span>
+                  <span className="font-semibold text-[#212121]">
+                    {money(
+                      (Number(mixedCash) || 0) +
+                        (Number(mixedCard) || 0),
+                    )}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-[#757575]">
+                    {(Number(mixedCash) || 0) +
+                      (Number(mixedCard) || 0) >=
+                    total - 0.01
+                      ? "Cubierto"
+                      : "Falta"}
+                  </span>
+                  <span
+                    className={
+                      (Number(mixedCash) || 0) +
+                        (Number(mixedCard) || 0) >=
+                      total - 0.01
+                        ? "font-semibold text-[#2e7d32]"
+                        : "font-semibold text-[#c62828]"
+                    }
+                  >
+                    {money(
+                      Math.max(
+                        0,
+                        total -
+                          ((Number(mixedCash) || 0) +
+                            (Number(mixedCard) || 0)),
+                      ),
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="px-1 text-center text-xs text-[#9e9e9e]">
+              La suma de efectivo y tarjeta debe cubrir el total
+              de la venta.
+            </p>
+          </div>
+
+          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              disabled={
+                !canSell ||
+                checkout.isPending ||
+                (Number(mixedCash) || 0) +
+                  (Number(mixedCard) || 0) <
+                  total - 0.01
+              }
+              onClick={() => checkout.mutate("mixed")}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
+            >
+              {checkout.isPending
+                ? "Procesando…"
+                : "Confirmar cobro mixto"}
             </button>
           </div>
         </div>
