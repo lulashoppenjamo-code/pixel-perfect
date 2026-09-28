@@ -2369,7 +2369,7 @@ export function POSPanel({
           "flex w-full min-w-0 flex-col border-t border-[#e0e0e0] bg-white md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
           mobileStep === "shop" && cart.length === 0 && "hidden md:flex",
           mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
-          mobileStep === "cart" && "fixed inset-0 z-40 md:static md:z-auto",
+          mobileStep === "cart" && "fixed inset-0 z-50 md:static md:z-auto",
           (mobileStep === "pay" ||
             mobileStep === "cash" ||
             mobileStep === "mixed" ||
@@ -2570,7 +2570,7 @@ export function POSPanel({
             TOTALES Y PAGO
             ================================================= */}
 
-        <div className="space-y-3 border-t border-[#e0e0e0] bg-white p-4">
+        <div className="space-y-3 border-t border-[#e0e0e0] bg-white p-4 pb-[calc(1rem+4.5rem+env(safe-area-inset-bottom))] md:pb-4">
           {/* Zobaze: Añadir artículo nuevo (móvil) */}
           {cart.length > 0 && (
             <button
