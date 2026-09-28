@@ -212,8 +212,9 @@ function ShellLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   /*
-   * Navegación inferior para celular/tablet.
-   * Se mantiene exactamente la misma lógica de permisos/rutas.
+   * Navegación inferior solo para celular (< md).
+   * Tablet y escritorio usan la sidebar fija.
+   * Misma lógica de permisos/rutas.
    */
   const bottomNavItems = [
     {
@@ -274,8 +275,14 @@ function ShellLayout() {
           Se conserva para pantallas grandes.
           Celular/tablet utilizan navegación táctil.
           ===================================================== */}
-      <aside className="hidden w-64 shrink-0 select-none flex-col justify-between border-r bg-card p-4 lg:flex">
-        <div className="min-h-0 space-y-6 overflow-y-auto overflow-x-hidden">
+      {/*
+        Breakpoints de layout:
+        - Celular (< md): top bar + bottom nav + sheet
+        - Tablet (md–lg): sidebar fija, sin bottom nav
+        - Escritorio (lg+): sidebar fija ancha
+      */}
+      <aside className="hidden w-56 shrink-0 select-none flex-col justify-between border-r bg-card p-3 md:flex lg:w-64 lg:p-4">
+        <div className="min-h-0 space-y-4 overflow-y-auto overflow-x-hidden lg:space-y-6">
           <div className="flex min-w-0 items-center gap-3 px-2">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#1a73e8] text-xl font-bold text-white shadow-sm">
               L
@@ -298,6 +305,38 @@ function ShellLayout() {
               />
             </div>
           </div>
+
+          {/* Marca visible en tablet y escritorio */}
+          <div className="mx-2 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
+            <Crown className="h-4 w-4 shrink-0 text-white" />
+            <div className="min-w-0">
+              <p className="truncate text-xs font-bold uppercase tracking-wide text-white">
+                Lula Shop OS
+              </p>
+              <p className="truncate text-[11px] text-white/90">
+                Sistema propio · v1.0
+              </p>
+            </div>
+          </div>
+
+          {/* Acceso claro a Vender (Caja/POS) en tablet/escritorio */}
+          {navItems.some((item) => item.key === "caja") && (
+            <div className="px-2">
+              <button
+                type="button"
+                onPointerDown={() => preloadRoute("/caja")}
+                onClick={() => navigate({ to: "/caja" })}
+                className={`flex min-h-11 w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-bold shadow-sm transition-colors ${
+                  location.pathname.startsWith("/caja")
+                    ? "bg-[#34a853] text-white"
+                    : "bg-[#1a73e8] text-white hover:bg-[#1557b0]"
+                }`}
+              >
+                <ShoppingBag className="h-4 w-4 shrink-0" />
+                Vender
+              </button>
+            </div>
+          )}
 
           <div className="px-2">
             <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
@@ -386,7 +425,7 @@ function ShellLayout() {
           ===================================================== */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* ===== MOBILE / TABLET TOP BAR ===== */}
-        <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden">
+        <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/90 active:bg-white/10"
@@ -420,8 +459,8 @@ function ShellLayout() {
         <main
           className={
             location.pathname.startsWith("/caja")
-              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(4.5rem+env(safe-area-inset-bottom))] lg:overflow-y-auto lg:p-4 lg:pb-4"
-              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:p-4 sm:pb-[calc(5rem+env(safe-area-inset-bottom))] md:p-5 md:pb-[calc(5rem+env(safe-area-inset-bottom))] lg:p-6 lg:pb-6"
+              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:overflow-y-auto md:p-3 md:pb-3 lg:p-4 lg:pb-4"
+              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:p-4 md:p-4 md:pb-4 lg:p-6 lg:pb-6"
           }
         >
           <Outlet />
@@ -432,7 +471,7 @@ function ShellLayout() {
           MOBILE / TABLET BOTTOM NAV
           ===================================================== */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white lg:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white md:hidden"
         style={{
           paddingBottom:
             "env(safe-area-inset-bottom, 0px)",
@@ -496,7 +535,7 @@ function ShellLayout() {
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0 lg:hidden"
+          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0 md:hidden"
         >
           <div className="flex min-h-full flex-col">
             <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white sm:px-5">
@@ -621,7 +660,7 @@ function ShellLayout() {
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0 lg:hidden"
+          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0 md:hidden"
         >
           <div className="flex justify-center pt-3">
             <div className="h-1 w-10 rounded-full bg-[#e0e0e0]" />
