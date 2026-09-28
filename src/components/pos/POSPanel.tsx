@@ -2263,6 +2263,19 @@ export function POSPanel({
                     product.stock <=
                     0;
 
+                  const cartQty = cart
+                    .filter(
+                      (line) =>
+                        line.product_id ===
+                        product.id,
+                    )
+                    .reduce(
+                      (sum, line) =>
+                        sum +
+                        line.quantity,
+                      0,
+                    );
+
                   return (
                     <button
                       key={
@@ -2286,6 +2299,12 @@ export function POSPanel({
                       {outOfStock && (
                         <span className="absolute left-1.5 top-1.5 z-10 rounded bg-[#f8bbd0] px-1.5 py-0.5 text-[10px] font-semibold text-[#ad1457]">
                           Agotado
+                        </span>
+                      )}
+
+                      {cartQty > 0 && (
+                        <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-[#1a73e8] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          +{cartQty}
                         </span>
                       )}
 
@@ -2354,7 +2373,7 @@ export function POSPanel({
             mobileStep === "cash" ||
             mobileStep === "mixed" ||
             mobileStep === "success") &&
-            "hidden md:flex",
+            "hidden lg:flex",
         )}
       >
         <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
@@ -3433,7 +3452,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: métodos de pago
           ===================================================== */}
       {mobileStep === "pay" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] md:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
           <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
             <button
               type="button"
@@ -3527,7 +3546,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: efectivo
           ===================================================== */}
       {mobileStep === "cash" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] md:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3640,7 +3659,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: pago mixto
           ===================================================== */}
       {mobileStep === "mixed" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] md:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] lg:hidden">
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3774,7 +3793,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: éxito
           ===================================================== */}
       {mobileStep === "success" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white md:hidden">
+        <div className="fixed inset-0 z-50 flex flex-col bg-white lg:hidden">
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
             <div className="flex h-16 w-16 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]">
               <svg
