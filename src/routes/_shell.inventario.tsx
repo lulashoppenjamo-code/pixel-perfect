@@ -1344,7 +1344,7 @@ function InventarioPage() {
          * ===================================================== */}
         <TabsContent
           value="conteo"
-          className="mt-3 sm:mt-4"
+          className="mt-3 max-w-full overflow-x-hidden sm:mt-4"
         >
           {!activeCount ? (
             <Card>
@@ -1471,7 +1471,7 @@ function InventarioPage() {
                 </CardHeader>
 
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 sm:gap-3 lg:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
                     <CountKpi
                       label="Productos"
                       value={String(
@@ -1608,7 +1608,7 @@ function InventarioPage() {
                             return (
                               <div
                                 key={item.id}
-                                className="rounded-xl border p-3.5"
+                                className="rounded-xl border bg-card p-3.5 shadow-sm"
                               >
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0 flex-1">
@@ -1697,7 +1697,7 @@ function InventarioPage() {
                                       type="number"
                                       min="0"
                                       step="0.01"
-                                      className="mt-1 h-10 w-full rounded-lg text-right text-base"
+                                      className="mt-1 h-11 min-h-11 w-full touch-manipulation rounded-lg text-right text-base"
                                       value={
                                         physicalCount[
                                           item.id
@@ -2064,7 +2064,7 @@ function InventarioPage() {
          * ===================================================== */}
         <TabsContent
           value="historial"
-          className="mt-3 sm:mt-4"
+          className="mt-3 max-w-full overflow-x-hidden sm:mt-4"
         >
           <Card className="overflow-hidden">
             <CardHeader>
