@@ -560,7 +560,7 @@ function AjustesPage() {
         defaultValue="sucursales"
         className="space-y-4"
       >
-        <TabsList className="flex w-full flex-wrap justify-start">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1">
           <TabsTrigger value="sucursales">
             Sucursales
           </TabsTrigger>
@@ -584,7 +584,7 @@ function AjustesPage() {
 
         <TabsContent
           value="sucursales"
-          className="grid gap-4 lg:grid-cols-[1fr_340px]"
+          className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-[1fr_340px]"
         >
           <Card>
             <CardHeader>
@@ -593,7 +593,7 @@ function AjustesPage() {
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="overflow-x-auto">
+            <CardContent className="max-w-full overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -671,6 +671,7 @@ function AjustesPage() {
                 </Label>
 
                 <Input
+                  className="h-11"
                   value={
                     branch.name
                   }
@@ -738,7 +739,7 @@ function AjustesPage() {
               </div>
 
               <Button
-                className="w-full"
+                className="min-h-11 w-full touch-manipulation"
                 disabled={
                   !isAdmin ||
                   !branch.name.trim() ||
@@ -787,7 +788,7 @@ function AjustesPage() {
                 </div>
               </CardHeader>
 
-              <CardContent className="overflow-x-auto">
+              <CardContent className="max-w-full overflow-x-auto">
                 {profilesLoading ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">
                     Cargando usuarios...
@@ -1086,7 +1087,7 @@ function AjustesPage() {
         {isManager && (
           <TabsContent
             value="general"
-            className="grid gap-4 lg:grid-cols-[1fr_340px]"
+            className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-[1fr_340px]"
           >
             <Card>
               <CardHeader>
@@ -1100,7 +1101,7 @@ function AjustesPage() {
                 </p>
               </CardHeader>
 
-              <CardContent className="overflow-x-auto">
+              <CardContent className="max-w-full overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
