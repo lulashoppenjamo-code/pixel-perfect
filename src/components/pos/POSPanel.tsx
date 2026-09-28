@@ -3832,4 +3832,4 @@ export function POSPanel({
       />
     </div>
   );
-}
+} 
