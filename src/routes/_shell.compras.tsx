@@ -1370,3 +1370,456 @@ function ComprasPage() {
 
               <div className="space-y-1.5">
                 <Label>Proveedor</Label>
+
+                <Select
+                  value={supplierId}
+                  onValueChange={setSupplierId}
+                  disabled={!isManager}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue placeholder="Selecciona proveedor" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value="none">
+                      Sin proveedor
+                    </SelectItem>
+
+                    {suppliers.map(
+                      (supplier) => (
+                        <SelectItem
+                          key={supplier.id}
+                          value={supplier.id}
+                        >
+                          {supplier.name}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Producto</Label>
+
+                <Select
+                  value={pick}
+                  disabled={!isManager}
+                  onValueChange={(value) => {
+                    const product =
+                      products.find(
+                        (item) =>
+                          item.id === value,
+                      );
+
+                    setPick(value);
+                    setPickVariant("");
+
+                    setCost(
+                      String(
+                        product?.cost ?? 0,
+                      ),
+                    );
+                  }}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue placeholder="Elige un producto" />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    {products.map(
+                      (product) => (
+                        <SelectItem
+                          key={product.id}
+                          value={product.id}
+                        >
+                          {product.name}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedProduct &&
+                selectedProduct.has_variants &&
+                productVariants.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label>Variante</Label>
+
+                    <Select
+                      value={pickVariant}
+                      disabled={!isManager}
+                      onValueChange={(value) => {
+                        setPickVariant(value);
+
+                        const variant =
+                          productVariants.find(
+                            (item) =>
+                              item.id ===
+                              value,
+                          );
+
+                        if (
+                          variant?.cost_override !=
+                          null
+                        ) {
+                          setCost(
+                            String(
+                              variant.cost_override,
+                            ),
+                          );
+                        } else {
+                          setCost(
+                            String(
+                              selectedProduct.cost,
+                            ),
+                          );
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue placeholder="Elige una variante" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {productVariants.map(
+                          (variant) => (
+                            <SelectItem
+                              key={variant.id}
+                              value={variant.id}
+                            >
+                              {variant.name}
+
+                              {variant.sku
+                                ? ` · ${variant.sku}`
+                                : ""}
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label>Cantidad</Label>
+
+                  <Input
+                    type="number"
+                    min="0.01"
+                    step="any"
+                    value={qty}
+                    disabled={!isManager}
+                    className="h-11 rounded-xl"
+                    onChange={(event) =>
+                      setQty(
+                        event.target.value,
+                      )
+                    }
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Costo unitario</Label>
+
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={cost}
+                    disabled={!isManager}
+                    className="h-11 rounded-xl"
+                    onChange={(event) =>
+                      setCost(
+                        event.target.value,
+                      )
+                    }
+                  />
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="min-h-11 w-full touch-manipulation rounded-xl"
+                disabled={!isManager || !pick}
+                onClick={addLine}
+              >
+                <Plus className="size-4" />
+                Agregar partida
+              </Button>
+
+              {lines.length > 0 && (
+                <div className="space-y-2 border-t pt-3">
+                  {lines.map(
+                    (line, index) => (
+                      <div
+                        key={`${line.product_id}-${line.variant_id}-${index}`}
+                        className="flex items-start gap-2 rounded-xl border p-2.5"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="break-words text-sm font-medium">
+                            {line.quantity} ×{" "}
+                            {line.name}
+                          </div>
+
+                          {line.variant_name && (
+                            <div className="mt-0.5 break-words text-xs text-muted-foreground">
+                              {line.variant_name}
+                            </div>
+                          )}
+
+                          <div className="mt-1 text-sm font-semibold">
+                            {money(
+                              line.quantity *
+                                line.unit_cost,
+                            )}
+                          </div>
+                        </div>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-10 w-10 shrink-0 touch-manipulation"
+                          disabled={!isManager}
+                          onClick={() =>
+                            setLines(
+                              (current) =>
+                                current.filter(
+                                  (
+                                    _,
+                                    lineIndex,
+                                  ) =>
+                                    lineIndex !==
+                                    index,
+                                ),
+                            )
+                          }
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between gap-3 border-t pt-3">
+                <span className="text-sm font-semibold">
+                  Total
+                </span>
+
+                <span className="text-lg font-bold">
+                  {money(total)}
+                </span>
+              </div>
+
+              <Button
+                className="min-h-11 w-full touch-manipulation rounded-xl"
+                disabled={
+                  !isManager ||
+                  !lines.length ||
+                  createPurchase.isPending
+                }
+                onClick={() =>
+                  createPurchase.mutate()
+                }
+              >
+                {createPurchase.isPending
+                  ? "Creando..."
+                  : "Crear orden"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ======================================================
+            PROVEEDORES
+            ====================================================== */}
+
+        <TabsContent
+          value="proveedores"
+          className="mt-0 grid gap-3 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-4"
+        >
+          <Card className="overflow-hidden">
+            <CardHeader className="p-4 sm:p-5">
+              <CardTitle className="text-base sm:text-lg">
+                Proveedores
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="p-0">
+              {/* MÓVIL / TABLET */}
+
+              <div className="space-y-2 p-3 lg:hidden">
+                {suppliers.map(
+                  (supplier) => (
+                    <div
+                      key={supplier.id}
+                      className="rounded-xl border p-3"
+                    >
+                      <p className="break-words text-sm font-semibold">
+                        {supplier.name}
+                      </p>
+
+                      <div className="mt-2 grid gap-1 text-xs text-muted-foreground">
+                        <span className="break-all">
+                          Teléfono:{" "}
+                          {supplier.phone ??
+                            "—"}
+                        </span>
+
+                        <span className="break-all">
+                          Correo:{" "}
+                          {supplier.email ??
+                            "—"}
+                        </span>
+                      </div>
+                    </div>
+                  ),
+                )}
+
+                {!suppliers.length && (
+                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    Aún no hay proveedores.
+                  </div>
+                )}
+              </div>
+
+              {/* ESCRITORIO */}
+
+              <div className="hidden overflow-x-auto lg:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        Nombre
+                      </TableHead>
+                      <TableHead>
+                        Teléfono
+                      </TableHead>
+                      <TableHead>
+                        Correo
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
+
+                  <TableBody>
+                    {suppliers.map(
+                      (supplier) => (
+                        <TableRow
+                          key={supplier.id}
+                        >
+                          <TableCell>
+                            {supplier.name}
+                          </TableCell>
+
+                          <TableCell>
+                            {supplier.phone ??
+                              "—"}
+                          </TableCell>
+
+                          <TableCell>
+                            {supplier.email ??
+                              "—"}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
+
+                    {!suppliers.length && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={3}
+                          className="py-8 text-center text-muted-foreground"
+                        >
+                          Aún no hay proveedores.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="h-fit overflow-hidden">
+            <CardHeader className="p-4 sm:p-5">
+              <CardTitle className="text-base sm:text-lg">
+                Nuevo proveedor
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-3 p-4 sm:p-5">
+              <div className="space-y-1.5">
+                <Label>Nombre</Label>
+
+                <Input
+                  value={sup.name}
+                  disabled={!isManager}
+                  className="h-11 rounded-xl"
+                  onChange={(event) =>
+                    setSup({
+                      ...sup,
+                      name: event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Teléfono</Label>
+
+                <Input
+                  value={sup.phone}
+                  disabled={!isManager}
+                  className="h-11 rounded-xl"
+                  onChange={(event) =>
+                    setSup({
+                      ...sup,
+                      phone: event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Correo</Label>
+
+                <Input
+                  type="email"
+                  value={sup.email}
+                  disabled={!isManager}
+                  className="h-11 rounded-xl"
+                  onChange={(event) =>
+                    setSup({
+                      ...sup,
+                      email: event.target.value,
+                    })
+                  }
+                />
+              </div>
+
+              <Button
+                className="min-h-11 w-full touch-manipulation rounded-xl"
+                disabled={
+                  !isManager ||
+                  !sup.name.trim() ||
+                  saveSupplier.isPending
+                }
+                onClick={() =>
+                  saveSupplier.mutate()
+                }
+              >
+                {saveSupplier.isPending
+                  ? "Guardando..."
+                  : "Guardar proveedor"}
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </PageShell>
+  );
+}
