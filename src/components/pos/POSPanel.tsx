@@ -200,6 +200,31 @@ export function POSPanel({
   const [lastSaleTotal, setLastSaleTotal] = useState(0);
   const [lastSaleFolio, setLastSaleFolio] = useState<string | number>("");
 
+  /*
+   * Flujo secuencial (solo productos → caja completa):
+   * - Teléfonos y tablets táctiles en cualquier orientación.
+   * - No depende solo del ancho: en landscape muchas tablets
+   *   superan 1280px y antes caían al layout de escritorio.
+   */
+  const [sequential, setSequential] = useState(true);
+  useEffect(() => {
+    const update = () => {
+      if (typeof window === "undefined") return;
+      const coarse =
+        window.matchMedia("(pointer: coarse)").matches ||
+        window.matchMedia("(hover: none)").matches;
+      const narrow = window.innerWidth < 1400;
+      setSequential(coarse || narrow);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
+    };
+  }, []);
+
   const branchName =
     branches.find((b) => b.id === branchId)?.name ?? "";
 
@@ -2131,7 +2156,8 @@ export function POSPanel({
   return (
     <div
       className={cn(
-        "flex flex-col bg-[#f5f5f5] md:flex-row",
+        "flex flex-col bg-[#f5f5f5]",
+        !sequential && "md:flex-row",
         className,
       )}
     >
@@ -2142,7 +2168,7 @@ export function POSPanel({
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col overflow-hidden",
-          mobileStep !== "shop" && "hidden xl:flex",
+          mobileStep !== "shop" && sequential && "hidden",
         )}
       >
         {/* Header azul estilo Zobaze — búsqueda integrada */}
@@ -2367,27 +2393,37 @@ export function POSPanel({
       <div
         className={cn(
           "flex w-full min-w-0 flex-col border-t border-[#e0e0e0] bg-white md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
-          mobileStep === "shop" && cart.length === 0 && "hidden xl:flex",
-          mobileStep === "shop" && cart.length > 0 && "hidden xl:flex",
-          mobileStep === "cart" && "fixed inset-0 z-50 xl:static xl:z-auto",
-          (mobileStep === "pay" ||
-            mobileStep === "cash" ||
-            mobileStep === "mixed" ||
-            mobileStep === "success") &&
-            "hidden xl:flex",
+          sequential && mobileStep === "shop" && "hidden",
+          sequential && mobileStep === "cart" && "fixed inset-0 z-50",
+          sequential &&
+            (mobileStep === "pay" ||
+              mobileStep === "cash" ||
+              mobileStep === "mixed" ||
+              mobileStep === "success") &&
+            "hidden",
+          !sequential && mobileStep === "shop" && cart.length === 0 && "hidden md:flex",
+          !sequential && mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
         )}
       >
         <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
           <div className="flex items-center gap-2">
             <button
               type="button"
-              className="flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8] md:hidden"
+              className={cn(
+                "flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8]",
+                !sequential && "hidden",
+              )}
               onClick={() => setMobileStep("shop")}
               aria-label="Volver"
             >
               ←
             </button>
-            <div className="hidden h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc] md:flex">
+            <div
+              className={cn(
+                "h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc]",
+                sequential ? "hidden" : "hidden md:flex",
+              )}
+            >
               <ShoppingCart className="h-4 w-4 text-[#1a73e8]" />
             </div>
 
@@ -2576,7 +2612,7 @@ export function POSPanel({
             <button
               type="button"
               onClick={() => setMobileStep("shop")}
-              className="flex h-11 w-full items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8] xl:hidden"
+              className={cn("flex h-11 w-full items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8]", !sequential && "hidden")}
             >
               Añadir artículo nuevo
             </button>
@@ -2961,7 +2997,7 @@ export function POSPanel({
           {/* Cobrar */}
 
           {/* Botones estilo Zobaze: Borrar | Guardar + Cobrar */}
-          <div className="flex gap-2 xl:hidden">
+          <div className={cn("flex gap-2", !sequential && "hidden")}>
             <button
               type="button"
               disabled={cart.length === 0}
@@ -2990,10 +3026,7 @@ export function POSPanel({
             }
             onClick={() => {
               // Móvil: ir a métodos de pago. Desktop: cobrar directo
-              if (
-                typeof window !== "undefined" &&
-                window.matchMedia("(max-width: 1279px)").matches
-              ) {
+              if (sequential) {
                 setMobileStep("pay");
               } else {
                 checkout.mutate();
@@ -3457,7 +3490,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: métodos de pago
           ===================================================== */}
       {mobileStep === "pay" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] xl:hidden">
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
           <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
             <button
               type="button"
@@ -3551,7 +3584,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: efectivo
           ===================================================== */}
       {mobileStep === "cash" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] xl:hidden">
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3674,7 +3707,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: pago mixto
           ===================================================== */}
       {mobileStep === "mixed" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5] xl:hidden">
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
           <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
@@ -3808,7 +3841,7 @@ export function POSPanel({
           FLUJO MÓVIL ZOBAZE: éxito
           ===================================================== */}
       {mobileStep === "success" && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-white xl:hidden">
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-white", !sequential && "hidden")}>
           <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
             <div
               className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
