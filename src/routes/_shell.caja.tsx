@@ -249,7 +249,7 @@ function CajaPage() {
           <button
             type="button"
             onClick={() => setMobileView("home")}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8] lg:hidden"
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8] xl:hidden"
             aria-label="Volver"
           >
             <ArrowLeft className="h-5 w-5" />
@@ -323,13 +323,13 @@ function CajaPage() {
 
   return (
     <>
-      {/* Teléfono y tablet: home estilo Zobaze o contenido */}
-      <div className="lg:hidden">
+      {/* Teléfono y tablet (incl. horizontal): home estilo Zobaze o contenido */}
+      <div className="xl:hidden">
         {mobileView === "home" ? mobileHome : mainContent}
       </div>
 
-      {/* Desktop grande: siempre el contenido completo */}
-      <div className="hidden lg:block">
+      {/* Desktop grande (≥1280px): siempre el contenido completo */}
+      <div className="hidden xl:block">
         {mainContent}
       </div>
     </>
