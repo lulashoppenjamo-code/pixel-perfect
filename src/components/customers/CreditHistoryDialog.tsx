@@ -108,7 +108,7 @@ export function CreditHistoryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[85vh] max-w-2xl overflow-hidden">
+      <DialogContent className="flex max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-2xl flex-col overflow-hidden p-4 sm:p-6">
         <DialogHeader>
           <DialogTitle>Historial de crédito</DialogTitle>
 
@@ -119,7 +119,7 @@ export function CreditHistoryDialog({
           )}
         </DialogHeader>
 
-        <div className="space-y-4 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <div className="rounded-lg border p-3">
               <p className="text-xs text-muted-foreground">
@@ -174,9 +174,9 @@ export function CreditHistoryDialog({
                 return (
                   <div
                     key={row.movement_id}
-                    className="flex items-center gap-3 rounded-lg border p-3"
+                    className="flex items-start gap-3 rounded-lg border p-3 sm:items-center"
                   >
-                    <div className="rounded-full bg-muted p-2">
+                    <div className="shrink-0 rounded-full bg-muted p-2">
                       {sale ? (
                         <ArrowUpCircle className="h-4 w-4" />
                       ) : (
@@ -186,7 +186,7 @@ export function CreditHistoryDialog({
 
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium">
+                        <span className="text-sm font-medium">
                           {sale
                             ? "Venta a crédito"
                             : "Abono"}
@@ -198,6 +198,7 @@ export function CreditHistoryDialog({
                               ? "destructive"
                               : "secondary"
                           }
+                          className="rounded-full"
                         >
                           {sale
                             ? row.sale_folio
@@ -218,18 +219,18 @@ export function CreditHistoryDialog({
                       </p>
 
                       {row.notes && (
-                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                        <p className="mt-1 break-words text-xs text-muted-foreground">
                           {row.notes}
                         </p>
                       )}
                     </div>
 
-                    <div className="text-right">
+                    <div className="shrink-0 text-right">
                       <div
                         className={
                           sale
-                            ? "font-semibold text-destructive"
-                            : "font-semibold text-emerald-600"
+                            ? "text-sm font-semibold text-destructive"
+                            : "text-sm font-semibold text-emerald-600"
                         }
                       >
                         {sale ? "+" : "-"}
@@ -259,9 +260,10 @@ export function CreditHistoryDialog({
           )}
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end pt-2">
           <Button
             variant="outline"
+            className="min-h-11 w-full touch-manipulation sm:w-auto"
             onClick={() => onOpenChange(false)}
           >
             Cerrar
