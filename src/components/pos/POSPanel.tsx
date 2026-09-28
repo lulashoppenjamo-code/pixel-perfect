@@ -838,6 +838,7 @@ export function POSPanel({
 
     setSearch("");
     searchRef.current?.focus();
+    setMobileStep("cart");
   };
 
   /*
@@ -1754,7 +1755,7 @@ export function POSPanel({
         setLastSaleFolio(sale.folio ?? "");
         setMobileStep("success");
         setTicketOpen(
-          true,
+          false,
         );
 
         setCart([]);
