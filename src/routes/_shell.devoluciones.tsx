@@ -598,13 +598,73 @@ function DevolucionesPage() {
                   )
                 }
                 placeholder="Buscar folio..."
-                className="pl-9"
+                className="h-11 pl-9"
               />
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="overflow-x-auto">
+        <CardContent className="px-3 sm:px-6">
+          {/* Móvil */}
+          <div className="grid gap-2.5 lg:hidden">
+            {isLoading && (
+              <div className="py-10 text-center text-sm text-muted-foreground">
+                Cargando ventas...
+              </div>
+            )}
+            {!isLoading && filteredSales.length === 0 && (
+              <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
+                No hay ventas disponibles para devolver.
+              </div>
+            )}
+            {filteredSales.map((sale) => (
+              <div
+                key={sale.id}
+                className="rounded-xl border p-3.5 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-bold">
+                      #{sale.folio}
+                    </p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {new Date(sale.created_at).toLocaleString("es-MX")}
+                    </p>
+                  </div>
+                  {statusBadge(sale.status)}
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-sm">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">
+                      Total
+                    </p>
+                    <p className="font-semibold">
+                      {money(Number(sale.total))}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase text-muted-foreground">
+                      Pago
+                    </p>
+                    <p>{paymentLabel(sale.payment_method)}</p>
+                  </div>
+                </div>
+                <Button
+                  className="mt-3 min-h-11 w-full touch-manipulation"
+                  size="sm"
+                  variant="outline"
+                  disabled={!isManager}
+                  onClick={() => openRefund(sale.id)}
+                >
+                  <RotateCcw className="mr-1.5 size-3.5" />
+                  {isManager ? "Devolver" : "Solo gerente"}
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          {/* Escritorio */}
+          <div className="hidden overflow-x-auto lg:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -722,6 +782,7 @@ function DevolucionesPage() {
               )}
             </TableBody>
           </Table>
+          </div>
         </CardContent>
       </Card>
 
@@ -733,7 +794,7 @@ function DevolucionesPage() {
           }
         }}
       >
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90dvh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               Registrar devolución
