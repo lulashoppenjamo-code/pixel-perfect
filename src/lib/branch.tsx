@@ -350,15 +350,14 @@ export function BranchProvider({
       branches,
       branchId,
       setBranchId,
-      loading:
-        isLoading ||
-        isFetching,
+      // Solo bloquear en la carga inicial. Los refetches
+      // en segundo plano (isFetching) no deben ocultar Caja.
+      loading: isLoading,
     }),
     [
       branches,
       branchId,
       isLoading,
-      isFetching,
     ],
   );
 
