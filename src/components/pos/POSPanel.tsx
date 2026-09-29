@@ -2405,634 +2405,506 @@ export function POSPanel({
           !sequential && mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
         )}
       >
-        <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
-          <div className="flex items-center gap-2">
+        {/* ===== HEADER: sequential = azul Zobaze; desktop = blanco ===== */}
+        {sequential ? (
+          <div className="flex shrink-0 items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
               type="button"
-              className={cn(
-                "flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8]",
-                !sequential && "hidden",
-              )}
               onClick={() => setMobileStep("shop")}
-              aria-label="Volver"
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
+              aria-label="Menú"
             >
-              ←
+              ☰
             </button>
-            <div
-              className={cn(
-                "h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc]",
-                sequential ? "hidden" : "hidden md:flex",
-              )}
+            <h1 className="flex-1 text-lg font-bold">Caja</h1>
+            <button
+              type="button"
+              className="flex h-9 w-9 items-center justify-center rounded-full"
+              aria-label="Cliente"
+              title="Cliente"
             >
-              <ShoppingCart className="h-4 w-4 text-[#1a73e8]" />
+              <User className="h-5 w-5" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between border-b border-[#e0e0e0] px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e8eefc]">
+                <ShoppingCart className="h-4 w-4 text-[#1a73e8]" />
+              </div>
+              <span className="font-bold text-[#212121]">Caja</span>
+              {cart.length > 0 && (
+                <span className="rounded-full bg-[#1a73e8] px-2 py-0.5 text-[11px] font-bold text-white">
+                  {cart.reduce((sum, line) => sum + line.quantity, 0)}
+                </span>
+              )}
             </div>
-
-            <span className="font-bold text-[#212121]">
-              Caja
-            </span>
-
-            {cart.length >
-              0 && (
-              <span className="rounded-full bg-[#1a73e8] px-2 py-0.5 text-[11px] font-bold text-white">
-                {cart.reduce(
-                  (
-                    sum,
-                    line,
-                  ) =>
-                    sum +
-                    line.quantity,
-                  0,
-                )}
-              </span>
+            {cart.length > 0 && (
+              <button
+                type="button"
+                className="text-xs font-semibold text-[#e5484d]"
+                onClick={() => setCart([])}
+              >
+                Borrar
+              </button>
             )}
           </div>
+        )}
 
-          {cart.length >
-            0 && (
-            <button
-              type="button"
-              className="hidden text-xs font-semibold text-[#e5484d] lg:inline"
-              onClick={() =>
-                setCart([])
-              }
-            >
-              Borrar
-            </button>
-          )}
-        </div>
-
-        <ScrollArea className="flex-1 px-3 py-2">
-          {cart.length ===
-          0 ? (
+        {/* ===== LISTA DE ARTÍCULOS ===== */}
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[#f5f5f5] px-3 py-2">
+          {cart.length === 0 ? (
             <div className="flex h-36 flex-col items-center justify-center gap-2 text-[#757575]">
               <ShoppingCart className="h-9 w-9 opacity-25" />
-
-              <p className="text-sm">
-                Añade artículos para vender
-              </p>
+              <p className="text-sm">Añade artículos para vender</p>
             </div>
-          ) : (
+          ) : sequential ? (
+            /* --- Estilo Zobaze: nombre, 1 x precio, lápiz, total --- */
             <div className="space-y-2">
-              {cart.map(
-                (line) => (
-                  <div
-                    key={
-                      line.key
-                    }
-                    className="flex items-start gap-2 rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-2.5"
-                  >
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e8eefc] text-base">
-                      {line.emoji ||
-                        "📦"}
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-[#212121]">
-                        {
-                          line.name
-                        }
-                      </p>
-
-                      <p className="text-[11px] text-[#757575]">
-                        {money(
-                          line.unit_price,
-                        )}{" "}
-                        ×{" "}
-                        {
-                          line.quantity
-                        }
-
-                        {line.discount >
-                          0 && (
-                          <span className="ml-1 text-[#e5484d]">
-                            −
-                            {money(
-                              line.discount,
-                            )}
-                          </span>
-                        )}
-                      </p>
-
-                      <div className="mt-1.5 flex items-center gap-1">
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7 rounded-lg border-[#e0e0e0]"
-                          onClick={() =>
-                            updateQty(
-                              line.key,
-                              -1,
-                            )
-                          }
-                        >
-                          <Minus className="h-3 w-3" />
-                        </Button>
-
-                        <Input
-                          type="number"
-                          min="0.001"
-                          step="any"
-                          value={
-                            line.quantity
-                          }
-                          onChange={(
-                            event,
-                          ) =>
-                            setQtyDirect(
-                              line.key,
-                              event
-                                .target
-                                .value,
-                            )
-                          }
-                          className="h-7 w-14 rounded-lg border-[#e0e0e0] px-1 text-center text-sm"
-                        />
-
-                        <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-7 w-7 rounded-lg border-[#e0e0e0]"
-                          onClick={() =>
-                            updateQty(
-                              line.key,
-                              1,
-                            )
-                          }
-                        >
-                          <Plus className="h-3 w-3" />
-                        </Button>
-
-                        <button
-                          type="button"
-                          className="ml-auto text-[#757575] hover:text-[#1a73e8]"
-                          onClick={() =>
-                            openEditLine(
-                              line,
-                            )
-                          }
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          className="text-[#757575] hover:text-[#e5484d]"
-                          onClick={() =>
-                            removeLine(
-                              line.key,
-                            )
-                          }
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="shrink-0 text-sm font-bold text-[#212121]">
-                      {money(
-                        line.unit_price *
-                          line.quantity -
-                          line.discount,
+              {cart.map((line) => (
+                <div
+                  key={line.key}
+                  className="flex items-center gap-2 rounded-lg border border-[#e0e0e0] bg-white px-3 py-2.5"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#212121]">
+                      {line.name}
+                    </p>
+                    <p className="text-sm font-medium text-[#34a853]">
+                      {line.quantity} x {line.unit_price % 1 === 0 ? line.unit_price : line.unit_price.toFixed(2)}
+                      {line.discount > 0 && (
+                        <span className="ml-1 text-[#e5484d]">
+                          −{money(line.discount)}
+                        </span>
                       )}
                     </p>
                   </div>
-                ),
-              )}
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#1a73e8]"
+                    onClick={() => openEditLine(line)}
+                    aria-label="Editar"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <p className="w-12 shrink-0 text-right text-sm font-bold text-[#212121]">
+                    {(line.unit_price * line.quantity - line.discount) % 1 === 0
+                      ? Math.round(line.unit_price * line.quantity - line.discount)
+                      : (line.unit_price * line.quantity - line.discount).toFixed(2)}
+                  </p>
+                </div>
+              ))}
             </div>
-          )}
-        </ScrollArea>
-
-        {/* =================================================
-            TOTALES Y PAGO
-            ================================================= */}
-
-        <div className="space-y-3 border-t border-[#e0e0e0] bg-white p-4 pb-[calc(1rem+4.5rem+env(safe-area-inset-bottom))] md:pb-4">
-          {/* Zobaze: Añadir artículo nuevo (móvil) */}
-          {cart.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setMobileStep("shop")}
-              className={cn("flex h-11 w-full items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8]", !sequential && "hidden")}
-            >
-              Añadir artículo nuevo
-            </button>
-          )}
-
-          {cart.length >
-            0 && (
-            <div className="hidden items-center gap-2 md:flex">
-              <span className="w-20 shrink-0 text-xs font-medium text-[#6b7280]">
-                Descuento
-              </span>
-
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={
-                  ticketDiscount
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setTicketDiscount(
-                    event.target
-                      .value,
-                  )
-                }
-                placeholder="0.00"
-                className="h-9 rounded-xl border-[#e0e0e0] text-sm"
-              />
-            </div>
-          )}
-
-          {cart.length >
-            0 && (
-            <div className="hidden items-start gap-2 md:flex">
-              <span className="mt-2 w-20 shrink-0 text-xs font-medium text-[#6b7280]">
-                <StickyNote className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
-                Nota
-              </span>
-
-              <Input
-                value={
-                  saleNotes
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setSaleNotes(
-                    event.target
-                      .value,
-                  )
-                }
-                placeholder="Nota para el ticket (opcional)"
-                className="h-9 rounded-xl border-[#e0e0e0] text-sm"
-              />
-            </div>
-          )}
-
-          <div className="space-y-1 text-sm">
-            <div className="flex justify-between text-[#6b7280]">
-              <span>
-                Subtotal
-              </span>
-
-              <span>
-                {money(
-                  linesSubtotal,
-                )}
-              </span>
-            </div>
-
-            {disc > 0 && (
-              <div className="flex justify-between text-[#e5484d]">
-                <span>
-                  Discount
-                </span>
-
-                <span>
-                  −
-                  {money(
-                    disc,
-                  )}
-                </span>
-              </div>
-            )}
-
-            <div className="flex justify-between text-[#6b7280]">
-              <span>
-                Impuesto
-              </span>
-
-              <span>
-                {money(
-                  linesTax,
-                )}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between border-t border-[#e0e0e0] pt-2">
-              <span className="text-base font-bold text-[#212121]">
-                Total general
-              </span>
-
-              <span className="text-xl font-black text-[#1a73e8]">
-                {money(total)}
-              </span>
-            </div>
-
-            <div className="flex items-center justify-between text-xs text-[#757575] md:hidden">
-              <span>
-                {cart.length} Artículos |{" "}
-                {cart.reduce((s, l) => s + l.quantity, 0)} Unidades
-              </span>
-            </div>
-          </div>
-
-          {/* Métodos de pago — solo desktop; en móvil usa el paso "pay" */}
-
-          <div className="hidden grid-cols-3 gap-2 md:grid lg:grid-cols-5">
-            {[
-              {
-                id: "cash" as const,
-                label: "Efectivo",
-                icon: Banknote,
-              },
-
-              {
-                id: "card" as const,
-                label: "Tarjeta",
-                icon: CreditCard,
-              },
-
-              {
-                id: "transfer" as const,
-                label: "Transfer.",
-                icon: Smartphone,
-              },
-
-              {
-                id: "credit" as const,
-                label: "Crédito",
-                icon: User,
-              },
-
-              {
-                id: "mixed" as const,
-                label: "Mixto",
-                icon: CreditCard,
-              },
-            ].map(
-              ({
-                id,
-                label,
-                icon: Icon,
-              }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() =>
-                    setMethod(
-                      id,
-                    )
-                  }
-                  className={cn(
-                    "flex flex-col items-center gap-1 rounded-xl border p-2 text-[10px] font-semibold transition-all",
-                    method ===
-                      id
-                      ? "border-[#1a73e8] bg-[#1a73e8] text-white"
-                      : "border-[#e0e0e0] bg-[#fafbfe] text-[#4b5563]",
-                  )}
+          ) : (
+            /* --- Desktop: con controles +/- --- */
+            <div className="space-y-2">
+              {cart.map((line) => (
+                <div
+                  key={line.key}
+                  className="flex items-start gap-2 rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-2.5"
                 >
-                  <Icon className="h-4 w-4" />
-                  {
-                    label
-                  }
-                </button>
-              ),
-            )}
-          </div>
-
-          {/* Efectivo — estilo Zobaze (solo desktop) */}
-
-          {method ===
-            "cash" && (
-            <div className="hidden space-y-2.5 lg:block">
-              <div className="flex items-center gap-2">
-                <span className="w-20 shrink-0 text-xs font-medium text-[#757575]">
-                  Recibido
-                </span>
-
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={
-                    cashReceived
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    setCashReceived(
-                      event.target
-                        .value,
-                    )
-                  }
-                  placeholder={String(
-                    total.toFixed(
-                      2,
-                    ),
-                  )}
-                  className="h-11 rounded-xl border-[#e0e0e0] text-base font-semibold"
-                />
-              </div>
-
-              {/* Botones de billetes rápidos */}
-              <div className="grid grid-cols-4 gap-1.5">
-                {[20, 50, 100, 200, 500, 1000].map(
-                  (amount) => (
-                    <button
-                      key={amount}
-                      type="button"
-                      onClick={() => {
-                        const current =
-                          Number(
-                            cashReceived,
-                          ) || 0;
-                        const prefilled =
-                          total > 0 &&
-                          Math.abs(current - total) < 0.001;
-                        if (current === 0 || prefilled) {
-                          setCashReceived(String(amount));
-                        } else {
-                          setCashReceived(
-                            String(current + amount),
-                          );
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#e8eefc] text-base">
+                    {line.emoji || "📦"}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[#212121]">
+                      {line.name}
+                    </p>
+                    <p className="text-[11px] text-[#757575]">
+                      {money(line.unit_price)} × {line.quantity}
+                      {line.discount > 0 && (
+                        <span className="ml-1 text-[#e5484d]">
+                          −{money(line.discount)}
+                        </span>
+                      )}
+                    </p>
+                    <div className="mt-1.5 flex items-center gap-1">
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7 rounded-lg border-[#e0e0e0]"
+                        onClick={() => updateQty(line.key, -1)}
+                      >
+                        <Minus className="h-3 w-3" />
+                      </Button>
+                      <Input
+                        type="number"
+                        min="0.001"
+                        step="any"
+                        value={line.quantity}
+                        onChange={(event) =>
+                          setQtyDirect(line.key, event.target.value)
                         }
-                      }}
-                      className="rounded-lg border border-[#e0e0e0] bg-white py-2 text-xs font-bold text-[#212121] shadow-sm transition active:scale-95 active:bg-[#e8f5e9]"
-                    >
-                      +${amount}
-                    </button>
-                  ),
-                )}
+                        className="h-7 w-14 rounded-lg border-[#e0e0e0] px-1 text-center text-sm"
+                      />
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-7 w-7 rounded-lg border-[#e0e0e0]"
+                        onClick={() => updateQty(line.key, 1)}
+                      >
+                        <Plus className="h-3 w-3" />
+                      </Button>
+                      <button
+                        type="button"
+                        className="ml-auto text-[#757575] hover:text-[#1a73e8]"
+                        onClick={() => openEditLine(line)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[#757575] hover:text-[#e5484d]"
+                        onClick={() => removeLine(line.key)}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <p className="shrink-0 text-sm font-bold text-[#212121]">
+                    {money(line.unit_price * line.quantity - line.discount)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ===== FOOTER TOTALES + ACCIONES ===== */}
+        <div
+          className={cn(
+            "shrink-0 space-y-2 border-t border-[#e0e0e0] bg-white p-3",
+            sequential &&
+              "pb-[calc(0.75rem+4.5rem+env(safe-area-inset-bottom))]",
+          )}
+        >
+          {sequential && cart.length > 0 && (
+            <>
+              {/* Añadir artículo nuevo + escáner */}
+              <div className="flex gap-2">
                 <button
                   type="button"
-                  onClick={() =>
-                    setCashReceived(
-                      String(
-                        total.toFixed(
-                          2,
-                        ),
-                      ),
-                    )
-                  }
-                  className="rounded-lg border border-[#34a853] bg-[#e8f5e9] py-2 text-xs font-bold text-[#34a853] shadow-sm transition active:scale-95"
+                  onClick={() => setMobileStep("shop")}
+                  className="flex h-11 flex-1 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8]"
                 >
-                  Exacto
+                  Añadir artículo nuevo
                 </button>
                 <button
                   type="button"
-                  onClick={() =>
-                    setCashReceived(
-                      "",
-                    )
-                  }
-                  className="rounded-lg border border-[#e0e0e0] bg-[#f5f5f5] py-2 text-xs font-semibold text-[#757575] transition active:scale-95"
+                  onClick={() => setScannerOpen(true)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-[#1a73e8]"
+                  aria-label="Escanear código"
+                >
+                  <Camera className="h-5 w-5" />
+                </button>
+              </div>
+
+              {/* Tarjeta totales estilo Zobaze */}
+              <div className="rounded-lg border border-[#e0e0e0] bg-white px-3 py-2.5">
+                <div className="flex justify-between text-sm text-[#212121]">
+                  <span>Subtotal</span>
+                  <span>
+                    {linesSubtotal % 1 === 0
+                      ? Math.round(linesSubtotal)
+                      : linesSubtotal.toFixed(2)}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center justify-between">
+                  <span className="text-base font-bold text-[#212121]">
+                    Total general
+                  </span>
+                  <span className="text-lg font-bold text-[#1a73e8]">
+                    {money(total)}
+                  </span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm">
+                  <button
+                    type="button"
+                    className="text-[#1a73e8] underline"
+                    onClick={() => {
+                      const v = window.prompt(
+                        "Impuesto adicional ($)",
+                        "0",
+                      );
+                      // Solo informativo: el impuesto de línea ya se calcula del producto
+                      if (v != null) {
+                        toast.message(
+                          "El impuesto se calcula por producto. Ajusta el precio o el descuento del ticket.",
+                        );
+                      }
+                    }}
+                  >
+                    Agregar impuesto
+                  </button>
+                  <span className="ml-auto text-xs text-[#757575]">
+                    {cart.length} Artículos |{" "}
+                    {cart.reduce((s, l) => s + l.quantity, 0)} Unidades
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                  <button
+                    type="button"
+                    className="text-[#1a73e8] underline"
+                    onClick={() => {
+                      const v = window.prompt(
+                        "Descuento del ticket ($)",
+                        ticketDiscount || "0",
+                      );
+                      if (v != null) setTicketDiscount(v);
+                    }}
+                  >
+                    Agregar descuento
+                  </button>
+                  <button
+                    type="button"
+                    className="text-[#1a73e8] underline"
+                    onClick={() => {
+                      const v = window.prompt(
+                        "Nota / otros cargos",
+                        saleNotes || "",
+                      );
+                      if (v != null) setSaleNotes(v);
+                    }}
+                  >
+                    Agregar otros cargos
+                  </button>
+                </div>
+                {disc > 0 && (
+                  <div className="mt-1 flex justify-between text-sm text-[#e5484d]">
+                    <span>Descuento</span>
+                    <span>−{money(disc)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Borrar | Guardar para más */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={cart.length === 0}
+                  onClick={() => setCart([])}
+                  className="h-11 flex-1 rounded-md bg-[#ef9a9a] text-sm font-bold text-white disabled:opacity-40"
                 >
                   Borrar
                 </button>
+                <button
+                  type="button"
+                  disabled={cart.length === 0}
+                  onClick={() => setMobileStep("shop")}
+                  className="h-11 flex-1 rounded-md bg-[#ffb74d] text-sm font-bold text-white disabled:opacity-40"
+                >
+                  Guardar para más
+                </button>
               </div>
-            </div>
+            </>
           )}
 
-          {/* Pago mixto */}
-
-          {method ===
-            "mixed" && (
-            <div className="hidden grid-cols-2 gap-2 md:grid">
-              <div>
-                <span className="text-[11px] text-[#6b7280]">
-                  Efectivo
-                </span>
-
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={
-                    mixedCash
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    setMixedCash(
-                      event.target
-                        .value,
-                    )
-                  }
-                  className="h-10 rounded-xl border-[#e0e0e0]"
-                />
-              </div>
-
-              <div>
-                <span className="text-[11px] text-[#6b7280]">
-                  Tarjeta
-                </span>
-
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={
-                    mixedCard
-                  }
-                  onChange={(
-                    event,
-                  ) =>
-                    setMixedCard(
-                      event.target
-                        .value,
-                    )
-                  }
-                  className="h-10 rounded-xl border-[#e0e0e0]"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Cliente — desktop; en móvil va en el paso "pay" */}
-
-          <Select
-            value={
-              customerId
-            }
-            onValueChange={
-              setCustomerId
-            }
-          >
-            <SelectTrigger className="hidden h-10 rounded-xl border-[#e0e0e0] text-sm md:flex">
-              <SelectValue placeholder="Cliente" />
-            </SelectTrigger>
-
-            <SelectContent>
-              <SelectItem value="none">
-                Público general
-              </SelectItem>
-
-              {customers.map(
-                (customer) => (
-                  <SelectItem
-                    key={
-                      customer.id
+          {/* Desktop: descuento, nota, totales clásicos, métodos */}
+          {!sequential && (
+            <>
+              {cart.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 text-xs font-medium text-[#6b7280]">
+                    Descuento
+                  </span>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={ticketDiscount}
+                    onChange={(event) =>
+                      setTicketDiscount(event.target.value)
                     }
-                    value={
-                      customer.id
-                    }
-                  >
-                    {
-                      customer.name
-                    }
-                  </SelectItem>
-                ),
+                    placeholder="0.00"
+                    className="h-9 rounded-xl border-[#e0e0e0] text-sm"
+                  />
+                </div>
               )}
-            </SelectContent>
-          </Select>
-
-          {method ===
-            "cash" &&
-            cashNum > 0 &&
-            cashNum >=
-              total && (
-              <p className="hidden text-center text-sm font-semibold text-[#34a853] lg:block">
-                Cambio:{" "}
-                {money(
-                  cashNum -
-                    total,
+              {cart.length > 0 && (
+                <div className="flex items-start gap-2">
+                  <span className="mt-2 w-20 shrink-0 text-xs font-medium text-[#6b7280]">
+                    <StickyNote className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
+                    Nota
+                  </span>
+                  <Input
+                    value={saleNotes}
+                    onChange={(event) => setSaleNotes(event.target.value)}
+                    placeholder="Nota para el ticket (opcional)"
+                    className="h-9 rounded-xl border-[#e0e0e0] text-sm"
+                  />
+                </div>
+              )}
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between text-[#6b7280]">
+                  <span>Subtotal</span>
+                  <span>{money(linesSubtotal)}</span>
+                </div>
+                {disc > 0 && (
+                  <div className="flex justify-between text-[#e5484d]">
+                    <span>Discount</span>
+                    <span>−{money(disc)}</span>
+                  </div>
                 )}
-              </p>
-            )}
+                <div className="flex justify-between text-[#6b7280]">
+                  <span>Impuesto</span>
+                  <span>{money(linesTax)}</span>
+                </div>
+                <div className="flex items-center justify-between border-t border-[#e0e0e0] pt-2">
+                  <span className="text-base font-bold text-[#212121]">
+                    Total general
+                  </span>
+                  <span className="text-xl font-black text-[#1a73e8]">
+                    {money(total)}
+                  </span>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 lg:grid-cols-5">
+                {(
+                  [
+                    { id: "cash" as const, label: "Efectivo", icon: Banknote },
+                    { id: "card" as const, label: "Tarjeta", icon: CreditCard },
+                    {
+                      id: "transfer" as const,
+                      label: "Transfer.",
+                      icon: Smartphone,
+                    },
+                    { id: "credit" as const, label: "Crédito", icon: User },
+                    { id: "mixed" as const, label: "Mixto", icon: CreditCard },
+                  ] as const
+                ).map(({ id, label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setMethod(id)}
+                    className={cn(
+                      "flex flex-col items-center gap-1 rounded-xl border p-2 text-[10px] font-semibold transition-all",
+                      method === id
+                        ? "border-[#1a73e8] bg-[#1a73e8] text-white"
+                        : "border-[#e0e0e0] bg-[#fafbfe] text-[#4b5563]",
+                    )}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {method === "cash" && (
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-20 shrink-0 text-xs font-medium text-[#757575]">
+                      Recibido
+                    </span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={cashReceived}
+                      onChange={(event) =>
+                        setCashReceived(event.target.value)
+                      }
+                      placeholder={String(total.toFixed(2))}
+                      className="h-11 rounded-xl border-[#e0e0e0] text-base font-semibold"
+                    />
+                  </div>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[20, 50, 100, 200, 500, 1000].map((amount) => (
+                      <button
+                        key={amount}
+                        type="button"
+                        onClick={() => {
+                          const current = Number(cashReceived) || 0;
+                          const prefilled =
+                            total > 0 &&
+                            Math.abs(current - total) < 0.001;
+                          if (current === 0 || prefilled) {
+                            setCashReceived(String(amount));
+                          } else {
+                            setCashReceived(String(current + amount));
+                          }
+                        }}
+                        className="rounded-lg border border-[#e0e0e0] bg-white py-2 text-xs font-bold text-[#212121] shadow-sm transition active:scale-95 active:bg-[#e8f5e9]"
+                      >
+                        +${amount}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setCashReceived(String(total.toFixed(2)))
+                      }
+                      className="rounded-lg border border-[#34a853] bg-[#e8f5e9] py-2 text-xs font-bold text-[#34a853] shadow-sm transition active:scale-95"
+                    >
+                      Exacto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCashReceived("")}
+                      className="rounded-lg border border-[#e0e0e0] bg-[#f5f5f5] py-2 text-xs font-semibold text-[#757575] transition active:scale-95"
+                    >
+                      Borrar
+                    </button>
+                  </div>
+                </div>
+              )}
+              {method === "mixed" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[11px] text-[#6b7280]">Efectivo</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={mixedCash}
+                      onChange={(event) => setMixedCash(event.target.value)}
+                      className="h-10 rounded-xl border-[#e0e0e0]"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-[#6b7280]">Tarjeta</span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={mixedCard}
+                      onChange={(event) => setMixedCard(event.target.value)}
+                      className="h-10 rounded-xl border-[#e0e0e0]"
+                    />
+                  </div>
+                </div>
+              )}
+              <Select value={customerId} onValueChange={setCustomerId}>
+                <SelectTrigger className="h-10 rounded-xl border-[#e0e0e0] text-sm">
+                  <SelectValue placeholder="Cliente" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Público general</SelectItem>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {method === "cash" && cashNum > 0 && cashNum >= total && (
+                <p className="text-center text-sm font-semibold text-[#34a853]">
+                  Cambio: {money(cashNum - total)}
+                </p>
+              )}
+            </>
+          )}
 
-          {/* Cobrar */}
-
-          {/* Botones estilo Zobaze: Borrar | Guardar + Cobrar */}
-          <div className={cn("flex gap-2", !sequential && "hidden")}>
-            <button
-              type="button"
-              disabled={cart.length === 0}
-              onClick={() => setCart([])}
-              className="h-11 flex-1 rounded-xl bg-[#ef5350] text-sm font-bold text-white disabled:opacity-40"
-            >
-              Borrar
-            </button>
-            <button
-              type="button"
-              disabled={cart.length === 0}
-              onClick={() => setMobileStep("shop")}
-              className="h-11 flex-1 rounded-xl bg-[#ffa726] text-sm font-bold text-white disabled:opacity-40"
-            >
-              Guardar para más
-            </button>
-          </div>
-
+          {/* Cobrar — siempre visible */}
           <button
             type="button"
-            disabled={
-              !canSell ||
-              cart.length ===
-                0 ||
-              checkout.isPending
-            }
+            disabled={!canSell || cart.length === 0 || checkout.isPending}
             onClick={() => {
-              // Móvil: ir a métodos de pago. Desktop: cobrar directo
               if (sequential) {
                 setMobileStep("pay");
               } else {
                 checkout.mutate();
               }
             }}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm transition active:scale-[0.98] hover:bg-[#2d9249] disabled:opacity-50"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
           >
             {checkout.isPending
               ? "Procesando…"
