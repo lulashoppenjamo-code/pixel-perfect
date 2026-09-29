@@ -535,8 +535,8 @@ function ShellLayout() {
         <main
           className={
             location.pathname.startsWith("/caja")
-              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:overflow-y-auto md:p-3 md:pb-3 lg:p-4 lg:pb-4"
-              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:p-4 md:p-4 md:pb-4 lg:p-6 lg:pb-6"
+              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:overflow-y-auto md:p-3 md:pb-3 lg:p-4 lg:pb-4"
+              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:p-4 md:p-4 md:pb-4 lg:p-6 lg:pb-6"
           }
         >
           <Outlet />
@@ -566,25 +566,25 @@ function ShellLayout() {
               type="button"
               onPointerDown={() => preloadRoute(item.path)}
               onClick={() => goTo(item.path)}
-              className={`flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium transition-colors sm:text-[11px] ${
+              className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium transition-colors ${
                 isActive
                   ? "text-[#1a73e8]"
                   : "text-[#757575]"
               }`}
             >
               <div
-                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${
+                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
                   isActive ? "bg-[#1a73e8]" : ""
                 }`}
               >
                 <Icon
-                  className={`h-5 w-5 ${
+                  className={`h-4 w-4 ${
                     isActive ? "text-white" : ""
                   }`}
                 />
               </div>
 
-              <span className="max-w-[72px] truncate">
+              <span className="max-w-[64px] truncate leading-tight">
                 {item.label}
               </span>
             </button>
@@ -594,13 +594,13 @@ function ShellLayout() {
         {moreItems.length > 0 && (
           <button
             onClick={() => setMoreOpen(true)}
-            className="flex min-h-16 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-medium text-[#757575] sm:text-[11px]"
+            className="flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium text-[#757575]"
           >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg">
-              <MoreHorizontal className="h-5 w-5" />
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
+              <MoreHorizontal className="h-4 w-4" />
             </div>
 
-            <span>Más</span>
+            <span className="leading-tight">Más</span>
           </button>
         )}
       </nav>
