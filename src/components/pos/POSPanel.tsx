@@ -34,6 +34,8 @@ import {
   Camera,
   CameraOff,
   ScanBarcode,
+  Zap,
+  LayoutGrid,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -102,6 +104,7 @@ type ProductRow = {
   price: number;
   tax_rate: number;
   emoji: string | null;
+  image_url: string | null;
   category_id: string | null;
   stock: number;
   has_variants: boolean;
@@ -363,7 +366,7 @@ export function POSPanel({
         supabase
           .from("products")
           .select(
-            "id, name, sku, barcode, price, tax_rate, emoji, category_id, has_variants",
+            "id, name, sku, barcode, price, tax_rate, emoji, image_url, category_id, has_variants",
           )
           .eq("is_active", true)
           .order("name"),
@@ -2172,44 +2175,76 @@ export function POSPanel({
           mobileStep !== "shop" && sequential && "hidden",
         )}
       >
-        {/* Header azul estilo Zobaze — búsqueda integrada */}
-        <div className="bg-[#1a73e8] px-3 pb-3 pt-2 sm:px-4">
-          <div className="mb-2 hidden items-center justify-between text-white sm:flex">
-            <div className="min-w-0">
-              <p className="truncate text-sm font-bold leading-tight">
-                {branchName || "Caja"}
-              </p>
-              <p className="text-[10px] opacity-80">
-                {canSell ? "Listo para vender" : "Caja cerrada"}
-              </p>
+        {/* Header azul estilo Zobaze */}
+        <div className="bg-[#1a73e8] px-3 pb-2.5 pt-2 sm:px-4">
+          {/* Título + acciones (móvil/tablet sequential) */}
+          {sequential ? (
+            <div className="mb-2.5 flex items-center gap-1 text-white">
+              <span className="flex-1 text-lg font-bold">Artículos</span>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full"
+                title="Vista"
+                aria-label="Vista cuadrícula"
+              >
+                <LayoutGrid className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full"
+                title="Cliente"
+                aria-label="Cliente"
+              >
+                <User className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full"
+                title="Historial"
+                onClick={() => {
+                  setHistoryOpen(true);
+                  void refetchHistory();
+                }}
+              >
+                <History className="h-5 w-5" />
+              </button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-full text-white hover:bg-white/15"
-              title="Historial"
-              onClick={() => {
-                setHistoryOpen(true);
-                void refetchHistory();
-              }}
-            >
-              <History className="h-4 w-4" />
-            </Button>
-          </div>
+          ) : (
+            <div className="mb-2 flex items-center justify-between text-white">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-bold leading-tight">
+                  {branchName || "Caja"}
+                </p>
+                <p className="text-[10px] opacity-80">
+                  {canSell ? "Listo para vender" : "Caja cerrada"}
+                </p>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full text-white hover:bg-white/15"
+                title="Historial"
+                onClick={() => {
+                  setHistoryOpen(true);
+                  void refetchHistory();
+                }}
+              >
+                <History className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
 
-          {/* Buscador blanco + barcode — exactamente como captura */}
+          {/* Buscador + barcode + rayo (Zobaze) */}
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
               <Input
                 ref={searchRef}
                 value={search}
-                onChange={(event) =>
-                  setSearch(event.target.value)
-                }
+                onChange={(event) => setSearch(event.target.value)}
                 onKeyDown={handleSearchKey}
                 placeholder="Quiero vender..."
-                className="h-11 rounded-lg border-0 bg-white pl-10 text-[15px] text-[#212121] shadow-none placeholder:text-[#9e9e9e] focus-visible:ring-0"
+                className="h-10 rounded-lg border-0 bg-white pl-10 text-[15px] text-[#212121] shadow-none placeholder:text-[#9e9e9e] focus-visible:ring-0"
                 autoComplete="off"
               />
             </div>
@@ -2217,9 +2252,19 @@ export function POSPanel({
               type="button"
               title="Escanear código de barras"
               onClick={() => setScannerOpen(true)}
-              className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-md bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
+              className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-lg bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
             >
               <ScanBarcode className="h-5 w-5" strokeWidth={1.75} />
+            </button>
+            <button
+              type="button"
+              title="Acceso rápido"
+              onClick={() => {
+                searchRef.current?.focus();
+              }}
+              className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-lg bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
+            >
+              <Zap className="h-5 w-5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -2230,13 +2275,18 @@ export function POSPanel({
           )}
         </div>
 
-        {/* Categorías — chips con scroll horizontal (móvil + desktop) */}
-        <div className="flex gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:px-4">
+        {/* Categorías: ocultas en sequential (Zobaze no las muestra aquí); visibles en desktop */}
+        <div
+          className={cn(
+            "gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:px-4",
+            sequential ? "hidden" : "flex",
+          )}
+        >
           <button
             type="button"
             onClick={() => setCategoryFilter("all")}
             className={cn(
-              "min-h-10 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition-colors",
+              "min-h-9 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
               categoryFilter === "all"
                 ? "bg-[#1a73e8] text-white shadow-sm"
                 : "bg-[#eeeeee] text-[#616161]",
@@ -2250,7 +2300,7 @@ export function POSPanel({
               type="button"
               onClick={() => setCategoryFilter(category.id)}
               className={cn(
-                "min-h-10 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-4 py-2 text-xs font-bold transition-colors",
+                "min-h-9 shrink-0 touch-manipulation whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold transition-colors",
                 categoryFilter === category.id
                   ? "bg-[#1a73e8] text-white shadow-sm"
                   : "bg-[#eeeeee] text-[#616161]",
@@ -2261,15 +2311,13 @@ export function POSPanel({
           ))}
         </div>
 
-        {/* Productos */}
-
-        <ScrollArea className="flex-1 bg-[#f5f5f5] p-1.5 sm:p-3">
+        {/* Productos — grilla estilo Zobaze */}
+        <ScrollArea className="flex-1 bg-[#f0f0f0] p-2 sm:p-3">
           {loadingProducts ? (
             <div className="py-16 text-center text-sm text-[#757575]">
               Cargando…
             </div>
-          ) : filtered.length ===
-            0 ? (
+          ) : filtered.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center gap-3 text-center">
               <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-3xl">
                 🔍
@@ -2279,109 +2327,89 @@ export function POSPanel({
                   Sin artículos
                 </p>
                 <p className="mt-1 text-xs text-[#757575]">
-                  Prueba otra búsqueda o categoría
+                  Prueba otra búsqueda
                 </p>
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-              {filtered.map(
-                (product) => {
-                  const outOfStock =
-                    product.stock <=
-                    0;
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
+              {filtered.map((product) => {
+                const outOfStock = product.stock <= 0;
+                const cartQty = cart
+                  .filter((line) => line.product_id === product.id)
+                  .reduce((sum, line) => sum + line.quantity, 0);
+                const initial = (product.name || "?").trim().charAt(0).toUpperCase();
 
-                  const cartQty = cart
-                    .filter(
-                      (line) =>
-                        line.product_id ===
-                        product.id,
-                    )
-                    .reduce(
-                      (sum, line) =>
-                        sum +
-                        line.quantity,
-                      0,
-                    );
-
-                  return (
-                    <button
-                      key={
-                        product.id
-                      }
-                      type="button"
-                      disabled={
-                        !canSell ||
-                        (
-                          settings?.blockWithoutStock &&
-                          outOfStock
-                        )
-                      }
-                      onClick={() =>
-                        addProduct(
-                          product,
-                        )
-                      }
-                      className="group relative flex min-h-[176px] touch-manipulation flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-[190px]"
-                    >
+                return (
+                  <button
+                    key={product.id}
+                    type="button"
+                    disabled={
+                      !canSell ||
+                      (settings?.blockWithoutStock && outOfStock)
+                    }
+                    onClick={() => addProduct(product)}
+                    className="group relative flex flex-col overflow-hidden rounded-lg border border-[#e8e8e8] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {/* Imagen / emoji / inicial */}
+                    <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-[#fafafa]">
                       {outOfStock && (
-                        <span className="absolute left-1.5 top-1.5 z-10 rounded bg-[#f8bbd0] px-1.5 py-0.5 text-[10px] font-semibold text-[#ad1457]">
+                        <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-[#f8bbd0] px-1.5 py-0.5 text-[10px] font-semibold text-[#c2185b]">
                           Agotado
                         </span>
                       )}
-
                       {cartQty > 0 && (
                         <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-[#1a73e8] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
                           +{cartQty}
                         </span>
                       )}
+                      {product.image_url ? (
+                        <img
+                          src={product.image_url}
+                          alt=""
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : product.emoji ? (
+                        <span className="text-3xl sm:text-4xl">
+                          {product.emoji}
+                        </span>
+                      ) : (
+                        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e3f2fd] text-xl font-bold text-[#1a73e8]">
+                          {initial}
+                        </span>
+                      )}
+                    </div>
 
-                      <div className="flex aspect-square items-center justify-center bg-[#fafafa] text-3xl sm:text-4xl">
-                        {product.emoji || "📦"}
-                      </div>
-
-                      <div className="flex flex-1 flex-col gap-0.5 p-2 sm:p-2.5">
-                        <p className="line-clamp-2 min-h-[2.25rem] text-xs font-bold leading-tight text-[#212121] sm:text-sm">
-                          {product.name}
+                    <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
+                      <p className="line-clamp-2 min-h-[2rem] text-center text-[11px] font-semibold leading-tight text-[#212121] sm:text-xs">
+                        {product.name}
+                      </p>
+                      {!outOfStock && product.stock > 0 && product.stock <= 10 && (
+                        <p className="mt-0.5 text-center text-[10px] text-[#757575]">
+                          {product.stock}
                         </p>
-                        {(product.sku || product.barcode) && (
-                          <p className="truncate text-[11px] text-[#9e9e9e]">
-                            {product.sku || product.barcode}
-                          </p>
-                        )}
-                        <p className="mt-auto text-base font-bold text-[#1a73e8]">
-                          {money(product.price)}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-[10px] leading-tight",
-                            outOfStock
-                              ? "font-semibold text-[#c2185b]"
-                              : "text-[#757575]",
-                          )}
-                        >
-                          {outOfStock
-                            ? "Sin stock"
-                            : `${product.stock} disp.`}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                },
-              )}
+                      )}
+                      <p className="mt-auto pt-1 text-center text-sm font-bold text-[#1a73e8]">
+                        {money(product.price)}
+                      </p>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </ScrollArea>
 
-        {/* Barra Ir al mostrador (móvil, estilo Zobaze) */}
-        {cart.length > 0 && (
-          <div className="border-t border-[#e0e0e0] bg-white p-3 md:hidden">
+        {/* Barra Ir al mostrador (solo sequential con carrito) */}
+        {sequential && cart.length > 0 && (
+          <div className="border-t border-[#e0e0e0] bg-white p-2.5 pb-[calc(0.5rem+3.75rem+env(safe-area-inset-bottom))]">
             <button
               type="button"
               onClick={() => setMobileStep("cart")}
-              className="flex h-12 min-h-12 w-full touch-manipulation items-center justify-center rounded-xl bg-[#34a853] text-base font-bold text-white shadow-sm active:scale-[0.98]"
+              className="flex h-11 w-full touch-manipulation items-center justify-center rounded-md bg-[#4caf50] text-[15px] font-bold text-white shadow-sm active:scale-[0.98]"
             >
-              Ir al mostrador
+              Ir al mostrador · {cart.reduce((s, l) => s + l.quantity, 0)} art.
             </button>
           </div>
         )}
