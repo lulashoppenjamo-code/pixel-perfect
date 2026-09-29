@@ -35,7 +35,6 @@ import {
   CameraOff,
   ScanBarcode,
   Zap,
-  LayoutGrid,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -217,8 +216,7 @@ export function POSPanel({
       const coarse =
         window.matchMedia("(pointer: coarse)").matches ||
         window.matchMedia("(hover: none)").matches;
-      const narrow = window.innerWidth < 1400;
-      setSequential(coarse || narrow);
+      setSequential(coarse);
     };
     update();
     window.addEventListener("resize", update);
@@ -2184,22 +2182,6 @@ export function POSPanel({
               <button
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full"
-                title="Vista"
-                aria-label="Vista cuadrícula"
-              >
-                <LayoutGrid className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full"
-                title="Cliente"
-                aria-label="Cliente"
-              >
-                <User className="h-5 w-5" />
-              </button>
-              <button
-                type="button"
-                className="flex h-9 w-9 items-center justify-center rounded-full"
                 title="Historial"
                 onClick={() => {
                   setHistoryOpen(true);
@@ -2275,11 +2257,11 @@ export function POSPanel({
           )}
         </div>
 
-        {/* Categorías: ocultas en sequential (Zobaze no las muestra aquí); visibles en desktop */}
+        {/* Categorías: visibles en desktop y también en móvil/tablet */}
         <div
           className={cn(
             "gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:px-4",
-            sequential ? "hidden" : "flex",
+            "flex",
           )}
         >
           <button
@@ -3667,166 +3649,4 @@ export function POSPanel({
                     placeholder="0.00"
                   />
                 </div>
-              </div>
-
-              <div className="border-t border-[#f0f0f0] px-4 py-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#757575]">
-                    Total aplicado
-                  </span>
-                  <span className="font-semibold text-[#212121]">
-                    {money(
-                      (Number(mixedCash) || 0) +
-                        (Number(mixedCard) || 0),
-                    )}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-[#757575]">
-                    {(Number(mixedCash) || 0) +
-                      (Number(mixedCard) || 0) >=
-                    total - 0.01
-                      ? "Cubierto"
-                      : "Falta"}
-                  </span>
-                  <span
-                    className={
-                      (Number(mixedCash) || 0) +
-                        (Number(mixedCard) || 0) >=
-                      total - 0.01
-                        ? "font-semibold text-[#2e7d32]"
-                        : "font-semibold text-[#c62828]"
-                    }
-                  >
-                    {money(
-                      Math.max(
-                        0,
-                        total -
-                          ((Number(mixedCash) || 0) +
-                            (Number(mixedCard) || 0)),
-                      ),
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <p className="px-1 text-center text-xs text-[#9e9e9e]">
-              La suma de efectivo y tarjeta debe cubrir el total
-              de la venta.
-            </p>
-          </div>
-
-          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <button
-              type="button"
-              disabled={
-                !canSell ||
-                checkout.isPending ||
-                (Number(mixedCash) || 0) +
-                  (Number(mixedCard) || 0) <
-                  total - 0.01
-              }
-              onClick={() => checkout.mutate("mixed")}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
-            >
-              {checkout.isPending
-                ? "Procesando…"
-                : "Confirmar cobro mixto"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
-          FLUJO MÓVIL ZOBAZE: éxito
-          ===================================================== */}
-      {mobileStep === "success" && (
-        <div className={cn("fixed inset-0 z-50 flex flex-col bg-white", !sequential && "hidden")}>
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-            <div
-              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
-              style={{
-                animation: "lulaCheckPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-              }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-10 w-10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-                style={{
-                  strokeDasharray: 30,
-                  strokeDashoffset: 30,
-                  animation: "lulaCheckDraw 0.35s ease-out 0.15s forwards",
-                }}
-              >
-                <path
-                  d="M5 13l4 4L19 7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <p
-              className="text-4xl font-bold text-[#1a73e8]"
-              style={{
-                animation: "lulaFadeUp 0.4s ease-out 0.2s both",
-              }}
-            >
-              {money(lastSaleTotal)}
-            </p>
-            <style>{`
-              @keyframes lulaCheckPop {
-                0% { transform: scale(0.3); opacity: 0; }
-                100% { transform: scale(1); opacity: 1; }
-              }
-              @keyframes lulaCheckDraw {
-                to { stroke-dashoffset: 0; }
-              }
-              @keyframes lulaFadeUp {
-                0% { opacity: 0; transform: translateY(8px); }
-                100% { opacity: 1; transform: translateY(0); }
-              }
-            `}</style>
-          </div>
-
-          <div className="space-y-2 border-t border-[#eee] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-            <p className="mb-2 text-center text-xs text-[#9e9e9e]">
-              ID DE RECIBO: LULA-{lastSaleFolio} · ARTÍCULOS
-              cobrados
-            </p>
-            <button
-              type="button"
-              onClick={() => setTicketOpen(true)}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold uppercase tracking-wide text-white"
-            >
-              OBTENER RECIBO
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileStep("shop");
-                setTicketOpen(false);
-              }}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#1a73e8] text-base font-bold uppercase tracking-wide text-white"
-            >
-              NUEVA VENTA
-            </button>
-          </div>
-        </div>
-      )}
-
-      <TicketModal
-        open={
-          ticketOpen
-        }
-        onOpenChange={
-          setTicketOpen
-        }
-        ticket={ticket}
-      />
-    </div>
-  );
-} 
+              </d
