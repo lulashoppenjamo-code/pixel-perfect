@@ -33,6 +33,7 @@ import {
   StickyNote,
   Camera,
   CameraOff,
+  ScanBarcode,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -2216,9 +2217,9 @@ export function POSPanel({
               type="button"
               title="Escanear código de barras"
               onClick={() => setScannerOpen(true)}
-              className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-lg bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
+              className="flex h-10 w-10 shrink-0 touch-manipulation items-center justify-center rounded-md bg-white text-[#1a73e8] shadow-sm active:bg-[#e8f0fe]"
             >
-              <Camera className="h-5 w-5" />
+              <ScanBarcode className="h-5 w-5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -2575,27 +2576,27 @@ export function POSPanel({
           className={cn(
             "shrink-0 space-y-2 border-t border-[#e0e0e0] bg-white p-3",
             sequential &&
-              "pb-[calc(0.75rem+4.5rem+env(safe-area-inset-bottom))]",
+              "pb-[calc(0.5rem+3.75rem+env(safe-area-inset-bottom))]",
           )}
         >
           {sequential && cart.length > 0 && (
             <>
-              {/* Añadir artículo nuevo + escáner */}
+              {/* Añadir artículo nuevo + escáner (icono código de barras como Zobaze) */}
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={() => setMobileStep("shop")}
-                  className="flex h-11 flex-1 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-sm font-semibold text-[#1a73e8]"
+                  className="flex h-10 flex-1 items-center justify-center rounded-md border border-[#e0e0e0] bg-white text-[13px] font-semibold text-[#1a73e8]"
                 >
                   Añadir artículo nuevo
                 </button>
                 <button
                   type="button"
                   onClick={() => setScannerOpen(true)}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-[#e0e0e0] bg-white text-[#1a73e8]"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-[#e0e0e0] bg-white text-[#1a73e8]"
                   aria-label="Escanear código"
                 >
-                  <Camera className="h-5 w-5" />
+                  <ScanBarcode className="h-5 w-5" strokeWidth={1.75} />
                 </button>
               </div>
 
@@ -2683,7 +2684,7 @@ export function POSPanel({
                   type="button"
                   disabled={cart.length === 0}
                   onClick={() => setCart([])}
-                  className="h-11 flex-1 rounded-md bg-[#ef9a9a] text-sm font-bold text-white disabled:opacity-40"
+                  className="h-10 flex-1 rounded-md bg-[#ef9a9a] text-[13px] font-semibold text-white disabled:opacity-40"
                 >
                   Borrar
                 </button>
@@ -2691,7 +2692,7 @@ export function POSPanel({
                   type="button"
                   disabled={cart.length === 0}
                   onClick={() => setMobileStep("shop")}
-                  className="h-11 flex-1 rounded-md bg-[#ffb74d] text-sm font-bold text-white disabled:opacity-40"
+                  className="h-10 flex-1 rounded-md bg-[#ffb74d] text-[13px] font-semibold text-white disabled:opacity-40"
                 >
                   Guardar para más
                 </button>
@@ -2904,7 +2905,7 @@ export function POSPanel({
                 checkout.mutate();
               }
             }}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
+            className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#4caf50] text-[15px] font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
           >
             {checkout.isPending
               ? "Procesando…"
