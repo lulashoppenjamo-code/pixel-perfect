@@ -3928,4 +3928,4 @@ export function POSPanel({
       />
     </div>
   );
-}
+} 
