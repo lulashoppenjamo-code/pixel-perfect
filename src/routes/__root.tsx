@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { initializePwa } from "../lib/pwa";
 import { AuthProvider } from "@/lib/auth";
 import { BranchProvider } from "@/lib/branch";
 import { Toaster } from "@/components/ui/sonner";
@@ -192,6 +193,26 @@ export const Route =
           name: "twitter:card",
           content: "summary_large_image",
         },
+        {
+          name: "theme-color",
+          content: "#ffffff",
+        },
+        {
+          name: "mobile-web-app-capable",
+          content: "yes",
+        },
+        {
+          name: "apple-mobile-web-app-capable",
+          content: "yes",
+        },
+        {
+          name: "apple-mobile-web-app-status-bar-style",
+          content: "default",
+        },
+        {
+          name: "apple-mobile-web-app-title",
+          content: "Lula Shop OS",
+        },
       ],
       links: [
         {
@@ -199,9 +220,17 @@ export const Route =
           href: appCss,
         },
         {
+          rel: "manifest",
+          href: "/manifest.webmanifest",
+        },
+        {
           rel: "icon",
-          href: "/favicon.ico",
-          type: "image/x-icon",
+          href: "/icons/icon-192.svg",
+          type: "image/svg+xml",
+        },
+        {
+          rel: "apple-touch-icon",
+          href: "/icons/icon-192.svg",
         },
       ],
     }),
@@ -237,6 +266,10 @@ function RootShell({
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    initializePwa();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
