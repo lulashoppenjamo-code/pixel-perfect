@@ -35,6 +35,9 @@ import {
   CameraOff,
   ScanBarcode,
   Zap,
+  LayoutGrid,
+  PackageOpen,
+  PauseCircle,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +45,13 @@ import { useBranch } from "@/lib/branch";
 import { useAuth } from "@/lib/auth";
 import { money } from "@/lib/format";
 import { getSharedInventory } from "@/lib/sharedInventory";
+import {
+  createParkedSale,
+  deleteParkedSale,
+  type ParkedSaleRow,
+} from "@/lib/parkedSales";
+
+import { ParkedSalesDialog } from "@/components/pos/ParkedSalesDialog";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -171,6 +181,12 @@ export function POSPanel({
   const [historyOpen, setHistoryOpen] =
     useState(false);
 
+  const [parkedSalesOpen, setParkedSalesOpen] =
+    useState(false);
+
+  const [parkedSaleLabel, setParkedSaleLabel] =
+    useState("");
+
   const [scannerOpen, setScannerOpen] =
     useState(false);
 
@@ -216,7 +232,8 @@ export function POSPanel({
       const coarse =
         window.matchMedia("(pointer: coarse)").matches ||
         window.matchMedia("(hover: none)").matches;
-      setSequential(coarse);
+      const narrow = window.innerWidth < 1400;
+      setSequential(coarse || narrow);
     };
     update();
     window.addEventListener("resize", update);
@@ -1495,6 +1512,247 @@ export function POSPanel({
 
   /*
    * =========================================================
+   * VENTAS APARTADAS
+   * =========================================================
+   */
+
+  const parkCurrentSale = async () => {
+    if (!branchId) {
+      toast.error("No hay sucursal seleccionada");
+      return;
+    }
+
+    if (!user?.id) {
+      toast.error("No se pudo identificar al usuario");
+      return;
+    }
+
+    if (cart.length === 0) {
+      toast.error("El carrito está vacío");
+      return;
+    }
+
+    const labelInput = window.prompt(
+      "Nombre o referencia de esta venta apartada:",
+      parkedSaleLabel.trim() ||
+        `Apartada ${new Date().toLocaleTimeString("es-MX", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })}`,
+    );
+
+    if (labelInput === null) {
+      return;
+    }
+
+    const label =
+      labelInput.trim() ||
+      `Apartada ${new Date().toLocaleTimeString("es-MX", {
+        hour: "2-digit",
+        minute: "2-digit",
+      })}`;
+
+    try {
+      await createParkedSale(supabase, {
+        branch_id: branchId,
+        created_by: user.id,
+        label,
+        customer_id:
+          customerId === "none"
+            ? null
+            : customerId,
+        payment_method: method,
+        ticket_discount:
+          Number(ticketDiscount) || 0,
+        cash_received:
+          cashReceived.trim()
+            ? Number(cashReceived)
+            : null,
+        mixed_cash:
+          mixedCash.trim()
+            ? Number(mixedCash)
+            : null,
+        mixed_card:
+          mixedCard.trim()
+            ? Number(mixedCard)
+            : null,
+        notes:
+          saleNotes.trim() || null,
+        cart: cart.map((line) => ({
+          key: line.key,
+          product_id: line.product_id,
+          variant_id: line.variant_id,
+          name: line.name,
+          unit_price: Number(line.unit_price),
+          original_price: Number(
+            line.original_price,
+          ),
+          quantity: Number(line.quantity),
+          discount: Number(line.discount),
+          tax_rate: Number(line.tax_rate),
+          stock: Number(line.stock),
+          sku: line.sku ?? null,
+          barcode: line.barcode ?? null,
+          emoji: line.emoji ?? null,
+        })),
+      });
+
+      setCart([]);
+      setCustomerId("none");
+      setMethod("cash");
+      setCashReceived("");
+      setMixedCash("");
+      setMixedCard("");
+      setTicketDiscount("0");
+      setSaleNotes("");
+      setParkedSaleLabel("");
+      setMobileStep("shop");
+
+      await qc.invalidateQueries({
+        queryKey: [
+          "pos-parked-sales",
+          branchId,
+        ],
+      });
+
+      toast.success(
+        "Venta apartada correctamente",
+      );
+    } catch (error) {
+      console.error(
+        "Error al apartar venta:",
+        error,
+      );
+
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo apartar la venta",
+      );
+    }
+  };
+
+  const recoverParkedSale = (
+    parkedSale: ParkedSaleRow,
+  ) => {
+    if (cart.length > 0) {
+      const replace = window.confirm(
+        "Ya tienes productos en el carrito. ¿Deseas reemplazarlos por la venta apartada?",
+      );
+
+      if (!replace) {
+        return;
+      }
+    }
+
+    setCart(
+      parkedSale.cart.map((line) => ({
+        key: line.key,
+        product_id: line.product_id,
+        variant_id: line.variant_id,
+        name: line.name,
+        unit_price: Number(line.unit_price),
+        original_price: Number(
+          line.original_price,
+        ),
+        quantity: Number(line.quantity),
+        discount: Number(line.discount),
+        tax_rate: Number(line.tax_rate),
+        stock: Number(line.stock),
+        sku: line.sku ?? null,
+        barcode: line.barcode ?? null,
+        emoji: line.emoji ?? null,
+      })),
+    );
+
+    setCustomerId(
+      parkedSale.customer_id ?? "none",
+    );
+
+    setMethod(
+      parkedSale.payment_method,
+    );
+
+    setTicketDiscount(
+      String(
+        Number(
+          parkedSale.ticket_discount ?? 0,
+        ),
+      ),
+    );
+
+    setCashReceived(
+      parkedSale.cash_received == null
+        ? ""
+        : String(
+            parkedSale.cash_received,
+          ),
+    );
+
+    setMixedCash(
+      parkedSale.mixed_cash == null
+        ? ""
+        : String(
+            parkedSale.mixed_cash,
+          ),
+    );
+
+    setMixedCard(
+      parkedSale.mixed_card == null
+        ? ""
+        : String(
+            parkedSale.mixed_card,
+          ),
+    );
+
+    setSaleNotes(
+      parkedSale.notes ?? "",
+    );
+
+    setParkedSaleLabel(
+      parkedSale.label ?? "",
+    );
+
+    setParkedSalesOpen(false);
+
+    setMobileStep("cart");
+
+    toast.success(
+      "Venta apartada recuperada",
+    );
+
+    /*
+     * La apartada se elimina SOLO después de
+     * haber restaurado correctamente el carrito.
+     *
+     * Esto NO modifica inventario ni crea una venta.
+     */
+    void deleteParkedSale(
+      supabase,
+      parkedSale.id,
+    )
+      .then(async () => {
+        await qc.invalidateQueries({
+          queryKey: [
+            "pos-parked-sales",
+            branchId,
+          ],
+        });
+      })
+      .catch((error) => {
+        console.error(
+          "No se pudo eliminar la apartada recuperada:",
+          error,
+        );
+
+        toast.error(
+          "La venta fue recuperada, pero no se pudo eliminar su registro apartado.",
+        );
+      });
+  };
+
+  /*
+   * =========================================================
    * COBRO
    * =========================================================
    *
@@ -2182,6 +2440,30 @@ export function POSPanel({
               <button
                 type="button"
                 className="flex h-9 w-9 items-center justify-center rounded-full"
+                title="Vista"
+                aria-label="Vista cuadrícula"
+              >
+                <LayoutGrid className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full"
+                title="Cliente"
+                aria-label="Cliente"
+              >
+                <User className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full"
+                title="Apartadas"
+                onClick={() => setParkedSalesOpen(true)}
+              >
+                <PackageOpen className="h-5 w-5" />
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full"
                 title="Historial"
                 onClick={() => {
                   setHistoryOpen(true);
@@ -2201,6 +2483,16 @@ export function POSPanel({
                   {canSell ? "Listo para vender" : "Caja cerrada"}
                 </p>
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-full text-white hover:bg-white/15"
+                title="Apartadas"
+                onClick={() => setParkedSalesOpen(true)}
+              >
+                <PackageOpen className="h-4 w-4" />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"
@@ -2257,11 +2549,11 @@ export function POSPanel({
           )}
         </div>
 
-        {/* Categorías: visibles en desktop y también en móvil/tablet */}
+        {/* Categorías: ocultas en sequential (Zobaze no las muestra aquí); visibles en desktop */}
         <div
           className={cn(
             "gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:px-4",
-            "flex",
+            sequential ? "hidden" : "flex",
           )}
         >
           <button
@@ -2904,23 +3196,35 @@ export function POSPanel({
             </>
           )}
 
-          {/* Cobrar — siempre visible */}
-          <button
-            type="button"
-            disabled={!canSell || cart.length === 0 || checkout.isPending}
-            onClick={() => {
-              if (sequential) {
-                setMobileStep("pay");
-              } else {
-                checkout.mutate();
-              }
-            }}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-[#4caf50] text-[15px] font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
-          >
-            {checkout.isPending
-              ? "Procesando…"
-              : `Cobrar: ${money(total)}`}
-          </button>
+          {/* Apartar + Cobrar */}
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={cart.length === 0}
+              onClick={parkCurrentSale}
+              className="h-11 gap-1.5 shrink-0"
+            >
+              <PauseCircle className="h-4 w-4" />
+              <span>Apartar</span>
+            </Button>
+            <button
+              type="button"
+              disabled={!canSell || cart.length === 0 || checkout.isPending}
+              onClick={() => {
+                if (sequential) {
+                  setMobileStep("pay");
+                } else {
+                  checkout.mutate();
+                }
+              }}
+              className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#4caf50] text-[15px] font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
+            >
+              {checkout.isPending
+                ? "Procesando…"
+                : `Cobrar: ${money(total)}`}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3649,4 +3953,173 @@ export function POSPanel({
                     placeholder="0.00"
                   />
                 </div>
-              </d
+              </div>
+
+              <div className="border-t border-[#f0f0f0] px-4 py-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#757575]">
+                    Total aplicado
+                  </span>
+                  <span className="font-semibold text-[#212121]">
+                    {money(
+                      (Number(mixedCash) || 0) +
+                        (Number(mixedCard) || 0),
+                    )}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-[#757575]">
+                    {(Number(mixedCash) || 0) +
+                      (Number(mixedCard) || 0) >=
+                    total - 0.01
+                      ? "Cubierto"
+                      : "Falta"}
+                  </span>
+                  <span
+                    className={
+                      (Number(mixedCash) || 0) +
+                        (Number(mixedCard) || 0) >=
+                      total - 0.01
+                        ? "font-semibold text-[#2e7d32]"
+                        : "font-semibold text-[#c62828]"
+                    }
+                  >
+                    {money(
+                      Math.max(
+                        0,
+                        total -
+                          ((Number(mixedCash) || 0) +
+                            (Number(mixedCard) || 0)),
+                      ),
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="px-1 text-center text-xs text-[#9e9e9e]">
+              La suma de efectivo y tarjeta debe cubrir el total
+              de la venta.
+            </p>
+          </div>
+
+          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              disabled={
+                !canSell ||
+                checkout.isPending ||
+                (Number(mixedCash) || 0) +
+                  (Number(mixedCard) || 0) <
+                  total - 0.01
+              }
+              onClick={() => checkout.mutate("mixed")}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
+            >
+              {checkout.isPending
+                ? "Procesando…"
+                : "Confirmar cobro mixto"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* =====================================================
+          FLUJO MÓVIL ZOBAZE: éxito
+          ===================================================== */}
+      {mobileStep === "success" && (
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-white", !sequential && "hidden")}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+            <div
+              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
+              style={{
+                animation: "lulaCheckPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-10 w-10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                style={{
+                  strokeDasharray: 30,
+                  strokeDashoffset: 30,
+                  animation: "lulaCheckDraw 0.35s ease-out 0.15s forwards",
+                }}
+              >
+                <path
+                  d="M5 13l4 4L19 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <p
+              className="text-4xl font-bold text-[#1a73e8]"
+              style={{
+                animation: "lulaFadeUp 0.4s ease-out 0.2s both",
+              }}
+            >
+              {money(lastSaleTotal)}
+            </p>
+            <style>{`
+              @keyframes lulaCheckPop {
+                0% { transform: scale(0.3); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+              @keyframes lulaCheckDraw {
+                to { stroke-dashoffset: 0; }
+              }
+              @keyframes lulaFadeUp {
+                0% { opacity: 0; transform: translateY(8px); }
+                100% { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+          </div>
+
+          <div className="space-y-2 border-t border-[#eee] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+            <p className="mb-2 text-center text-xs text-[#9e9e9e]">
+              ID DE RECIBO: LULA-{lastSaleFolio} · ARTÍCULOS
+              cobrados
+            </p>
+            <button
+              type="button"
+              onClick={() => setTicketOpen(true)}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold uppercase tracking-wide text-white"
+            >
+              OBTENER RECIBO
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileStep("shop");
+                setTicketOpen(false);
+              }}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#1a73e8] text-base font-bold uppercase tracking-wide text-white"
+            >
+              NUEVA VENTA
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ParkedSalesDialog
+        open={parkedSalesOpen}
+        onOpenChange={setParkedSalesOpen}
+        branchId={branchId}
+        onRecover={recoverParkedSale}
+      />
+
+      <TicketModal
+        open={
+          ticketOpen
+        }
+        onOpenChange={
+          setTicketOpen
+        }
+        ticket={ticket}
+      />
+    </div>
+  );
+} 
