@@ -80,4 +80,4 @@ function getBluetooth(): BluetoothApi {
       bluetooth: BluetoothApi;
     }
   ).bluetooth;
-}
+} 
