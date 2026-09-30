@@ -137,7 +137,7 @@ function paymentLabel(method: string) {
 
 function DevolucionesPage() {
   const { branchId } = useBranch();
-  const { isManager } = useAuth();
+  const { isManager , can } = useAuth();
   const qc = useQueryClient();
 
   const [folioSearch, setFolioSearch] =
@@ -654,11 +654,11 @@ function DevolucionesPage() {
                 <Button
                   className="mt-3 min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-white hover:bg-[#1557b0]"
                   size="sm"
-                  disabled={!isManager}
+                  disabled={!canRefund}
                   onClick={() => openRefund(sale.id)}
                 >
                   <RotateCcw className="mr-1.5 size-3.5" />
-                  {isManager ? "Devolver" : "Solo gerente"}
+                  {canRefund ? "Devolver" : "Sin permiso"}
                 </Button>
               </div>
             ))}
