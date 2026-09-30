@@ -1097,7 +1097,7 @@ function ReportesPage() {
               setRangeDays
             }
           >
-            <SelectTrigger className="w-[180px] rounded-xl border-[#e0e0e0]">
+            <SelectTrigger className="h-11 w-full rounded-xl border-[#e0e0e0] bg-white shadow-sm sm:w-[200px]">
               <SelectValue />
             </SelectTrigger>
 
@@ -1407,18 +1407,18 @@ function ReportesPage() {
         <CardContent>
           {byDay.length ===
           0 ? (
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              Sin ventas en
-              el periodo.
+            <p className="py-10 text-center text-sm text-[#757575] sm:py-12">
+              Sin ventas en el periodo seleccionado.
             </p>
           ) : (
-            <div className="h-64 w-full">
+            <div className="h-52 w-full sm:h-64 md:h-72">
               <ResponsiveContainer
                 width="100%"
                 height="100%"
               >
                 <BarChart
                   data={byDay}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                 >
                   <CartesianGrid
                     strokeDasharray="3 3"
@@ -1905,17 +1905,17 @@ function ReportRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 px-4 py-3.5",
+        "flex items-center justify-between gap-3 px-3.5 py-3 sm:px-4 sm:py-3.5",
         !last && "border-b border-[#f0f0f0]",
       )}
     >
-      <span className="text-[11px] font-semibold uppercase tracking-wide text-[#757575]">
+      <span className="min-w-0 flex-1 text-[10px] font-semibold uppercase tracking-wide text-[#757575] sm:text-[11px]">
         {label}
       </span>
-      <div className="flex items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         <span
           className={cn(
-            "text-base font-bold tabular-nums",
+            "text-[15px] font-bold tabular-nums sm:text-base",
             highlight
               ? "text-[#1a73e8]"
               : "text-[#212121]",
@@ -1946,14 +1946,14 @@ function KpiCard({
 }) {
   return (
     <Card className="border-[#e0e0e0] shadow-sm">
-      <CardContent className="pt-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium text-muted-foreground">
+      <CardContent className="p-3.5 sm:pt-4 sm:p-6">
+        <div className="flex items-start justify-between gap-2 sm:gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-xs sm:normal-case sm:tracking-normal sm:text-muted-foreground">
               {title}
             </p>
 
-            <p className="mt-1 text-2xl font-bold tracking-tight text-[#1a73e8]">
+            <p className="mt-1 truncate text-xl font-bold tracking-tight text-[#1a73e8] sm:text-2xl">
               {loading
                 ? "…"
                 : value}
