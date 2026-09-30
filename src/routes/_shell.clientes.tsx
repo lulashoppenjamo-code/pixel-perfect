@@ -152,6 +152,8 @@ function ClientesPage() {
 
   const [form, setForm] = useState<Form>(empty);
   const [search, setSearch] = useState("");
+  /** Filtro visual de saldo (client-side sobre stats ya calculados). */
+  const [debtFilter, setDebtFilter] = useState<"all" | "debt" | "clear">("all");
 
   const [payCustomerId, setPayCustomerId] =
     useState<string | null>(null);
@@ -333,29 +335,22 @@ function ClientesPage() {
     };
   }, [customers, stats]);
 
-  const filtered = customers.filter(
-    (customer) => {
-      if (!search.trim()) {
-        return true;
-      }
+  const filtered = customers.filter((customer) => {
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      const match =
+        customer.name.toLowerCase().includes(q) ||
+        (customer.phone ?? "").toLowerCase().includes(q) ||
+        (customer.email ?? "").toLowerCase().includes(q);
+      if (!match) return false;
+    }
 
-      const q = search
-        .trim()
-        .toLowerCase();
-
-      return (
-        customer.name
-          .toLowerCase()
-          .includes(q) ||
-        (customer.phone ?? "")
-          .toLowerCase()
-          .includes(q) ||
-        (customer.email ?? "")
-          .toLowerCase()
-          .includes(q)
-      );
-    },
-  );
+    if (debtFilter === "all") return true;
+    const balance = stats.get(customer.id)?.credit ?? 0;
+    if (debtFilter === "debt") return balance > 0;
+    if (debtFilter === "clear") return balance <= 0;
+    return true;
+  });
 
   const save = useMutation({
     mutationFn: async () => {
@@ -722,8 +717,8 @@ function ClientesPage() {
       </div>
 
       <div className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-3">
-        <Card className="lg:col-span-1">
-          <CardHeader>
+        <Card className="border-[#e0e0e0] shadow-sm lg:col-span-1">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base">
               {form.id
                 ? "Editar cliente"
@@ -851,22 +846,22 @@ function ClientesPage() {
         </Card>
 
         <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <CardTitle className="text-base">
-                Clientes
-              </CardTitle>
-
-              <p className="text-xs text-muted-foreground">
-                Busca por nombre, teléfono o correo.
-              </p>
+          <CardHeader className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <CardTitle className="text-base">
+                  Clientes
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Busca por nombre, teléfono o correo.
+                </p>
+              </div>
             </div>
 
-            <div className="relative w-full sm:w-64">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
               <Input
-                className="h-11 pl-9"
+                className="h-12 rounded-xl border-[#e0e0e0] bg-[#fafafa] pl-10 text-[15px] shadow-none"
                 placeholder="Buscar cliente…"
                 value={search}
                 onChange={(event) =>
@@ -879,6 +874,29 @@ function ClientesPage() {
           </CardHeader>
 
           <CardContent className="px-3 sm:px-6">
+            <div className="mb-3 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+              {(
+                [
+                  ["all", "Todos"],
+                  ["debt", "Con saldo"],
+                  ["clear", "Sin saldo"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setDebtFilter(key)}
+                  className={
+                    debtFilter === key
+                      ? "shrink-0 rounded-full bg-[#1a73e8] px-3.5 py-1.5 text-[12px] font-semibold text-white"
+                      : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
+                  }
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             {/* Móvil / tablet: tarjetas */}
             <div className="grid gap-2.5 lg:hidden">
               {filtered.map((customer) => {
@@ -892,73 +910,73 @@ function ClientesPage() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-sm font-bold leading-5">
+                        <p className="break-words text-[15px] font-bold leading-5 text-[#212121]">
                           {customer.name}
                         </p>
-                        {customer.email && (
-                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {customer.email}
-                          </p>
-                        )}
-                        <p className="mt-0.5 text-xs text-muted-foreground">
+                        <p className="mt-0.5 text-xs text-[#757575]">
                           {customer.phone ?? "Sin teléfono"}
                         </p>
+                        {customer.email ? (
+                          <p className="mt-0.5 truncate text-[11px] text-[#9e9e9e]">
+                            {customer.email}
+                          </p>
+                        ) : null}
                       </div>
                       {balance > 0 ? (
                         <Badge
                           variant="destructive"
-                          className="shrink-0 rounded-full"
+                          className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
                         >
-                          {money(balance)}
+                          Con saldo
                         </Badge>
                       ) : (
                         <Badge
                           variant="secondary"
-                          className="shrink-0 rounded-full"
+                          className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
                         >
-                          $0
+                          Al corriente
                         </Badge>
                       )}
                     </div>
 
-                    <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
+                    <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-[#f5f5f5] p-2.5">
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
+                          Saldo
+                        </p>
+                        <p
+                          className={
+                            balance > 0
+                              ? "mt-0.5 text-sm font-bold text-[#c62828]"
+                              : "mt-0.5 text-sm font-bold text-[#212121]"
+                          }
+                        >
+                          {money(balance)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
                           Compras
                         </p>
-                        <p className="mt-1 text-sm font-semibold">
+                        <p className="mt-0.5 text-sm font-semibold text-[#212121]">
                           {stat?.count ?? 0}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
                           Total
                         </p>
-                        <p className="mt-1 text-sm font-semibold">
+                        <p className="mt-0.5 text-sm font-semibold text-[#212121]">
                           {money(stat?.total ?? 0)}
                         </p>
                       </div>
                     </div>
 
-                    <div className="mt-3 flex flex-wrap gap-1.5 border-t pt-3">
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        className="h-11 w-11 touch-manipulation"
-                        title="Ver historial de crédito"
-                        onClick={() =>
-                          setHistoryCustomerId(customer.id)
-                        }
-                      >
-                        <History className="h-4 w-4" />
-                      </Button>
-
-                      {balance > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[#eeeeee] pt-3">
+                      {balance > 0 ? (
                         <Button
-                          size="icon"
-                          variant="outline"
-                          className="h-11 w-11 touch-manipulation"
-                          title="Registrar abono"
+                          size="sm"
+                          className="h-10 flex-1 touch-manipulation rounded-lg bg-[#43a047] text-[13px] font-semibold text-white hover:bg-[#388e3c]"
                           onClick={() => {
                             setPayCustomerId(customer.id);
                             setPayAmount(balance.toFixed(2));
@@ -966,9 +984,21 @@ function ClientesPage() {
                             setPayNotes("");
                           }}
                         >
-                          <Wallet className="h-4 w-4" />
+                          <Wallet className="mr-1.5 h-4 w-4" />
+                          Abonar
                         </Button>
-                      )}
+                      ) : null}
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        className="h-10 w-10 touch-manipulation rounded-lg"
+                        title="Ver historial de crédito"
+                        onClick={() =>
+                          setHistoryCustomerId(customer.id)
+                        }
+                      >
+                        <History className="h-4 w-4" />
+                      </Button>
 
                       <Button
                         size="icon"
@@ -1364,9 +1394,10 @@ function ClientesPage() {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button
               variant="outline"
+              className="h-11 rounded-lg"
               onClick={() => {
                 setPayCustomerId(null);
                 setPayAmount("");
@@ -1378,6 +1409,7 @@ function ClientesPage() {
             </Button>
 
             <Button
+              className="h-11 min-w-[8rem] rounded-lg bg-[#43a047] text-[15px] font-bold text-white hover:bg-[#388e3c]"
               disabled={
                 registerPayment.isPending ||
                 !payCustomerId ||
@@ -1391,7 +1423,7 @@ function ClientesPage() {
             >
               {registerPayment.isPending
                 ? "Registrando…"
-                : "Abonar"}
+                : "Confirmar abono"}
             </Button>
           </DialogFooter>
         </DialogContent>
