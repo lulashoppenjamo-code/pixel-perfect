@@ -52,6 +52,10 @@ import {
 } from "@/lib/parkedSales";
 
 import { ParkedSalesDialog } from "@/components/pos/ParkedSalesDialog";
+import {
+  getBluetoothAutoPrint,
+  printTicketBluetooth,
+} from "@/lib/bluetoothPrinter";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1957,7 +1961,7 @@ export function POSPanel({
               )})`
             : activeMethod;
 
-        setTicket({
+        const completedTicket: TicketData = {
           companyName:
             settings?.companyName,
 
@@ -2034,7 +2038,22 @@ export function POSPanel({
             saleNotes
               ? `${settings?.ticketFooter ?? ""}\nNotas: ${saleNotes}`.trim()
               : settings?.ticketFooter,
-        });
+        };
+
+        setTicket(completedTicket);
+
+        if (getBluetoothAutoPrint()) {
+          void printTicketBluetooth(completedTicket).catch((error) => {
+            console.error(
+              "No se pudo imprimir automáticamente:",
+              error,
+            );
+
+            toast.error(
+              "Venta realizada, pero no se pudo imprimir el ticket.",
+            );
+          });
+        }
 
         setLastSaleTotal(total);
         setLastSaleFolio(sale.folio ?? "");
