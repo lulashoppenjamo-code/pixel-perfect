@@ -176,6 +176,7 @@ export function TicketPrinterSettings() {
         unit_price: 150,
         discount: 0,
         total: 150,
+        sku: "SKU-001",
       },
       {
         name: "Producto con descuento",
@@ -183,6 +184,7 @@ export function TicketPrinterSettings() {
         unit_price: 160,
         discount: 20,
         total: 300,
+        sku: "SKU-002",
       },
     ];
     const subtotal = 450;
@@ -504,10 +506,14 @@ export function TicketPrinterSettings() {
                 <div className="flex justify-between gap-2">
                   <span>
                     {line.quantity} x {line.name}
-                    {form.layout.showSku ? " [SKU]" : ""}
                   </span>
                   <span>{money(line.total)}</span>
                 </div>
+                {form.layout.showSku && line.sku ? (
+                  <p className="text-[10px] text-gray-600">
+                    SKU: {line.sku}
+                  </p>
+                ) : null}
                 {form.layout.showDiscounts &&
                   line.discount != null &&
                   line.discount > 0 && (
