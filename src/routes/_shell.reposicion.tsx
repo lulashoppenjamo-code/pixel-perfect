@@ -1005,7 +1005,7 @@ function ReposicionPage() {
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3.5 sm:p-4">
             <p className="text-xs text-muted-foreground">
               Pendientes
             </p>
@@ -1017,7 +1017,7 @@ function ReposicionPage() {
         </Card>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3.5 sm:p-4">
             <p className="text-xs text-muted-foreground">
               Comprados
             </p>
@@ -1029,7 +1029,7 @@ function ReposicionPage() {
         </Card>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3.5 sm:p-4">
             <p className="text-xs text-muted-foreground">
               Recibidos
             </p>
@@ -1041,7 +1041,7 @@ function ReposicionPage() {
         </Card>
 
         <Card>
-          <CardContent className="p-4">
+          <CardContent className="p-3.5 sm:p-4">
             <p className="text-xs text-muted-foreground">
               Agotados
             </p>
@@ -1477,47 +1477,39 @@ function ReposicionPage() {
                       event.target.value,
                     )
                   }
-                  className="h-11" placeholder="Buscar producto..."
-                  className="pl-9"
+                  placeholder="Buscar producto..."
+                  className="h-11 rounded-xl border-[#e0e0e0] pl-9"
                 />
               </div>
 
-              <Select
-                value={statusFilter}
-                onValueChange={(value) =>
-                  setStatusFilter(
-                    value as
-                      | "all"
-                      | ReplenishmentStatus,
-                  )
-                }
-              >
-                <SelectTrigger className="w-full sm:w-[170px]">
-                  <SelectValue />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="all">
-                    Todos
-                  </SelectItem>
-
-                  <SelectItem value="pending">
-                    Pendientes
-                  </SelectItem>
-
-                  <SelectItem value="purchased">
-                    Comprados
-                  </SelectItem>
-
-                  <SelectItem value="received">
-                    Recibidos
-                  </SelectItem>
-
-                  <SelectItem value="cancelled">
-                    Cancelados
-                  </SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex w-full gap-1.5 overflow-x-auto pb-0.5 scrollbar-none sm:w-auto">
+                {(
+                  [
+                    ["all", "Todos"],
+                    ["pending", "Pendiente"],
+                    ["purchased", "Comprada"],
+                    ["received", "Recibida"],
+                    ["cancelled", "Cancelada"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() =>
+                      setStatusFilter(
+                        key as "all" | ReplenishmentStatus,
+                      )
+                    }
+                    className={
+                      statusFilter === key
+                        ? "shrink-0 rounded-full bg-[#1a73e8] px-3 py-1.5 text-[11px] font-semibold text-white"
+                        : "shrink-0 rounded-full bg-[#eeeeee] px-3 py-1.5 text-[11px] font-medium text-[#616161]"
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -1641,6 +1633,15 @@ function ReposicionPage() {
                           variant={statusVariant(
                             request.status,
                           )}
+                          className={
+                            request.status === "pending"
+                              ? "rounded-full border-transparent bg-[#fff8e1] text-[#f57f17]"
+                              : request.status === "purchased"
+                                ? "rounded-full border-transparent bg-[#e3f2fd] text-[#1565c0]"
+                                : request.status === "received"
+                                  ? "rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]"
+                                  : "rounded-full border-transparent bg-[#ffebee] text-[#c62828]"
+                          }
                         >
                           {statusLabel(
                             request.status,
