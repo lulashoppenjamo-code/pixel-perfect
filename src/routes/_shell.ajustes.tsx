@@ -1,4 +1,4 @@
-import { useEffect,useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
 import {
@@ -109,6 +109,14 @@ const ROLES: AppRole[] = [
   "staff",
 ];
 
+const ROLE_LABELS: Record<AppRole, string> = {
+  owner: "Propietario",
+  admin: "Administrador",
+  manager: "Encargado",
+  cashier: "Cajero",
+  staff: "Colaborador",
+};
+
 type ProfileRow = {
   id: string;
   full_name: string | null;
@@ -143,7 +151,7 @@ function AjustesPage() {
       full_name: "",
       email: "",
       password: "",
-      role: "cashier" as AppRole,
+      role: "staff" as AppRole,
       branch_id: "",
     });
 
@@ -578,6 +586,26 @@ function AjustesPage() {
       );
     };
 
+  const currentProfile =
+    profiles.find(
+      (profile) =>
+        profile.id === user?.id,
+    );
+
+  const currentRole =
+    currentProfile?.roles[0] ??
+    "owner";
+
+  const currentRoleLabel =
+    ROLE_LABELS[currentRole];
+
+  const currentBranchName =
+    currentProfile?.branch_id
+      ? getBranchName(
+          currentProfile.branch_id,
+        )
+      : "Todas las sucursales";
+
   const submitInvite = async () => {
     if (!canManageUsers) {
       toast.error("No autorizado");
@@ -649,12 +677,12 @@ function AjustesPage() {
         full_name: "",
         email: "",
         password: "",
-        role: "cashier",
+        role: "staff",
         branch_id: "",
       });
 
       void qc.invalidateQueries({
-        queryKey: ["admin-profiles"],
+        queryKey: ["profiles"],
       });
     } catch (err) {
       toast.error(
@@ -773,7 +801,9 @@ function AjustesPage() {
                     {branches.map(
                       (item) => (
                         <TableRow
-                          key={item.id}
+                          key={
+                            item.id
+                          }
                         >
                           <TableCell className="font-medium">
                             {item.name}
@@ -819,8 +849,8 @@ function AjustesPage() {
             <CardContent className="space-y-4">
               {!isAdmin && (
                 <p className="text-sm text-muted-foreground">
-                  Solo owner o admin pueden
-                  crear sucursales.
+                  Solo propietario o administrador
+                  pueden crear sucursales.
                 </p>
               )}
 
@@ -922,6 +952,77 @@ function AjustesPage() {
 
         {isAdmin && (
           <TabsContent value="usuarios">
+            {/* ================================================== */}
+            {/* MI SESIÓN */}
+            {/* ================================================== */}
+
+            <Card className="mb-4 border-[#e0e0e0] shadow-sm">
+              <CardHeader>
+                <CardTitle>
+                  Mi sesión
+                </CardTitle>
+
+                <p className="text-sm text-muted-foreground">
+                  Esta es la cuenta con la que estás
+                  conectado actualmente.
+                </p>
+              </CardHeader>
+
+              <CardContent className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-xl border bg-[#f8f9fa] p-4">
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    Usuario
+                  </p>
+
+                  <p className="mt-1 font-semibold">
+                    {currentProfile?.full_name?.trim() ||
+                      "Sin nombre"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border bg-[#f8f9fa] p-4">
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    Rol
+                  </p>
+
+                  <p className="mt-1 font-semibold">
+                    {currentRoleLabel}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border bg-[#f8f9fa] p-4">
+                  <p className="text-xs font-medium uppercase text-muted-foreground">
+                    Sucursal
+                  </p>
+
+                  <p className="mt-1 font-semibold">
+                    {currentBranchName}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2 md:col-span-3">
+                  <Badge className="rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
+                    Sesión activa
+                  </Badge>
+
+                  <Badge variant="outline">
+                    Acceso administrativo
+                  </Badge>
+
+                  {currentRole ===
+                    "owner" && (
+                    <Badge variant="outline">
+                      Propietario protegido
+                    </Badge>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* ================================================== */}
+            {/* USUARIOS Y PERMISOS */}
+            {/* ================================================== */}
+
             <Card className="border-[#e0e0e0] shadow-sm">
               <CardHeader>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1027,8 +1128,12 @@ function AjustesPage() {
                                     Rol
                                   </p>
 
-                                  <p className="mt-0.5 font-semibold capitalize text-[#212121]">
-                                    {role}
+                                  <p className="mt-0.5 font-semibold text-[#212121]">
+                                    {
+                                      ROLE_LABELS[
+                                        role
+                                      ]
+                                    }
                                   </p>
                                 </div>
 
@@ -1046,7 +1151,9 @@ function AjustesPage() {
                               </div>
 
                               <p className="mt-2 text-[11px] text-[#9e9e9e]">
-                                Usa la vista de escritorio para cambiar rol, sucursal o activación.
+                                Usa la vista de escritorio
+                                para cambiar rol, sucursal
+                                o activación.
                               </p>
                             </div>
                           );
@@ -1105,6 +1212,14 @@ function AjustesPage() {
                                   profile,
                                 );
 
+                              /*
+                               * La sesión actual no se modifica
+                               * desde esta tabla para proteger
+                               * especialmente la cuenta propietaria.
+                               *
+                               * La configuración de la sesión
+                               * actual se muestra arriba.
+                               */
                               const canModify =
                                 !current;
 
@@ -1177,7 +1292,9 @@ function AjustesPage() {
                                               }
                                             >
                                               {
-                                                item
+                                                ROLE_LABELS[
+                                                  item
+                                                ]
                                               }
                                             </SelectItem>
                                           ),
@@ -1187,7 +1304,7 @@ function AjustesPage() {
 
                                     {owner && (
                                       <p className="mt-1 text-[11px] font-medium text-amber-600">
-                                        Owner protegido
+                                        Propietario protegido
                                       </p>
                                     )}
                                   </TableCell>
@@ -1277,16 +1394,12 @@ function AjustesPage() {
 
                                   <TableCell className="text-right">
                                     {current ? (
-                                      <Badge
-                                        variant="outline"
-                                      >
+                                      <Badge variant="outline">
                                         Sesión actual
                                       </Badge>
                                     ) : owner ? (
-                                      <Badge
-                                        variant="outline"
-                                      >
-                                        Owner
+                                      <Badge variant="outline">
+                                        Propietario
                                       </Badge>
                                     ) : (
                                       <Button
@@ -1524,6 +1637,10 @@ function AjustesPage() {
         )}
       </Tabs>
 
+      {/* ================================================== */}
+      {/* INVITAR COLABORADOR */}
+      {/* ================================================== */}
+
       <Dialog
         open={inviteOpen}
         onOpenChange={setInviteOpen}
@@ -1639,7 +1756,11 @@ function AjustesPage() {
                         key={role}
                         value={role}
                       >
-                        {role}
+                        {
+                          ROLE_LABELS[
+                            role
+                          ]
+                        }
                       </SelectItem>
                     ),
                   )}
