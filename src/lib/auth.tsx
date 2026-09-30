@@ -36,6 +36,8 @@ type AuthState = {
   loading: boolean;
   isManager: boolean;
   isAdmin: boolean;
+  /** true si el usuario tiene el permiso en role_permissions (vía get_my_permissions). */
+  can: (permission: string) => boolean;
   refresh: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -531,6 +533,22 @@ export function AuthProvider({
           role === "owner" ||
           role === "admin",
       ),
+
+    can: (permission: string) => {
+      if (!permission) return false;
+      // Owner/admin: acceso total de respaldo si permisos aún no cargan
+      if (
+        roles.some(
+          (role) =>
+            role === "owner" ||
+            role === "admin",
+        )
+      ) {
+        if (permissions === null) return true;
+      }
+      if (!permissions) return false;
+      return permissions.has(permission);
+    },
 
     refresh: async () => {
       const {
