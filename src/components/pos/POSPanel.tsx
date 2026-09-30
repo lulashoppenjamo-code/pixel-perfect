@@ -54,6 +54,7 @@ import {
 import { ParkedSalesDialog } from "@/components/pos/ParkedSalesDialog";
 import {
   getBluetoothAutoPrint,
+  normalizeTicketLayout,
   printTicketBluetooth,
 } from "@/lib/bluetoothPrinter";
 
@@ -258,22 +259,40 @@ export function POSPanel({
    */
 
   const { data: settings } = useQuery({
-    queryKey: ["settings-pos"],
+    queryKey: ["settings-pos", branchId],
+    enabled: !!branchId,
 
     queryFn: async () => {
+      // Prioridad: sucursal actual > global (branch_id null) > default.
+      // Nunca tomar filas de otra sucursal.
       const { data, error } = await supabase
         .from("settings")
-        .select("key, value");
+        .select("key, value, branch_id")
+        .or(
+          `branch_id.eq.${branchId},branch_id.is.null`,
+        );
 
       if (error) throw error;
+
+      const rows = data ?? [];
 
       const parse = (
         key: string,
         fallback: unknown,
       ) => {
-        const raw = (data ?? []).find(
-          (row) => row.key === key,
-        )?.value;
+        const branchRow = rows.find(
+          (row) =>
+            row.key === key &&
+            row.branch_id === branchId,
+        );
+        const globalRow = rows.find(
+          (row) =>
+            row.key === key &&
+            row.branch_id == null,
+        );
+        const raw =
+          branchRow?.value ??
+          globalRow?.value;
 
         if (raw === null || raw === undefined) {
           return fallback;
@@ -319,11 +338,24 @@ export function POSPanel({
           ),
         ),
 
+        companyAddress: String(
+          parse("company_address", ""),
+        ),
+
+        companyPhone: String(
+          parse("company_phone", ""),
+        ),
+
         ticketFooter: String(
           parse(
             "ticket_footer",
             "¡Gracias por su compra!",
           ),
+        ),
+
+        ticketLayout: parse(
+          "ticket_layout",
+          null,
         ),
       };
     },
@@ -1965,6 +1997,14 @@ export function POSPanel({
           companyName:
             settings?.companyName,
 
+          companyAddress:
+            settings?.companyAddress ||
+            undefined,
+
+          companyPhone:
+            settings?.companyPhone ||
+            undefined,
+
           branchName,
 
           folio:
@@ -2004,6 +2044,9 @@ export function POSPanel({
                   line.unit_price *
                     line.quantity -
                   line.discount,
+
+                sku:
+                  line.sku ?? null,
               }),
             ),
 
@@ -2043,7 +2086,13 @@ export function POSPanel({
         setTicket(completedTicket);
 
         if (getBluetoothAutoPrint()) {
-          void printTicketBluetooth(completedTicket).catch((error) => {
+          const layout = normalizeTicketLayout(
+            settings?.ticketLayout,
+          );
+          void printTicketBluetooth(
+            completedTicket,
+            layout,
+          ).catch((error) => {
             console.error(
               "No se pudo imprimir automáticamente:",
               error,
