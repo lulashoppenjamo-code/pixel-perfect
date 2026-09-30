@@ -300,6 +300,18 @@ function buildTicketText(
   chunks.push(doubleSize(false));
   chunks.push(bold(false));
 
+  if (ticket.companyAddress) {
+    chunks.push(
+      encode(`${ticket.companyAddress}\n`),
+    );
+  }
+
+  if (ticket.companyPhone) {
+    chunks.push(
+      encode(`Tel: ${ticket.companyPhone}\n`),
+    );
+  }
+
   if (layout.showBranch && ticket.branchName) {
     chunks.push(
       encode(`${ticket.branchName}\n`),
@@ -346,8 +358,8 @@ function buildTicketText(
 
   for (const line of ticket.lines) {
     const name =
-      layout.showSku
-        ? line.name
+      layout.showSku && line.sku
+        ? `${line.name} (${line.sku})`
         : line.name;
 
     chunks.push(
