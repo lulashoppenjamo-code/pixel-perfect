@@ -146,7 +146,8 @@ type CustomerStats = {
 };
 
 function ClientesPage() {
-  const { isManager } = useAuth();
+  const { isManager, can } = useAuth();
+  const canCreditPay = can("clientes.credit_payment");
   const { branchId } = useBranch();
   const qc = useQueryClient();
 
