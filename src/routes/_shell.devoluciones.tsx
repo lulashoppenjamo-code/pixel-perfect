@@ -598,7 +598,7 @@ function DevolucionesPage() {
                   )
                 }
                 placeholder="Buscar folio..."
-                className="h-11 pl-9"
+                className="h-11 rounded-xl border-[#e0e0e0] bg-[#fafafa] pl-9"
               />
             </div>
           </div>
@@ -624,35 +624,36 @@ function DevolucionesPage() {
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="font-mono text-sm font-bold">
+                    <p className="font-mono text-[15px] font-bold text-[#212121]">
                       #{sale.folio}
                     </p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
+                    <p className="mt-0.5 text-xs text-[#757575]">
                       {new Date(sale.created_at).toLocaleString("es-MX")}
                     </p>
                   </div>
                   {statusBadge(sale.status)}
                 </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3 text-sm">
+                <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-[#f5f5f5] p-2.5 text-sm">
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-muted-foreground">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
                       Total
                     </p>
-                    <p className="font-semibold">
+                    <p className="mt-0.5 font-bold text-[#212121]">
                       {money(Number(sale.total))}
                     </p>
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase text-muted-foreground">
+                    <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
                       Pago
                     </p>
-                    <p>{paymentLabel(sale.payment_method)}</p>
+                    <p className="mt-0.5 text-[#424242]">
+                      {paymentLabel(sale.payment_method)}
+                    </p>
                   </div>
                 </div>
                 <Button
-                  className="mt-3 min-h-11 w-full touch-manipulation"
+                  className="mt-3 min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-white hover:bg-[#1557b0]"
                   size="sm"
-                  variant="outline"
                   disabled={!isManager}
                   onClick={() => openRefund(sale.id)}
                 >
