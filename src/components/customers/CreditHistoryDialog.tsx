@@ -120,33 +120,30 @@ export function CreditHistoryDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
-                Ventas a crédito
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-2.5 sm:p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-xs">
+                Crédito
               </p>
-
-              <p className="mt-1 font-semibold">
+              <p className="mt-1 text-sm font-bold text-[#c62828] sm:text-base">
                 {money(creditTotal)}
               </p>
             </div>
 
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
+            <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-2.5 sm:p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-xs">
                 Abonos
               </p>
-
-              <p className="mt-1 font-semibold">
+              <p className="mt-1 text-sm font-bold text-[#2e7d32] sm:text-base">
                 {money(paymentsTotal)}
               </p>
             </div>
 
-            <div className="rounded-lg border p-3">
-              <p className="text-xs text-muted-foreground">
-                Saldo actual
+            <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-2.5 sm:p-3">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-xs">
+                Saldo
               </p>
-
-              <p className="mt-1 font-semibold">
+              <p className="mt-1 text-sm font-bold text-[#212121] sm:text-base">
                 {money(balance)}
               </p>
             </div>
