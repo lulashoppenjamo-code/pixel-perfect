@@ -560,13 +560,26 @@ export function CashDrawerPanel({
             </div>
 
             <div className="min-w-0">
-              <p className="text-sm font-bold text-[#1a1d26] sm:text-base">
-                {sessionLoading
-                  ? "Consultando caja…"
-                  : session
-                    ? "Caja abierta"
-                    : "Caja cerrada"}
-              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-bold text-[#1a1d26] sm:text-base">
+                  {sessionLoading
+                    ? "Consultando caja…"
+                    : session
+                      ? "Caja abierta"
+                      : "Caja cerrada"}
+                </p>
+                {!sessionLoading && (
+                  <span
+                    className={
+                      session
+                        ? "rounded-full bg-[#e8f5e9] px-2.5 py-0.5 text-[11px] font-semibold text-[#2e7d32]"
+                        : "rounded-full bg-[#eeeeee] px-2.5 py-0.5 text-[11px] font-semibold text-[#757575]"
+                    }
+                  >
+                    {session ? "ABIERTA" : "CERRADA"}
+                  </span>
+                )}
+              </div>
 
               <p className="mt-0.5 break-words text-xs leading-5 text-[#9aa3b8]">
                 {session
@@ -801,7 +814,7 @@ export function CashDrawerPanel({
               </Button>
             </div>
 
-            <div className="mt-4 divide-y divide-[#eef1f8]">
+            <div className="mt-4 space-y-2">
               {(summary?.movements ?? [])
                 .length === 0 ? (
                 <p className="py-5 text-center text-sm text-[#9aa3b8]">
@@ -814,16 +827,32 @@ export function CashDrawerPanel({
                 ).map((movement) => (
                   <div
                     key={movement.id}
-                    className="flex min-w-0 items-center justify-between gap-3 py-3"
+                    className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[#f0f0f0] bg-[#fafafa] px-3 py-2.5"
                   >
                     <div className="min-w-0 flex-1">
-                      <p className="break-words text-sm font-medium leading-5 text-[#1a1d26]">
-                        {movement.reason ||
-                          (movement.type ===
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                            movement.type ===
+                              "deposit"
+                              ? "bg-[#e8f5e9] text-[#2e7d32]"
+                              : "bg-[#ffebee] text-[#c62828]",
+                          )}
+                        >
+                          {movement.type ===
                           "deposit"
-                            ? "Entrada de efectivo"
-                            : "Salida de efectivo")}
-                      </p>
+                            ? "Entrada"
+                            : "Salida"}
+                        </span>
+                        <p className="break-words text-sm font-medium leading-5 text-[#1a1d26]">
+                          {movement.reason ||
+                            (movement.type ===
+                            "deposit"
+                              ? "Entrada de efectivo"
+                              : "Salida de efectivo")}
+                        </p>
+                      </div>
 
                       <p className="mt-0.5 text-xs text-[#9aa3b8]">
                         {dateTime(
