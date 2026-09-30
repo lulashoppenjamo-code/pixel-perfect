@@ -53,10 +53,19 @@ import {
 } from "@/components/ui/select";
 
 import { Badge } from "@/components/ui/badge";
+
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+
 import {
   PageHeader,
   PageShell,
 } from "@/components/PageHeader";
+
 import { BluetoothPrinterSettings } from "@/components/settings/BluetoothPrinterSettings";
 import { TicketPrinterSettings } from "@/components/settings/TicketPrinterSettings";
 
@@ -569,7 +578,6 @@ function AjustesPage() {
       );
     };
 
-
   const submitInvite = async () => {
     if (!canManageUsers) {
       toast.error("No autorizado");
@@ -578,6 +586,7 @@ function AjustesPage() {
 
     const email = inviteForm.email.trim();
     const password = inviteForm.password;
+
     if (!email || password.length < 6) {
       toast.error(
         "Correo y contraseña (mín. 6) requeridos",
@@ -586,12 +595,15 @@ function AjustesPage() {
     }
 
     setInvitePending(true);
+
     try {
       const {
         data: sessionData,
       } = await supabase.auth.getSession();
+
       const token =
         sessionData.session?.access_token;
+
       if (!token) {
         throw new Error("Sesión no válida");
       }
@@ -608,8 +620,10 @@ function AjustesPage() {
           body: JSON.stringify({
             email,
             password,
-            full_name: inviteForm.full_name.trim(),
-            role: inviteForm.role,
+            full_name:
+              inviteForm.full_name.trim(),
+            role:
+              inviteForm.role,
             branch_id:
               inviteForm.branch_id || null,
           }),
@@ -617,14 +631,20 @@ function AjustesPage() {
       );
 
       const json = await res.json();
+
       if (!res.ok) {
         throw new Error(
-          json.error || "No se pudo crear el usuario",
+          json.error ||
+            "No se pudo crear el usuario",
         );
       }
 
-      toast.success("Colaborador creado");
+      toast.success(
+        "Colaborador creado",
+      );
+
       setInviteOpen(false);
+
       setInviteForm({
         full_name: "",
         email: "",
@@ -632,6 +652,7 @@ function AjustesPage() {
         role: "cashier",
         branch_id: "",
       });
+
       void qc.invalidateQueries({
         queryKey: ["admin-profiles"],
       });
@@ -710,14 +731,19 @@ function AjustesPage() {
                     <p className="text-[15px] font-bold text-[#212121]">
                       {item.name}
                     </p>
+
                     <p className="mt-0.5 text-xs text-[#757575]">
-                      {item.address ?? "Sin dirección"}
+                      {item.address ??
+                        "Sin dirección"}
                     </p>
+
                     <p className="mt-0.5 text-xs text-[#9e9e9e]">
-                      {item.phone ?? "Sin teléfono"}
+                      {item.phone ??
+                        "Sin teléfono"}
                     </p>
                   </div>
                 ))}
+
                 {!branches.length && (
                   <p className="py-8 text-center text-sm text-muted-foreground">
                     No hay sucursales registradas.
@@ -726,59 +752,59 @@ function AjustesPage() {
               </div>
 
               <div className="hidden overflow-x-auto lg:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>
-                      Nombre
-                    </TableHead>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>
+                        Nombre
+                      </TableHead>
 
-                    <TableHead>
-                      Dirección
-                    </TableHead>
+                      <TableHead>
+                        Dirección
+                      </TableHead>
 
-                    <TableHead>
-                      Teléfono
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
+                      <TableHead>
+                        Teléfono
+                      </TableHead>
+                    </TableRow>
+                  </TableHeader>
 
-                <TableBody>
-                  {branches.map(
-                    (item) => (
-                      <TableRow
-                        key={item.id}
-                      >
-                        <TableCell className="font-medium">
-                          {item.name}
-                        </TableCell>
+                  <TableBody>
+                    {branches.map(
+                      (item) => (
+                        <TableRow
+                          key={item.id}
+                        >
+                          <TableCell className="font-medium">
+                            {item.name}
+                          </TableCell>
 
-                        <TableCell>
-                          {item.address ??
-                            "—"}
-                        </TableCell>
+                          <TableCell>
+                            {item.address ??
+                              "—"}
+                          </TableCell>
 
-                        <TableCell>
-                          {item.phone ??
-                            "—"}
+                          <TableCell>
+                            {item.phone ??
+                              "—"}
+                          </TableCell>
+                        </TableRow>
+                      ),
+                    )}
+
+                    {!branches.length && (
+                      <TableRow>
+                        <TableCell
+                          colSpan={3}
+                          className="py-8 text-center text-muted-foreground"
+                        >
+                          No hay sucursales activas
+                          disponibles para tu usuario.
                         </TableCell>
                       </TableRow>
-                    ),
-                  )}
-
-                  {!branches.length && (
-                    <TableRow>
-                      <TableCell
-                        colSpan={3}
-                        className="py-8 text-center text-muted-foreground"
-                      >
-                        No hay sucursales activas
-                        disponibles para tu usuario.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                    )}
+                  </TableBody>
+                </Table>
               </div>
             </CardContent>
           </Card>
@@ -919,6 +945,7 @@ function AjustesPage() {
                         ? ""
                         : "s"}
                     </Badge>
+
                     {canManageUsers && (
                       <Button
                         size="sm"
@@ -941,101 +968,12 @@ function AjustesPage() {
                   </div>
                 ) : (
                   <>
-                  {/* Móvil */}
-                  <div className="grid gap-2.5 lg:hidden">
-                    {profiles.map((profile) => {
-                      const role = getUserRole(profile);
-                      const current = isCurrentUser(profile.id);
-                      return (
-                        <div
-                          key={profile.id}
-                          className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[15px] font-bold text-[#212121]">
-                                {profile.full_name?.trim() || "Sin nombre"}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-[#9e9e9e]">
-                                {current ? "Sesión actual" : profile.id.slice(0, 8) + "…"}
-                              </p>
-                            </div>
-                            {profile.is_active ? (
-                              <Badge className="shrink-0 gap-1 rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
-                                Activo
-                              </Badge>
-                            ) : (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 rounded-full border-transparent bg-[#eeeeee] text-[#757575]"
-                              >
-                                Inactivo
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-[#f5f5f5] p-2.5 text-xs">
-                            <div>
-                              <p className="text-[10px] font-medium uppercase text-[#757575]">
-                                Rol
-                              </p>
-                              <p className="mt-0.5 font-semibold capitalize text-[#212121]">
-                                {role}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-[10px] font-medium uppercase text-[#757575]">
-                                Sucursal
-                              </p>
-                              <p className="mt-0.5 font-semibold text-[#212121]">
-                                {getBranchName(profile.branch_id)}
-                              </p>
-                            </div>
-                          </div>
-                          <p className="mt-2 text-[11px] text-[#9e9e9e]">
-                            Usa la vista de escritorio para cambiar rol, sucursal o activación.
-                          </p>
-                        </div>
-                      );
-                    })}
-                    {!profiles.length && (
-                      <p className="py-8 text-center text-sm text-muted-foreground">
-                        No hay perfiles para mostrar.
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Desktop */}
-                  <div className="hidden overflow-x-auto lg:block">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>
-                          Usuario
-                        </TableHead>
-
-                        <TableHead>
-                          Rol
-                        </TableHead>
-
-                        <TableHead>
-                          Sucursal
-                        </TableHead>
-
-                        <TableHead>
-                          Estado
-                        </TableHead>
-
-                        <TableHead className="text-right">
-                          Acciones
-                        </TableHead>
-                      </TableRow>
-                    </TableHeader>
-
-                    <TableBody>
+                    {/* Móvil */}
+                    <div className="grid gap-2.5 lg:hidden">
                       {profiles.map(
                         (profile) => {
-                          const owner =
-                            isUserOwner(
+                          const role =
+                            getUserRole(
                               profile,
                             );
 
@@ -1044,249 +982,369 @@ function AjustesPage() {
                               profile.id,
                             );
 
-                          const role =
-                            getUserRole(
-                              profile,
-                            );
-
-                          const canModify =
-                            !current;
-
                           return (
-                            <TableRow
+                            <div
                               key={
                                 profile.id
                               }
+                              className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
                             >
-                              <TableCell>
-                                <div className="min-w-[180px]">
-                                  <p className="font-semibold">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-[15px] font-bold text-[#212121]">
                                     {profile.full_name?.trim() ||
                                       "Sin nombre"}
                                   </p>
 
-                                  <p className="mt-0.5 text-xs text-muted-foreground">
+                                  <p className="mt-0.5 text-[11px] text-[#9e9e9e]">
                                     {current
                                       ? "Sesión actual"
                                       : profile.id.slice(
                                           0,
                                           8,
                                         ) +
-                                        "..."}
+                                        "…"}
                                   </p>
                                 </div>
-                              </TableCell>
 
-                              <TableCell>
-                                <Select
-                                  value={
-                                    role
-                                  }
-                                  disabled={
-                                    !canModify ||
-                                    setUserAccess.isPending
-                                  }
-                                  onValueChange={(
-                                    value,
-                                  ) =>
-                                    setUserAccess.mutate(
-                                      {
-                                        userId:
-                                          profile.id,
-                                        role:
-                                          value as AppRole,
-                                        bid:
-                                          profile.branch_id,
-                                        active:
-                                          profile.is_active,
-                                      },
-                                    )
-                                  }
-                                >
-                                  <SelectTrigger className="w-36">
-                                    <SelectValue />
-                                  </SelectTrigger>
-
-                                  <SelectContent>
-                                    {ROLES.map(
-                                      (
-                                        item,
-                                      ) => (
-                                        <SelectItem
-                                          key={
-                                            item
-                                          }
-                                          value={
-                                            item
-                                          }
-                                        >
-                                          {item}
-                                        </SelectItem>
-                                      ),
-                                    )}
-                                  </SelectContent>
-                                </Select>
-
-                                {owner && (
-                                  <p className="mt-1 text-[11px] font-medium text-amber-600">
-                                    Owner protegido
-                                  </p>
-                                )}
-                              </TableCell>
-
-                              <TableCell>
-                                <Select
-                                  value={
-                                    profile.branch_id ??
-                                    "none"
-                                  }
-                                  disabled={
-                                    !canModify ||
-                                    setUserAccess.isPending
-                                  }
-                                  onValueChange={(
-                                    value,
-                                  ) =>
-                                    setUserAccess.mutate(
-                                      {
-                                        userId:
-                                          profile.id,
-                                        role,
-                                        bid:
-                                          value ===
-                                          "none"
-                                            ? null
-                                            : value,
-                                        active:
-                                          profile.is_active,
-                                      },
-                                    )
-                                  }
-                                >
-                                  <SelectTrigger className="w-48">
-                                    <SelectValue placeholder="Sin asignar" />
-                                  </SelectTrigger>
-
-                                  <SelectContent>
-                                    <SelectItem value="none">
-                                      Sin asignar
-                                    </SelectItem>
-
-                                    {branches.map(
-                                      (
-                                        item,
-                                      ) => (
-                                        <SelectItem
-                                          key={
-                                            item.id
-                                          }
-                                          value={
-                                            item.id
-                                          }
-                                        >
-                                          {
-                                            item.name
-                                          }
-                                        </SelectItem>
-                                      ),
-                                    )}
-                                  </SelectContent>
-                                </Select>
-
-                                <p className="mt-1 text-[11px] text-muted-foreground">
-                                  {getBranchName(
-                                    profile.branch_id,
-                                  )}
-                                </p>
-                              </TableCell>
-
-                              <TableCell>
                                 {profile.is_active ? (
-                                  <Badge className="gap-1 rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
-                                    <CheckCircle2 className="h-3 w-3" />
+                                  <Badge className="shrink-0 gap-1 rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
                                     Activo
                                   </Badge>
                                 ) : (
                                   <Badge
                                     variant="secondary"
-                                    className="gap-1"
+                                    className="shrink-0 rounded-full border-transparent bg-[#eeeeee] text-[#757575]"
                                   >
-                                    <UserX className="h-3 w-3" />
-                                    Pendiente
+                                    Inactivo
                                   </Badge>
                                 )}
-                              </TableCell>
+                              </div>
 
-                              <TableCell className="text-right">
-                                {current ? (
-                                  <Badge
-                                    variant="outline"
-                                  >
-                                    Sesión actual
-                                  </Badge>
-                                ) : owner ? (
-                                  <Badge
-                                    variant="outline"
-                                  >
-                                    Owner
-                                  </Badge>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant={
-                                      profile.is_active
-                                        ? "outline"
-                                        : "default"
-                                    }
-                                    disabled={
-                                      setUserAccess.isPending
-                                    }
-                                    onClick={() =>
-                                      setUserAccess.mutate(
-                                        {
-                                          userId:
-                                            profile.id,
-                                          role,
-                                          bid:
-                                            profile.branch_id,
-                                          active:
-                                            !profile.is_active,
-                                        },
-                                      )
-                                    }
-                                  >
-                                    {profile.is_active ? (
-                                      <>
-                                        <UserX className="mr-1.5 h-4 w-4" />
-                                        Desactivar
-                                      </>
-                                    ) : (
-                                      <>
-                                        <UserCheck className="mr-1.5 h-4 w-4" />
-                                        Activar
-                                      </>
+                              <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-[#f5f5f5] p-2.5 text-xs">
+                                <div>
+                                  <p className="text-[10px] font-medium uppercase text-[#757575]">
+                                    Rol
+                                  </p>
+
+                                  <p className="mt-0.5 font-semibold capitalize text-[#212121]">
+                                    {role}
+                                  </p>
+                                </div>
+
+                                <div>
+                                  <p className="text-[10px] font-medium uppercase text-[#757575]">
+                                    Sucursal
+                                  </p>
+
+                                  <p className="mt-0.5 font-semibold text-[#212121]">
+                                    {getBranchName(
+                                      profile.branch_id,
                                     )}
-                                  </Button>
-                                )}
-                              </TableCell>
-                            </TableRow>
+                                  </p>
+                                </div>
+                              </div>
+
+                              <p className="mt-2 text-[11px] text-[#9e9e9e]">
+                                Usa la vista de escritorio para cambiar rol, sucursal o activación.
+                              </p>
+                            </div>
                           );
                         },
                       )}
 
                       {!profiles.length && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={5}
-                            className="py-10 text-center text-sm text-muted-foreground"
-                          >
-                            No hay perfiles para mostrar.
-                          </TableCell>
-                        </TableRow>
+                        <p className="py-8 text-center text-sm text-muted-foreground">
+                          No hay perfiles para mostrar.
+                        </p>
                       )}
-                    </TableBody>
-                  </Table>
-                  </div>
+                    </div>
+
+                    {/* Desktop */}
+                    <div className="hidden overflow-x-auto lg:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>
+                              Usuario
+                            </TableHead>
+
+                            <TableHead>
+                              Rol
+                            </TableHead>
+
+                            <TableHead>
+                              Sucursal
+                            </TableHead>
+
+                            <TableHead>
+                              Estado
+                            </TableHead>
+
+                            <TableHead className="text-right">
+                              Acciones
+                            </TableHead>
+                          </TableRow>
+                        </TableHeader>
+
+                        <TableBody>
+                          {profiles.map(
+                            (profile) => {
+                              const owner =
+                                isUserOwner(
+                                  profile,
+                                );
+
+                              const current =
+                                isCurrentUser(
+                                  profile.id,
+                                );
+
+                              const role =
+                                getUserRole(
+                                  profile,
+                                );
+
+                              const canModify =
+                                !current;
+
+                              return (
+                                <TableRow
+                                  key={
+                                    profile.id
+                                  }
+                                >
+                                  <TableCell>
+                                    <div className="min-w-[180px]">
+                                      <p className="font-semibold">
+                                        {profile.full_name?.trim() ||
+                                          "Sin nombre"}
+                                      </p>
+
+                                      <p className="mt-0.5 text-xs text-muted-foreground">
+                                        {current
+                                          ? "Sesión actual"
+                                          : profile.id.slice(
+                                              0,
+                                              8,
+                                            ) +
+                                            "..."}
+                                      </p>
+                                    </div>
+                                  </TableCell>
+
+                                  <TableCell>
+                                    <Select
+                                      value={
+                                        role
+                                      }
+                                      disabled={
+                                        !canModify ||
+                                        setUserAccess.isPending
+                                      }
+                                      onValueChange={(
+                                        value,
+                                      ) =>
+                                        setUserAccess.mutate(
+                                          {
+                                            userId:
+                                              profile.id,
+                                            role:
+                                              value as AppRole,
+                                            bid:
+                                              profile.branch_id,
+                                            active:
+                                              profile.is_active,
+                                          },
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="w-36">
+                                        <SelectValue />
+                                      </SelectTrigger>
+
+                                      <SelectContent>
+                                        {ROLES.map(
+                                          (
+                                            item,
+                                          ) => (
+                                            <SelectItem
+                                              key={
+                                                item
+                                              }
+                                              value={
+                                                item
+                                              }
+                                            >
+                                              {
+                                                item
+                                              }
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+
+                                    {owner && (
+                                      <p className="mt-1 text-[11px] font-medium text-amber-600">
+                                        Owner protegido
+                                      </p>
+                                    )}
+                                  </TableCell>
+
+                                  <TableCell>
+                                    <Select
+                                      value={
+                                        profile.branch_id ??
+                                        "none"
+                                      }
+                                      disabled={
+                                        !canModify ||
+                                        setUserAccess.isPending
+                                      }
+                                      onValueChange={(
+                                        value,
+                                      ) =>
+                                        setUserAccess.mutate(
+                                          {
+                                            userId:
+                                              profile.id,
+                                            role,
+                                            bid:
+                                              value ===
+                                              "none"
+                                                ? null
+                                                : value,
+                                            active:
+                                              profile.is_active,
+                                          },
+                                        )
+                                      }
+                                    >
+                                      <SelectTrigger className="w-48">
+                                        <SelectValue placeholder="Sin asignar" />
+                                      </SelectTrigger>
+
+                                      <SelectContent>
+                                        <SelectItem value="none">
+                                          Sin asignar
+                                        </SelectItem>
+
+                                        {branches.map(
+                                          (
+                                            item,
+                                          ) => (
+                                            <SelectItem
+                                              key={
+                                                item.id
+                                              }
+                                              value={
+                                                item.id
+                                              }
+                                            >
+                                              {
+                                                item.name
+                                              }
+                                            </SelectItem>
+                                          ),
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+
+                                    <p className="mt-1 text-[11px] text-muted-foreground">
+                                      {getBranchName(
+                                        profile.branch_id,
+                                      )}
+                                    </p>
+                                  </TableCell>
+
+                                  <TableCell>
+                                    {profile.is_active ? (
+                                      <Badge className="gap-1 rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
+                                        <CheckCircle2 className="h-3 w-3" />
+                                        Activo
+                                      </Badge>
+                                    ) : (
+                                      <Badge
+                                        variant="secondary"
+                                        className="gap-1"
+                                      >
+                                        <UserX className="h-3 w-3" />
+                                        Pendiente
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+
+                                  <TableCell className="text-right">
+                                    {current ? (
+                                      <Badge
+                                        variant="outline"
+                                      >
+                                        Sesión actual
+                                      </Badge>
+                                    ) : owner ? (
+                                      <Badge
+                                        variant="outline"
+                                      >
+                                        Owner
+                                      </Badge>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant={
+                                          profile.is_active
+                                            ? "outline"
+                                            : "default"
+                                        }
+                                        disabled={
+                                          setUserAccess.isPending
+                                        }
+                                        onClick={() =>
+                                          setUserAccess.mutate(
+                                            {
+                                              userId:
+                                                profile.id,
+                                              role,
+                                              bid:
+                                                profile.branch_id,
+                                              active:
+                                                !profile.is_active,
+                                            },
+                                          )
+                                        }
+                                      >
+                                        {profile.is_active ? (
+                                          <>
+                                            <UserX className="mr-1.5 h-4 w-4" />
+                                            Desactivar
+                                          </>
+                                        ) : (
+                                          <>
+                                            <UserCheck className="mr-1.5 h-4 w-4" />
+                                            Activar
+                                          </>
+                                        )}
+                                      </Button>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            },
+                          )}
+
+                          {!profiles.length && (
+                            <TableRow>
+                              <TableCell
+                                colSpan={5}
+                                className="py-10 text-center text-sm text-muted-foreground"
+                              >
+                                No hay perfiles para mostrar.
+                              </TableCell>
+                            </TableRow>
+                          )}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </>
                 )}
               </CardContent>
@@ -1308,164 +1366,164 @@ function AjustesPage() {
             <TicketPrinterSettings />
 
             <div className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-[1fr_340px]">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Configuración de la sucursal
-                </CardTitle>
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    Configuración de la sucursal
+                  </CardTitle>
 
-                <p className="text-sm text-muted-foreground">
-                  Estas configuraciones aplican a la
-                  sucursal activa.
-                </p>
-              </CardHeader>
+                  <p className="text-sm text-muted-foreground">
+                    Estas configuraciones aplican a la
+                    sucursal activa.
+                  </p>
+                </CardHeader>
 
-              <CardContent className="max-w-full overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>
-                        Clave
-                      </TableHead>
+                <CardContent className="max-w-full overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>
+                          Clave
+                        </TableHead>
 
-                      <TableHead>
-                        Valor
-                      </TableHead>
+                        <TableHead>
+                          Valor
+                        </TableHead>
 
-                      <TableHead>
-                        Alcance
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
+                        <TableHead>
+                          Alcance
+                        </TableHead>
+                      </TableRow>
+                    </TableHeader>
 
-                  <TableBody>
-                    {settings.map(
-                      (item) => (
-                        <TableRow
-                          key={
-                            item.id
-                          }
-                        >
-                          <TableCell className="font-medium">
-                            {item.key}
-                          </TableCell>
+                    <TableBody>
+                      {settings.map(
+                        (item) => (
+                          <TableRow
+                            key={
+                              item.id
+                            }
+                          >
+                            <TableCell className="font-medium">
+                              {item.key}
+                            </TableCell>
 
-                          <TableCell className="max-w-[320px] truncate">
-                            {JSON.stringify(
-                              item.value,
-                            )}
-                          </TableCell>
+                            <TableCell className="max-w-[320px] truncate">
+                              {JSON.stringify(
+                                item.value,
+                              )}
+                            </TableCell>
 
-                          <TableCell>
-                            {item.branch_id
-                              ? getBranchName(
-                                  item.branch_id,
-                                )
-                              : "Global"}
+                            <TableCell>
+                              {item.branch_id
+                                ? getBranchName(
+                                    item.branch_id,
+                                  )
+                                : "Global"}
+                            </TableCell>
+                          </TableRow>
+                        ),
+                      )}
+
+                      {!settings.length && (
+                        <TableRow>
+                          <TableCell
+                            colSpan={3}
+                            className="py-10 text-center text-sm text-muted-foreground"
+                          >
+                            No hay configuraciones
+                            guardadas para esta
+                            sucursal.
                           </TableCell>
                         </TableRow>
-                      ),
-                    )}
+                      )}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
 
-                    {!settings.length && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={3}
-                          className="py-10 text-center text-sm text-muted-foreground"
-                        >
-                          No hay configuraciones
-                          guardadas para esta
-                          sucursal.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+              <Card className="h-fit">
+                <CardHeader>
+                  <CardTitle>
+                    Nuevo ajuste
+                  </CardTitle>
+                </CardHeader>
 
-            <Card className="h-fit">
-              <CardHeader>
-                <CardTitle>
-                  Nuevo ajuste
-                </CardTitle>
-              </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>
+                      Clave
+                    </Label>
 
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label>
-                    Clave
-                  </Label>
+                    <Input
+                      value={
+                        setting.key
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setSetting({
+                          ...setting,
+                          key:
+                            event.target
+                              .value,
+                        })
+                      }
+                      placeholder="company_name"
+                    />
+                  </div>
 
-                  <Input
-                    value={
-                      setting.key
+                  <div className="space-y-2">
+                    <Label>
+                      Valor
+                    </Label>
+
+                    <Input
+                      value={
+                        setting.value
+                      }
+                      onChange={(
+                        event,
+                      ) =>
+                        setSetting({
+                          ...setting,
+                          value:
+                            event.target
+                              .value,
+                        })
+                      }
+                      placeholder="Lula Shop"
+                    />
+
+                    <p className="text-xs text-muted-foreground">
+                      Puedes introducir texto, números,
+                      booleanos o JSON.
+                    </p>
+                  </div>
+
+                  <Button
+                    className="w-full"
+                    disabled={
+                      !isManager ||
+                      !branchId ||
+                      !setting.key.trim() ||
+                      saveSetting.isPending
                     }
-                    onChange={(
-                      event,
-                    ) =>
-                      setSetting({
-                        ...setting,
-                        key:
-                          event.target
-                            .value,
-                      })
+                    onClick={() =>
+                      saveSetting.mutate()
                     }
-                    placeholder="company_name"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>
-                    Valor
-                  </Label>
-
-                  <Input
-                    value={
-                      setting.value
-                    }
-                    onChange={(
-                      event,
-                    ) =>
-                      setSetting({
-                        ...setting,
-                        value:
-                          event.target
-                            .value,
-                      })
-                    }
-                    placeholder='Lula Shop'
-                  />
-
-                  <p className="text-xs text-muted-foreground">
-                    Puedes introducir texto, números,
-                    booleanos o JSON.
-                  </p>
-                </div>
-
-                <Button
-                  className="w-full"
-                  disabled={
-                    !isManager ||
-                    !branchId ||
-                    !setting.key.trim() ||
-                    saveSetting.isPending
-                  }
-                  onClick={() =>
-                    saveSetting.mutate()
-                  }
-                >
-                  {saveSetting.isPending
-                    ? "Guardando..."
-                    : "Guardar configuración"}
-                </Button>
-              </CardContent>
-            </Card>
+                  >
+                    {saveSetting.isPending
+                      ? "Guardando..."
+                      : "Guardar configuración"}
+                  </Button>
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         )}
       </Tabs>
-    
+
       <Dialog
         open={inviteOpen}
         onOpenChange={setInviteOpen}
@@ -1476,115 +1534,175 @@ function AjustesPage() {
               Invitar colaborador
             </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Nombre</Label>
+              <Label>
+                Nombre
+              </Label>
+
               <Input
                 className="h-11"
-                value={inviteForm.full_name}
+                value={
+                  inviteForm.full_name
+                }
                 onChange={(e) =>
-                  setInviteForm((f) => ({
-                    ...f,
-                    full_name: e.target.value,
-                  }))
+                  setInviteForm(
+                    (f) => ({
+                      ...f,
+                      full_name:
+                        e.target.value,
+                    }),
+                  )
                 }
                 placeholder="Nombre completo"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label>Correo</Label>
+              <Label>
+                Correo
+              </Label>
+
               <Input
                 className="h-11"
                 type="email"
-                value={inviteForm.email}
+                value={
+                  inviteForm.email
+                }
                 onChange={(e) =>
-                  setInviteForm((f) => ({
-                    ...f,
-                    email: e.target.value,
-                  }))
+                  setInviteForm(
+                    (f) => ({
+                      ...f,
+                      email:
+                        e.target.value,
+                    }),
+                  )
                 }
                 placeholder="correo@ejemplo.com"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label>Contraseña temporal</Label>
+              <Label>
+                Contraseña temporal
+              </Label>
+
               <Input
                 className="h-11"
                 type="password"
-                value={inviteForm.password}
+                value={
+                  inviteForm.password
+                }
                 onChange={(e) =>
-                  setInviteForm((f) => ({
-                    ...f,
-                    password: e.target.value,
-                  }))
+                  setInviteForm(
+                    (f) => ({
+                      ...f,
+                      password:
+                        e.target.value,
+                    }),
+                  )
                 }
                 placeholder="Mínimo 6 caracteres"
               />
             </div>
+
             <div className="space-y-1.5">
-              <Label>Rol</Label>
+              <Label>
+                Rol
+              </Label>
+
               <Select
-                value={inviteForm.role}
-                onValueChange={(value) =>
-                  setInviteForm((f) => ({
-                    ...f,
-                    role: value as AppRole,
-                  }))
+                value={
+                  inviteForm.role
+                }
+                onValueChange={(
+                  value,
+                ) =>
+                  setInviteForm(
+                    (f) => ({
+                      ...f,
+                      role:
+                        value as AppRole,
+                    }),
+                  )
                 }
               >
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
-                  {ROLES.map((role) => (
-                    <SelectItem
-                      key={role}
-                      value={role}
-                    >
-                      {role}
-                    </SelectItem>
-                  ))}
+                  {ROLES.map(
+                    (role) => (
+                      <SelectItem
+                        key={role}
+                        value={role}
+                      >
+                        {role}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-1.5">
-              <Label>Sucursal</Label>
+              <Label>
+                Sucursal
+              </Label>
+
               <Select
                 value={
-                  inviteForm.branch_id || "none"
+                  inviteForm.branch_id ||
+                  "none"
                 }
-                onValueChange={(value) =>
-                  setInviteForm((f) => ({
-                    ...f,
-                    branch_id:
-                      value === "none"
-                        ? ""
-                        : value,
-                  }))
+                onValueChange={(
+                  value,
+                ) =>
+                  setInviteForm(
+                    (f) => ({
+                      ...f,
+                      branch_id:
+                        value ===
+                        "none"
+                          ? ""
+                          : value,
+                    }),
+                  )
                 }
               >
                 <SelectTrigger className="h-11">
                   <SelectValue placeholder="Sucursal" />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="none">
                     Sin asignar
                   </SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem
-                      key={b.id}
-                      value={b.id}
-                    >
-                      {b.name}
-                    </SelectItem>
-                  ))}
+
+                  {branches.map(
+                    (b) => (
+                      <SelectItem
+                        key={b.id}
+                        value={b.id}
+                      >
+                        {b.name}
+                      </SelectItem>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             </div>
+
             <Button
               className="min-h-11 w-full rounded-xl bg-[#43a047] font-semibold"
-              disabled={invitePending}
-              onClick={() => void submitInvite()}
+              disabled={
+                invitePending
+              }
+              onClick={() =>
+                void submitInvite()
+              }
             >
               {invitePending
                 ? "Creando…"
@@ -1593,7 +1711,6 @@ function AjustesPage() {
           </div>
         </DialogContent>
       </Dialog>
-
     </PageShell>
   );
 }
