@@ -618,12 +618,24 @@ function PedidosPage() {
    */
 
   const statusBadge = (status: string) => {
+    const color =
+      status === "cancelled"
+        ? "border-transparent bg-[#ffebee] text-[#c62828]"
+        : status === "delivered"
+          ? "border-transparent bg-[#e8f5e9] text-[#2e7d32]"
+          : status === "ready"
+            ? "border-transparent bg-[#e3f2fd] text-[#1565c0]"
+            : status === "pending"
+              ? "border-transparent bg-[#fff8e1] text-[#f57f17]"
+              : "border-transparent bg-[#f5f5f5] text-[#616161]";
+
     return (
       <Badge
         variant={
           STATUS_VARIANT[status] ??
           "outline"
         }
+        className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${color}`}
       >
         {STATUS_LABEL[status] ?? status}
       </Badge>
@@ -689,24 +701,24 @@ function PedidosPage() {
         }
       />
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal sm:text-muted-foreground">
               Pedidos activos
             </p>
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#1a73e8] sm:text-2xl">
               {pendingOrders}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal sm:text-muted-foreground">
               Valor reservado
             </p>
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
               {money(reservedValue)}
             </p>
           </CardContent>
@@ -733,6 +745,53 @@ function PedidosPage() {
 
         <CardContent className="px-3 sm:px-6">
           <div className="overflow-x-auto">
+          {/* Móvil */}
+          <div className="grid gap-2.5 lg:hidden">
+            {loadingOrders ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Cargando pedidos...
+              </p>
+            ) : orders.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                Aún no hay pedidos online.
+              </p>
+            ) : (
+              orders.map((order) => (
+                <div
+                  key={order.id}
+                  className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[15px] font-bold text-[#212121]">
+                        {order.customer_name ?? "Cliente online"}
+                      </p>
+                      <p className="mt-0.5 text-xs text-[#757575]">
+                        {shortDate(order.created_at)}
+                        {order.customer_phone
+                          ? ` · ${order.customer_phone}`
+                          : ""}
+                      </p>
+                      {order.delivery_address ? (
+                        <p className="mt-0.5 truncate text-[11px] text-[#9e9e9e]">
+                          {order.delivery_address}
+                        </p>
+                      ) : null}
+                    </div>
+                    {statusBadge(order.status)}
+                  </div>
+                  <div className="mt-2 flex items-center justify-between border-t border-[#eeeeee] pt-2">
+                    <span className="text-base font-bold text-[#1a73e8]">
+                      {money(Number(order.total))}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Desktop */}
+          <div className="hidden overflow-x-auto lg:block">
           <Table>
             <TableHeader>
               <TableRow>
