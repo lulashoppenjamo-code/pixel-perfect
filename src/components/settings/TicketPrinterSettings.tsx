@@ -261,10 +261,8 @@ export function TicketPrinterSettings() {
 
     setPrinting(true);
     try {
-      const copies = Math.max(1, form.layout.copies || 1);
-      for (let i = 0; i < copies; i += 1) {
-        await printTicketBluetooth(previewTicket, form.layout);
-      }
+      // copies se aplica una sola vez dentro de printTicketBluetooth
+      await printTicketBluetooth(previewTicket, form.layout);
       toast.success("Ticket de prueba enviado a la impresora.");
     } catch (error) {
       console.error("Ticket test print:", error);
