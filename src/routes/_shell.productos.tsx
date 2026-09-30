@@ -94,6 +94,7 @@ type ProductForm = {
   cost: string;
   tax_rate: string;
   emoji: string;
+  image_url: string;
 };
 
 const emptyProduct: ProductForm = {
@@ -106,6 +107,7 @@ const emptyProduct: ProductForm = {
   cost: "0",
   tax_rate: "0.16",
   emoji: "📦",
+  image_url: "",
 };
 
 type ProductRow = {
@@ -119,6 +121,7 @@ type ProductRow = {
   cost: number;
   tax_rate: number;
   emoji: string | null;
+  image_url: string | null;
   is_active: boolean;
   categories:
     | {
@@ -128,7 +131,11 @@ type ProductRow = {
 };
 
 function ProductosPage() {
-  const { isManager } = useAuth();
+  const { isManager, can } = useAuth();
+  const canCreate = can("productos.create");
+  const canEdit = can("productos.edit");
+  const canDelete = can("productos.delete");
+  const canPrice = can("productos.price");
   const qc = useQueryClient();
 
   const [form, setForm] = useState<ProductForm>(emptyProduct);
@@ -318,6 +325,7 @@ function ProductosPage() {
         cost: Number(form.cost) || 0,
         tax_rate: Number(form.tax_rate) || 0,
         emoji: form.emoji || "📦",
+        image_url: form.image_url.trim() || null,
         is_active: true,
       };
 
@@ -478,6 +486,7 @@ function ProductosPage() {
       cost: String(p.cost ?? 0),
       tax_rate: String(p.tax_rate ?? 0),
       emoji: p.emoji ?? "📦",
+      image_url: p.image_url ?? "",
     });
   };
 
@@ -752,7 +761,7 @@ function ProductosPage() {
 
                     {/* ELIMINAR */}
 
-                    {isManager &&
+                    {canDelete &&
                       p.is_active && (
                         <button
                           type="button"
@@ -918,6 +927,98 @@ function ProductosPage() {
                     placeholder="Nombre del producto"
                     className="h-11 rounded-xl border-[#e0e0e0]"
                   />
+                </div>
+              </div>
+
+              {/* Imagen */}
+              <div className="space-y-2">
+                <Label className="text-xs text-[#757575]">
+                  Imagen del producto
+                </Label>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] text-2xl">
+                    {form.image_url ? (
+                      <img
+                        src={form.image_url}
+                        alt=""
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <span>{form.emoji || "📦"}</span>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="h-11 cursor-pointer rounded-xl border-[#e0e0e0] text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-[#e8f0fe] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#1a73e8]"
+                      disabled={
+                        !(canCreate || canEdit) ||
+                        saveProduct.isPending
+                      }
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        if (file.size > 5 * 1024 * 1024) {
+                          toast.error(
+                            "La imagen no debe superar 5 MB",
+                          );
+                          return;
+                        }
+                        try {
+                          const ext =
+                            file.name
+                              .split(".")
+                              .pop()
+                              ?.toLowerCase() || "jpg";
+                          const path = `${crypto.randomUUID()}.${ext}`;
+                          const { error: upErr } =
+                            await supabase.storage
+                              .from("product-images")
+                              .upload(path, file, {
+                                upsert: true,
+                                contentType:
+                                  file.type || "image/jpeg",
+                              });
+                          if (upErr) throw upErr;
+                          const { data: pub } =
+                            supabase.storage
+                              .from("product-images")
+                              .getPublicUrl(path);
+                          setForm((f) => ({
+                            ...f,
+                            image_url: pub.publicUrl,
+                          }));
+                          toast.success("Imagen cargada");
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "No se pudo subir la imagen",
+                          );
+                        } finally {
+                          event.target.value = "";
+                        }
+                      }}
+                    />
+                    {form.image_url ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-lg"
+                        onClick={() =>
+                          setForm((f) => ({
+                            ...f,
+                            image_url: "",
+                          }))
+                        }
+                      >
+                        Quitar imagen
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
               </div>
 
@@ -1120,8 +1221,10 @@ function ProductosPage() {
                 <Button
                   className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0] sm:flex-1"
                   disabled={
-                    !isManager ||
-                    saveProduct.isPending
+                    saveProduct.isPending ||
+                    (form.id
+                      ? !(canEdit || canPrice)
+                      : !canCreate)
                   }
                   onClick={() =>
                     saveProduct.mutate()
