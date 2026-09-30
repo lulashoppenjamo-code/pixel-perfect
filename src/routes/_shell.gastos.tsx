@@ -159,7 +159,10 @@ function isMissingTableError(error: {
 }
 
 function GastosPage() {
-  const { user, isManager } = useAuth();
+  const { user, isManager, can } = useAuth();
+  const canCreateExpense = can("gastos.create");
+  const canEditExpense = can("gastos.edit");
+  const canDeleteExpense = can("gastos.delete");
   const { branchId } = useBranch();
   const qc = useQueryClient();
 
@@ -489,9 +492,9 @@ function GastosPage() {
 
   const remove = useMutation({
     mutationFn: async (expenseId: string) => {
-      if (!isManager) {
+      if (!canDeleteExpense) {
         throw new Error(
-          "Solo un gerente puede eliminar gastos",
+          "No tienes permiso para eliminar gastos",
         );
       }
 
@@ -870,7 +873,8 @@ function GastosPage() {
                   (form.payment_method ===
                     "cash" &&
                     !openCashSession &&
-                    !editingId)
+                    !editingId) ||
+                  (editingId ? !canEditExpense : !canCreateExpense)
                 }
                 onClick={handleSubmit}
               >
