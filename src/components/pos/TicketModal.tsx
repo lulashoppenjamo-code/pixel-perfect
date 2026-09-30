@@ -22,10 +22,13 @@ export type TicketLine = {
   unit_price: number;
   discount?: number;
   total: number;
+  sku?: string | null;
 };
 
 export type TicketData = {
   companyName?: string | undefined;
+  companyAddress?: string | undefined;
+  companyPhone?: string | undefined;
   branchName?: string | undefined;
   folio: number | string;
   date: string;
