@@ -562,19 +562,28 @@ function AjustesPage() {
         defaultValue="sucursales"
         className="space-y-4"
       >
-        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 p-1">
-          <TabsTrigger value="sucursales">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+          <TabsTrigger
+            value="sucursales"
+            className="min-h-10 rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+          >
             Sucursales
           </TabsTrigger>
 
           {isAdmin && (
-            <TabsTrigger value="usuarios">
+            <TabsTrigger
+              value="usuarios"
+              className="min-h-10 rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+            >
               Usuarios y roles
             </TabsTrigger>
           )}
 
           {isManager && (
-            <TabsTrigger value="general">
+            <TabsTrigger
+              value="general"
+              className="min-h-10 rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+            >
               General
             </TabsTrigger>
           )}
@@ -595,7 +604,32 @@ function AjustesPage() {
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="max-w-full overflow-x-auto">
+            <CardContent className="max-w-full overflow-x-auto px-3 sm:px-6">
+              <div className="grid gap-2.5 lg:hidden">
+                {branches.map((item) => (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                  >
+                    <p className="text-[15px] font-bold text-[#212121]">
+                      {item.name}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#757575]">
+                      {item.address ?? "Sin dirección"}
+                    </p>
+                    <p className="mt-0.5 text-xs text-[#9e9e9e]">
+                      {item.phone ?? "Sin teléfono"}
+                    </p>
+                  </div>
+                ))}
+                {!branches.length && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    No hay sucursales registradas.
+                  </p>
+                )}
+              </div>
+
+              <div className="hidden overflow-x-auto lg:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -649,6 +683,7 @@ function AjustesPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
             </CardContent>
           </Card>
 
@@ -741,7 +776,7 @@ function AjustesPage() {
               </div>
 
               <Button
-                className="min-h-11 w-full touch-manipulation"
+                className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-[15px] font-semibold hover:bg-[#1557b0]"
                 disabled={
                   !isAdmin ||
                   !branch.name.trim() ||
@@ -765,11 +800,11 @@ function AjustesPage() {
 
         {isAdmin && (
           <TabsContent value="usuarios">
-            <Card>
+            <Card className="border-[#e0e0e0] shadow-sm">
               <CardHeader>
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <CardTitle>
+                    <CardTitle className="text-base">
                       Usuarios y permisos
                     </CardTitle>
 
@@ -790,12 +825,78 @@ function AjustesPage() {
                 </div>
               </CardHeader>
 
-              <CardContent className="max-w-full overflow-x-auto">
+              <CardContent className="max-w-full overflow-x-auto px-3 sm:px-6">
                 {profilesLoading ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">
                     Cargando usuarios...
                   </div>
                 ) : (
+                  <>
+                  {/* Móvil */}
+                  <div className="grid gap-2.5 lg:hidden">
+                    {profiles.map((profile) => {
+                      const role = getUserRole(profile);
+                      const current = isCurrentUser(profile.id);
+                      return (
+                        <div
+                          key={profile.id}
+                          className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-[15px] font-bold text-[#212121]">
+                                {profile.full_name?.trim() || "Sin nombre"}
+                              </p>
+                              <p className="mt-0.5 text-[11px] text-[#9e9e9e]">
+                                {current ? "Sesión actual" : profile.id.slice(0, 8) + "…"}
+                              </p>
+                            </div>
+                            {profile.is_active ? (
+                              <Badge className="shrink-0 gap-1 rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
+                                Activo
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="secondary"
+                                className="shrink-0 rounded-full border-transparent bg-[#eeeeee] text-[#757575]"
+                              >
+                                Inactivo
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-[#f5f5f5] p-2.5 text-xs">
+                            <div>
+                              <p className="text-[10px] font-medium uppercase text-[#757575]">
+                                Rol
+                              </p>
+                              <p className="mt-0.5 font-semibold capitalize text-[#212121]">
+                                {role}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-medium uppercase text-[#757575]">
+                                Sucursal
+                              </p>
+                              <p className="mt-0.5 font-semibold text-[#212121]">
+                                {getBranchName(profile.branch_id)}
+                              </p>
+                            </div>
+                          </div>
+                          <p className="mt-2 text-[11px] text-[#9e9e9e]">
+                            Usa la vista de escritorio para cambiar rol, sucursal o activación.
+                          </p>
+                        </div>
+                      );
+                    })}
+                    {!profiles.length && (
+                      <p className="py-8 text-center text-sm text-muted-foreground">
+                        No hay perfiles para mostrar.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Desktop */}
+                  <div className="hidden overflow-x-auto lg:block">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -992,7 +1093,7 @@ function AjustesPage() {
 
                               <TableCell>
                                 {profile.is_active ? (
-                                  <Badge className="gap-1">
+                                  <Badge className="gap-1 rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
                                     <CheckCircle2 className="h-3 w-3" />
                                     Activo
                                   </Badge>
@@ -1076,6 +1177,8 @@ function AjustesPage() {
                       )}
                     </TableBody>
                   </Table>
+                  </div>
+                  </>
                 )}
               </CardContent>
             </Card>
