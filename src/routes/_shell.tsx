@@ -566,25 +566,19 @@ function ShellLayout() {
               type="button"
               onPointerDown={() => preloadRoute(item.path)}
               onClick={() => goTo(item.path)}
-              className={`flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium transition-colors ${
+              className={`flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold transition-colors ${
                 isActive
-                  ? "text-[#1a73e8]"
-                  : "text-[#757575]"
+                  ? "bg-[#1a73e8] text-white"
+                  : "bg-transparent text-[#5f6368]"
               }`}
             >
-              <div
-                className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                  isActive ? "bg-[#1a73e8]" : ""
+              <Icon
+                className={`h-[22px] w-[22px] ${
+                  isActive ? "text-white" : "text-[#5f6368]"
                 }`}
-              >
-                <Icon
-                  className={`h-4 w-4 ${
-                    isActive ? "text-white" : ""
-                  }`}
-                />
-              </div>
-
-              <span className="max-w-[64px] truncate leading-tight">
+                strokeWidth={isActive ? 2.25 : 1.75}
+              />
+              <span className="max-w-[72px] truncate leading-tight">
                 {item.label}
               </span>
             </button>
@@ -593,13 +587,11 @@ function ShellLayout() {
 
         {moreItems.length > 0 && (
           <button
+            type="button"
             onClick={() => setMoreOpen(true)}
-            className="flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-medium text-[#757575]"
+            className="flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
           >
-            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md">
-              <MoreHorizontal className="h-4 w-4" />
-            </div>
-
+            <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.75} />
             <span className="leading-tight">Más</span>
           </button>
         )}
