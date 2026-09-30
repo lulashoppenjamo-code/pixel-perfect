@@ -1,5 +1,4 @@
 import {
-  useEffect,
   type ReactNode,
 } from "react";
 
@@ -56,6 +55,7 @@ export function RequireNavAccess({
     user,
     profile,
     roles,
+    permissions,
     loading,
   } = useAuth();
 
@@ -63,9 +63,8 @@ export function RequireNavAccess({
     useNavigate();
 
   /**
-   * Mientras AuthProvider termina de recuperar
-   * sesión, perfil y roles no mostramos una
-   * pantalla de "sin acceso".
+   * Mientras se recupera la sesión,
+   * perfil, roles y permisos.
    */
   if (loading) {
     return (
@@ -151,24 +150,39 @@ export function RequireNavAccess({
   }
 
   /**
-   * Acceso permitido.
+   * IMPORTANTE:
+   *
+   * permissions === null significa que todavía no
+   * se pudo obtener el sistema granular.
+   *
+   * En ese caso usamos el sistema anterior por rol
+   * para no provocar una caída de acceso.
+   *
+   * Cuando Supabase devuelve permisos correctamente,
+   * esos permisos tienen prioridad.
    */
-  if (
+  const hasAccess =
     roles.length > 0 &&
     canAccess(
       roles,
       navKey,
-    )
-  ) {
+      permissions ?? undefined,
+    );
+
+  if (hasAccess) {
     return <>{children}</>;
   }
 
+  /**
+   * Buscar una sección alternativa disponible.
+   */
   const fallback =
     FALLBACK_ROUTES.find(
       (route) =>
         canAccess(
           roles,
           route.key,
+          permissions ?? undefined,
         ),
     ) ?? null;
 
@@ -207,7 +221,7 @@ export function RequireNavAccess({
 
           <p className="mt-1">
             Tu cuenta está activa, pero no se
-            detectó ningún rol.
+            detectó ningún permiso disponible.
           </p>
 
           <p className="mt-2 text-xs opacity-80">
