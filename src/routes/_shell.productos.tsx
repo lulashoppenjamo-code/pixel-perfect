@@ -135,6 +135,8 @@ function ProductosPage() {
   const [catName, setCatName] = useState("");
   const [catParent, setCatParent] = useState("none");
   const [search, setSearch] = useState("");
+  /** Filtro visual de stock (client-side sobre stockMap compartido). */
+  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
 
   /*
    * ============================================================
@@ -266,16 +268,30 @@ function ProductosPage() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
-    if (!q) return products;
-
     return products.filter((p) => {
-      return (
-        p.name.toLowerCase().includes(q) ||
-        (p.sku ?? "").toLowerCase().includes(q) ||
-        (p.barcode ?? "").toLowerCase().includes(q)
+      if (q) {
+        const match =
+          p.name.toLowerCase().includes(q) ||
+          (p.sku ?? "").toLowerCase().includes(q) ||
+          (p.barcode ?? "").toLowerCase().includes(q);
+        if (!match) return false;
+      }
+
+      if (stockFilter === "all") return true;
+
+      const stock = stockMap.get(p.id);
+      const available = Number(stock?.availableStock ?? 0);
+      const isLow = sharedInventory.some(
+        (row) =>
+          row.product_id === p.id &&
+          row.stock_status === "low_stock",
       );
+
+      if (stockFilter === "out") return available <= 0;
+      if (stockFilter === "low") return isLow && available > 0;
+      return true;
     });
-  }, [products, search]);
+  }, [products, search, stockFilter, stockMap, sharedInventory]);
 
   /*
    * ============================================================
@@ -626,6 +642,29 @@ function ProductosPage() {
             </Button>
           </div>
 
+          <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+            {(
+              [
+                ["all", "Todos"],
+                ["low", "Inventario bajo"],
+                ["out", "Agotado"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStockFilter(key)}
+                className={
+                  stockFilter === key
+                    ? "shrink-0 rounded-full bg-[#7e57c2] px-3.5 py-1.5 text-[12px] font-semibold text-white"
+                    : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           {loading && (
             <div className="rounded-xl border p-10 text-center text-sm text-muted-foreground">
               Cargando...
@@ -651,7 +690,7 @@ function ProductosPage() {
           )}
 
           {!loading && filtered.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-2 sm:gap-2.5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-2 gap-2 xs:grid-cols-3 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
 
@@ -750,6 +789,19 @@ function ProductosPage() {
                         {money(
                           Number(p.price),
                         )}
+                        {Number(p.cost) > 0 &&
+                        Number(p.price) > 0 ? (
+                          <span className="ml-1 text-[11px] font-semibold text-[#34a853]">
+                            (
+                            {(
+                              ((Number(p.price) -
+                                Number(p.cost)) /
+                                Number(p.price)) *
+                              100
+                            ).toFixed(1)}
+                            %)
+                          </span>
+                        ) : null}
                       </p>
 
                       {/* STOCK CENTRAL */}
