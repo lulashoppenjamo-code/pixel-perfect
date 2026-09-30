@@ -15,6 +15,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { money } from "@/lib/format";
+import {
+  getCachedTicketLayout,
+  type TicketPrintLayout,
+} from "@/lib/bluetoothPrinter";
 
 export type TicketLine = {
   name: string;
@@ -57,10 +61,22 @@ type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   ticket: TicketData | null;
+  /** Opcional. Si no se pasa, usa el layout cacheado de settings. */
+  layout?: Partial<TicketPrintLayout>;
 };
 
-export function TicketModal({ open, onOpenChange, ticket }: Props) {
+export function TicketModal({
+  open,
+  onOpenChange,
+  ticket,
+  layout: layoutProp,
+}: Props) {
   const printRef = useRef<HTMLDivElement>(null);
+
+  const layout: TicketPrintLayout = {
+    ...getCachedTicketLayout(),
+    ...layoutProp,
+  };
 
   const handlePrint = () => {
     if (!printRef.current || !ticket) return;
@@ -87,17 +103,23 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
 
   const buildShareText = (t: TicketData) => {
     const lines = [
-      `${t.companyName ?? "Lula Shop"}${t.branchName ? " — " + t.branchName : ""}`,
+      `${t.companyName ?? "Lula Shop"}${layout.showBranch && t.branchName ? " — " + t.branchName : ""}`,
+      ...(t.companyAddress ? [t.companyAddress] : []),
+      ...(t.companyPhone ? [`Tel: ${t.companyPhone}`] : []),
       `Folio: ${t.folio}`,
       t.date,
       "",
-      ...t.lines.map(
-        (l) => `${l.quantity} x ${l.name} — ${money(l.total)}`,
-      ),
+      ...t.lines.map((l) => {
+        const skuPart =
+          layout.showSku && l.sku ? ` [SKU: ${l.sku}]` : "";
+        return `${l.quantity} x ${l.name}${skuPart} — ${money(l.total)}`;
+      }),
       "",
       `Subtotal: ${money(t.subtotal)}`,
-      `Impuestos: ${money(t.tax)}`,
-      ...(t.discount > 0 ? [`Descuento: -${money(t.discount)}`] : []),
+      ...(layout.showTaxes ? [`Impuestos: ${money(t.tax)}`] : []),
+      ...(layout.showDiscounts && t.discount > 0
+        ? [`Descuento: -${money(t.discount)}`]
+        : []),
       `TOTAL: ${money(t.total)}`,
       ...(t.footer ? ["", t.footer] : []),
     ];
@@ -133,7 +155,15 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
         <div ref={printRef} className="rounded-md border bg-white p-4 text-black">
           <div className="center space-y-1">
             <h1 className="font-bold">{ticket.companyName ?? "Lula Shop"}</h1>
-            {ticket.branchName && <p className="text-xs">{ticket.branchName}</p>}
+            {ticket.companyAddress ? (
+              <p className="text-xs">{ticket.companyAddress}</p>
+            ) : null}
+            {ticket.companyPhone ? (
+              <p className="text-xs">Tel: {ticket.companyPhone}</p>
+            ) : null}
+            {layout.showBranch && ticket.branchName ? (
+              <p className="text-xs">{ticket.branchName}</p>
+            ) : null}
             <p className="text-xs">{ticket.date}</p>
             <p className="text-xs font-semibold">Folio: {ticket.folio}</p>
           </div>
@@ -141,21 +171,24 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
           <div className="line" />
 
           <div className="space-y-0.5 text-xs">
-            {ticket.cashierName && (
+            {layout.showCashier && ticket.cashierName ? (
               <div className="row">
                 <span>Cajero:</span>
                 <span>{ticket.cashierName}</span>
               </div>
-            )}
-            {ticket.customerName && (
+            ) : null}
+            {layout.showCustomer && ticket.customerName ? (
               <div className="row">
                 <span>Cliente:</span>
                 <span>{ticket.customerName}</span>
               </div>
-            )}
+            ) : null}
             <div className="row">
               <span>Pago:</span>
-              <span>{PAYMENT_LABEL[ticket.paymentMethod] ?? ticket.paymentMethod}</span>
+              <span>
+                {PAYMENT_LABEL[ticket.paymentMethod] ??
+                  ticket.paymentMethod}
+              </span>
             </div>
           </div>
 
@@ -168,8 +201,17 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
                   <td className="qty">{l.quantity}</td>
                   <td>
                     <div>{l.name}</div>
-                    {l.discount && l.discount > 0 ? (
-                      <div className="text-[10px] text-gray-600">Desc. {money(l.discount)}</div>
+                    {layout.showSku && l.sku ? (
+                      <div className="text-[10px] text-gray-600">
+                        SKU: {l.sku}
+                      </div>
+                    ) : null}
+                    {layout.showDiscounts &&
+                    l.discount &&
+                    l.discount > 0 ? (
+                      <div className="text-[10px] text-gray-600">
+                        Desc. {money(l.discount)}
+                      </div>
                     ) : null}
                   </td>
                   <td className="price">{money(l.total)}</td>
@@ -185,40 +227,43 @@ export function TicketModal({ open, onOpenChange, ticket }: Props) {
               <span>Subtotal</span>
               <span>{money(ticket.subtotal)}</span>
             </div>
-            <div className="row">
-              <span>Impuestos</span>
-              <span>{money(ticket.tax)}</span>
-            </div>
-            {ticket.discount > 0 && (
+            {layout.showTaxes ? (
+              <div className="row">
+                <span>Impuestos</span>
+                <span>{money(ticket.tax)}</span>
+              </div>
+            ) : null}
+            {layout.showDiscounts && ticket.discount > 0 ? (
               <div className="row">
                 <span>Descuento</span>
                 <span>-{money(ticket.discount)}</span>
               </div>
-            )}
+            ) : null}
             <div className="row text-sm font-bold">
               <span>TOTAL</span>
               <span>{money(ticket.total)}</span>
             </div>
-            {ticket.cashReceived != null && (
-              <>
-                <div className="row">
-                  <span>Recibido</span>
-                  <span>{money(ticket.cashReceived)}</span>
-                </div>
-                <div className="row">
-                  <span>Cambio</span>
-                  <span>{money(ticket.changeGiven ?? 0)}</span>
-                </div>
-              </>
-            )}
+            {layout.showCashReceived &&
+            ticket.cashReceived != null ? (
+              <div className="row">
+                <span>Recibido</span>
+                <span>{money(ticket.cashReceived)}</span>
+              </div>
+            ) : null}
+            {layout.showChange && ticket.cashReceived != null ? (
+              <div className="row">
+                <span>Cambio</span>
+                <span>{money(ticket.changeGiven ?? 0)}</span>
+              </div>
+            ) : null}
           </div>
 
-          {ticket.footer && (
+          {ticket.footer ? (
             <>
               <div className="line" />
               <p className="center text-xs">{ticket.footer}</p>
             </>
-          )}
+          ) : null}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
