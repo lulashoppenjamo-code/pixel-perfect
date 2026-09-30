@@ -120,7 +120,26 @@ function AjustesPage() {
     user,
     isAdmin,
     isManager,
+    can,
   } = useAuth();
+
+  const canManageUsers =
+    can("usuarios.manage") || isAdmin;
+
+  const [inviteOpen, setInviteOpen] =
+    useState(false);
+
+  const [inviteForm, setInviteForm] =
+    useState({
+      full_name: "",
+      email: "",
+      password: "",
+      role: "cashier" as AppRole,
+      branch_id: "",
+    });
+
+  const [invitePending, setInvitePending] =
+    useState(false);
 
   const {
     branches,
@@ -550,6 +569,83 @@ function AjustesPage() {
       );
     };
 
+
+  const submitInvite = async () => {
+    if (!canManageUsers) {
+      toast.error("No autorizado");
+      return;
+    }
+
+    const email = inviteForm.email.trim();
+    const password = inviteForm.password;
+    if (!email || password.length < 6) {
+      toast.error(
+        "Correo y contraseña (mín. 6) requeridos",
+      );
+      return;
+    }
+
+    setInvitePending(true);
+    try {
+      const {
+        data: sessionData,
+      } = await supabase.auth.getSession();
+      const token =
+        sessionData.session?.access_token;
+      if (!token) {
+        throw new Error("Sesión no válida");
+      }
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+          },
+          body: JSON.stringify({
+            email,
+            password,
+            full_name: inviteForm.full_name.trim(),
+            role: inviteForm.role,
+            branch_id:
+              inviteForm.branch_id || null,
+          }),
+        },
+      );
+
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(
+          json.error || "No se pudo crear el usuario",
+        );
+      }
+
+      toast.success("Colaborador creado");
+      setInviteOpen(false);
+      setInviteForm({
+        full_name: "",
+        email: "",
+        password: "",
+        role: "cashier",
+        branch_id: "",
+      });
+      void qc.invalidateQueries({
+        queryKey: ["admin-profiles"],
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error
+          ? err.message
+          : "Error al crear colaborador",
+      );
+    } finally {
+      setInvitePending(false);
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -816,12 +912,25 @@ function AjustesPage() {
                     </p>
                   </div>
 
-                  <Badge variant="outline">
-                    {profiles.length} usuario
-                    {profiles.length === 1
-                      ? ""
-                      : "s"}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline">
+                      {profiles.length} usuario
+                      {profiles.length === 1
+                        ? ""
+                        : "s"}
+                    </Badge>
+                    {canManageUsers && (
+                      <Button
+                        size="sm"
+                        className="min-h-10 rounded-xl bg-[#1a73e8]"
+                        onClick={() =>
+                          setInviteOpen(true)
+                        }
+                      >
+                        Invitar colaborador
+                      </Button>
+                    )}
+                  </div>
                 </div>
               </CardHeader>
 
@@ -1356,6 +1465,135 @@ function AjustesPage() {
           </TabsContent>
         )}
       </Tabs>
+    
+      <Dialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+      >
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Invitar colaborador
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Nombre</Label>
+              <Input
+                className="h-11"
+                value={inviteForm.full_name}
+                onChange={(e) =>
+                  setInviteForm((f) => ({
+                    ...f,
+                    full_name: e.target.value,
+                  }))
+                }
+                placeholder="Nombre completo"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Correo</Label>
+              <Input
+                className="h-11"
+                type="email"
+                value={inviteForm.email}
+                onChange={(e) =>
+                  setInviteForm((f) => ({
+                    ...f,
+                    email: e.target.value,
+                  }))
+                }
+                placeholder="correo@ejemplo.com"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Contraseña temporal</Label>
+              <Input
+                className="h-11"
+                type="password"
+                value={inviteForm.password}
+                onChange={(e) =>
+                  setInviteForm((f) => ({
+                    ...f,
+                    password: e.target.value,
+                  }))
+                }
+                placeholder="Mínimo 6 caracteres"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Rol</Label>
+              <Select
+                value={inviteForm.role}
+                onValueChange={(value) =>
+                  setInviteForm((f) => ({
+                    ...f,
+                    role: value as AppRole,
+                  }))
+                }
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {ROLES.map((role) => (
+                    <SelectItem
+                      key={role}
+                      value={role}
+                    >
+                      {role}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Sucursal</Label>
+              <Select
+                value={
+                  inviteForm.branch_id || "none"
+                }
+                onValueChange={(value) =>
+                  setInviteForm((f) => ({
+                    ...f,
+                    branch_id:
+                      value === "none"
+                        ? ""
+                        : value,
+                  }))
+                }
+              >
+                <SelectTrigger className="h-11">
+                  <SelectValue placeholder="Sucursal" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">
+                    Sin asignar
+                  </SelectItem>
+                  {branches.map((b) => (
+                    <SelectItem
+                      key={b.id}
+                      value={b.id}
+                    >
+                      {b.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="min-h-11 w-full rounded-xl bg-[#43a047] font-semibold"
+              disabled={invitePending}
+              onClick={() => void submitInvite()}
+            >
+              {invitePending
+                ? "Creando…"
+                : "Crear colaborador"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </PageShell>
   );
 }
