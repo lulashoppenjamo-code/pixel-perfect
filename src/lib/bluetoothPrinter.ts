@@ -56,8 +56,8 @@ type BluetoothCharacteristic = {
     write: boolean;
     writeWithoutResponse: boolean;
   };
-  writeValue: (value: BufferSource) => Promise<void>;
-  writeValueWithoutResponse: (value: BufferSource) => Promise<void>;
+  writeValue: (value: Uint8Array) => Promise<void>;
+  writeValueWithoutResponse: (value: Uint8Array) => Promise<void>;
 };
 
 type BluetoothGATTService = {
