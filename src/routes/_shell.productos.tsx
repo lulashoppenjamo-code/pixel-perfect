@@ -312,22 +312,32 @@ function ProductosPage() {
         throw new Error("Nombre requerido");
       }
 
-      const payload = {
-        sku: form.sku.trim() || null,
-        barcode: form.barcode.trim() || null,
-        name: form.name.trim(),
-        description: form.description.trim() || null,
-        category_id:
-          form.category_id === "none"
-            ? null
-            : form.category_id,
-        price: Number(form.price) || 0,
-        cost: Number(form.cost) || 0,
-        tax_rate: Number(form.tax_rate) || 0,
-        emoji: form.emoji || "📦",
-        image_url: form.image_url.trim() || null,
-        is_active: true,
-      };
+      // productos.price solo puede actualizar price/cost/tax_rate
+      const payload =
+        form.id && canPrice && !canEdit
+          ? {
+              price: Number(form.price) || 0,
+              cost: Number(form.cost) || 0,
+              tax_rate: Number(form.tax_rate) || 0,
+            }
+          : {
+              sku: form.sku.trim() || null,
+              barcode: form.barcode.trim() || null,
+              name: form.name.trim(),
+              description:
+                form.description.trim() || null,
+              category_id:
+                form.category_id === "none"
+                  ? null
+                  : form.category_id,
+              price: Number(form.price) || 0,
+              cost: Number(form.cost) || 0,
+              tax_rate: Number(form.tax_rate) || 0,
+              emoji: form.emoji || "📦",
+              image_url:
+                form.image_url.trim() || null,
+              is_active: true,
+            };
 
       if (form.id) {
         const { error } = await supabase
@@ -972,12 +982,21 @@ function ProductosPage() {
                               .split(".")
                               .pop()
                               ?.toLowerCase() || "jpg";
-                          const path = `${crypto.randomUUID()}.${ext}`;
+                          const {
+                            data: { user: upUser },
+                          } = await supabase.auth.getUser();
+                          if (!upUser?.id) {
+                            throw new Error(
+                              "Sesión requerida para subir imagen",
+                            );
+                          }
+                          // Path {uid}/... exigido por política Storage
+                          const path = `${upUser.id}/${crypto.randomUUID()}.${ext}`;
                           const { error: upErr } =
                             await supabase.storage
                               .from("product-images")
                               .upload(path, file, {
-                                upsert: true,
+                                upsert: false,
                                 contentType:
                                   file.type || "image/jpeg",
                               });
