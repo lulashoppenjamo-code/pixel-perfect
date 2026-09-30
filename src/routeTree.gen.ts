@@ -23,6 +23,7 @@ import { Route as ShellInventarioRouteImport } from './routes/_shell.inventario'
 import { Route as ShellPedidosRouteImport } from './routes/_shell.pedidos'
 import { Route as ShellProductosRouteImport } from './routes/_shell.productos'
 import { Route as ShellReportesRouteImport } from './routes/_shell.reportes'
+import { Route as ShellReposicionRouteImport } from './routes/_shell.reposicion'
 import { Route as ShellVentasRouteImport } from './routes/_shell.ventas'
 
 const IndexRoute = IndexRouteImport.update({
@@ -94,6 +95,11 @@ const ShellReportesRoute = ShellReportesRouteImport.update({
   path: '/reportes',
   getParentRoute: () => ShellRoute,
 } as any)
+const ShellReposicionRoute = ShellReposicionRouteImport.update({
+  id: '/reposicion',
+  path: '/reposicion',
+  getParentRoute: () => ShellRoute,
+} as any)
 const ShellVentasRoute = ShellVentasRouteImport.update({
   id: '/ventas',
   path: '/ventas',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/pedidos': typeof ShellPedidosRoute
   '/productos': typeof ShellProductosRoute
   '/reportes': typeof ShellReportesRoute
+  '/reposicion': typeof ShellReposicionRoute
   '/ventas': typeof ShellVentasRoute
 }
 export interface FileRoutesByTo {
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/pedidos': typeof ShellPedidosRoute
   '/productos': typeof ShellProductosRoute
   '/reportes': typeof ShellReportesRoute
+  '/reposicion': typeof ShellReposicionRoute
   '/ventas': typeof ShellVentasRoute
 }
 export interface FileRoutesById {
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/_shell/pedidos': typeof ShellPedidosRoute
   '/_shell/productos': typeof ShellProductosRoute
   '/_shell/reportes': typeof ShellReportesRoute
+  '/_shell/reposicion': typeof ShellReposicionRoute
   '/_shell/ventas': typeof ShellVentasRoute
 }
 export interface FileRouteTypes {
@@ -166,6 +175,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/productos'
     | '/reportes'
+    | '/reposicion'
     | '/ventas'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -182,6 +192,7 @@ export interface FileRouteTypes {
     | '/pedidos'
     | '/productos'
     | '/reportes'
+    | '/reposicion'
     | '/ventas'
   id:
     | '__root__'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/_shell/pedidos'
     | '/_shell/productos'
     | '/_shell/reportes'
+    | '/_shell/reposicion'
     | '/_shell/ventas'
   fileRoutesById: FileRoutesById
 }
@@ -308,6 +320,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellReportesRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/reposicion': {
+      id: '/_shell/reposicion'
+      path: '/reposicion'
+      fullPath: '/reposicion'
+      preLoaderRoute: typeof ShellReposicionRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/ventas': {
       id: '/_shell/ventas'
       path: '/ventas'
@@ -330,6 +349,7 @@ interface ShellRouteChildren {
   ShellPedidosRoute: typeof ShellPedidosRoute
   ShellProductosRoute: typeof ShellProductosRoute
   ShellReportesRoute: typeof ShellReportesRoute
+  ShellReposicionRoute: typeof ShellReposicionRoute
   ShellVentasRoute: typeof ShellVentasRoute
 }
 
@@ -345,6 +365,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellPedidosRoute: ShellPedidosRoute,
   ShellProductosRoute: ShellProductosRoute,
   ShellReportesRoute: ShellReportesRoute,
+  ShellReposicionRoute: ShellReposicionRoute,
   ShellVentasRoute: ShellVentasRoute,
 }
 

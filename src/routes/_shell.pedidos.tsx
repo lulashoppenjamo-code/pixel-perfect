@@ -917,6 +917,7 @@ function PedidosPage() {
             </TableBody>
           </Table>
           </div>
+          </div>
         </CardContent>
       </Card>
 
