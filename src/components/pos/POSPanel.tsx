@@ -2723,16 +2723,16 @@ export function POSPanel({
                       )}
                     </div>
 
-                    <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
-                      <p className="line-clamp-2 min-h-[2rem] text-center text-[11px] font-semibold leading-tight text-[#212121] sm:text-xs">
+                    <div className="flex flex-1 flex-col px-1.5 pb-1.5 pt-1">
+                      <p className="line-clamp-2 min-h-[2rem] text-center text-[11px] font-bold leading-tight text-[#212121] sm:text-xs">
                         {product.name}
                       </p>
-                      {!outOfStock && product.stock > 0 && product.stock <= 10 && (
-                        <p className="mt-0.5 text-center text-[10px] text-[#757575]">
-                          {product.stock}
+                      {product.sku ? (
+                        <p className="mt-0.5 truncate text-center text-[10px] font-medium text-[#757575]">
+                          {product.sku}
                         </p>
-                      )}
-                      <p className="mt-auto pt-1 text-center text-sm font-bold text-[#1a73e8]">
+                      ) : null}
+                      <p className="mt-auto pt-1 text-center text-[15px] font-bold text-[#1a73e8]">
                         {money(product.price)}
                       </p>
                     </div>
@@ -3061,7 +3061,7 @@ export function POSPanel({
                 <button
                   type="button"
                   disabled={cart.length === 0}
-                  onClick={() => setMobileStep("shop")}
+                  onClick={() => void parkCurrentSale()}
                   className="h-10 flex-1 rounded-md bg-[#ffb74d] text-[13px] font-semibold text-white disabled:opacity-40"
                 >
                   Guardar para más
@@ -3264,18 +3264,20 @@ export function POSPanel({
             </>
           )}
 
-          {/* Apartar + Cobrar */}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={cart.length === 0}
-              onClick={parkCurrentSale}
-              className="h-11 gap-1.5 shrink-0"
-            >
-              <PauseCircle className="h-4 w-4" />
-              <span>Apartar</span>
-            </Button>
+          {/* Apartar (desktop) + Cobrar principal */}
+          <div className={cn("flex gap-2", sequential && "flex-col")}>
+            {!sequential && (
+              <Button
+                type="button"
+                variant="outline"
+                disabled={cart.length === 0}
+                onClick={parkCurrentSale}
+                className="h-11 gap-1.5 shrink-0"
+              >
+                <PauseCircle className="h-4 w-4" />
+                <span>Apartar</span>
+              </Button>
+            )}
             <button
               type="button"
               disabled={!canSell || cart.length === 0 || checkout.isPending}
@@ -3286,7 +3288,7 @@ export function POSPanel({
                   checkout.mutate();
                 }
               }}
-              className="flex h-11 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#4caf50] text-[15px] font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
+              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#43a047] text-[16px] font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
                 ? "Procesando…"
