@@ -309,3 +309,293 @@ async function loadUserProfile(
       profile,
       roles: [],
       permissions: new Set<string>(),
+    };
+  }
+
+  const roles =
+    await loadRoles(uid);
+
+  const {
+    permissions,
+  } = await loadPermissions();
+
+  console.info(
+    "[LULA AUTH] ACCESO FINAL",
+    {
+      uid,
+      active: profile.is_active,
+      branchId: profile.branch_id,
+      roles,
+      roleCount: roles.length,
+      permissionCount:
+        permissions?.size ?? null,
+    },
+  );
+
+  return {
+    profile,
+    roles,
+    permissions,
+  };
+}
+
+export function AuthProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const [
+    session,
+    setSession,
+  ] = useState<Session | null>(null);
+
+  const [
+    profile,
+    setProfile,
+  ] = useState<Profile | null>(null);
+
+  const [
+    roles,
+    setRoles,
+  ] = useState<AppRole[]>([]);
+
+  const [
+    permissions,
+    setPermissions,
+  ] = useState<Set<string> | null>(null);
+
+  const [
+    loading,
+    setLoading,
+  ] = useState(true);
+
+  const loadProfile = async (
+    currentSession: Session | null,
+  ) => {
+    if (!currentSession?.user) {
+      setProfile(null);
+      setRoles([]);
+      setPermissions(null);
+      return;
+    }
+
+    const uid =
+      currentSession.user.id;
+
+    try {
+      const result =
+        await loadUserProfile(uid);
+
+      const {
+        data,
+      } =
+        await supabase.auth.getSession();
+
+      const currentUid =
+        data.session?.user?.id ??
+        null;
+
+      if (currentUid !== uid) {
+        return;
+      }
+
+      setProfile(result.profile);
+      setRoles(result.roles);
+      setPermissions(
+        result.permissions,
+      );
+    } catch (error) {
+      console.error(
+        "[LULA AUTH] Error cargando perfil:",
+        error,
+      );
+
+      setProfile(null);
+      setRoles([]);
+      setPermissions(null);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    const {
+      data: subscription,
+    } =
+      supabase.auth.onAuthStateChange(
+        (_event, nextSession) => {
+          if (!mounted) {
+            return;
+          }
+
+          setSession(nextSession);
+
+          if (!nextSession?.user) {
+            setProfile(null);
+            setRoles([]);
+            setPermissions(null);
+            setLoading(false);
+            return;
+          }
+
+          setTimeout(() => {
+            if (!mounted) {
+              return;
+            }
+
+            void loadProfile(
+              nextSession,
+            ).finally(() => {
+              if (mounted) {
+                setLoading(false);
+              }
+            });
+          }, 0);
+        },
+      );
+
+    void supabase.auth
+      .getSession()
+      .then(async ({ data }) => {
+        if (!mounted) {
+          return;
+        }
+
+        const nextSession =
+          data.session ?? null;
+
+        setSession(nextSession);
+
+        if (nextSession?.user) {
+          await loadProfile(
+            nextSession,
+          );
+        } else {
+          setProfile(null);
+          setRoles([]);
+          setPermissions(null);
+        }
+
+        if (mounted) {
+          setLoading(false);
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "[LULA AUTH] Error recuperando sesión:",
+          error,
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        setSession(null);
+        setProfile(null);
+        setRoles([]);
+        setPermissions(null);
+        setLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+      subscription.subscription.unsubscribe();
+    };
+  }, []);
+
+  const value: AuthState = {
+    session,
+
+    user:
+      session?.user ?? null,
+
+    profile,
+
+    roles,
+
+    permissions,
+
+    loading,
+
+    isManager:
+      roles.some(
+        (role) =>
+          role === "owner" ||
+          role === "admin" ||
+          role === "manager",
+      ),
+
+    isAdmin:
+      roles.some(
+        (role) =>
+          role === "owner" ||
+          role === "admin",
+      ),
+
+    refresh: async () => {
+      const {
+        data,
+      } =
+        await supabase.auth.getSession();
+
+      const currentSession =
+        data.session ?? null;
+
+      setSession(currentSession);
+
+      if (!currentSession?.user) {
+        setProfile(null);
+        setRoles([]);
+        setPermissions(null);
+        return;
+      }
+
+      setLoading(true);
+
+      try {
+        await loadProfile(
+          currentSession,
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+
+    signOut: async () => {
+      const {
+        error,
+      } =
+        await supabase.auth.signOut();
+
+      if (error) {
+        throw error;
+      }
+
+      setSession(null);
+      setProfile(null);
+      setRoles([]);
+      setPermissions(null);
+    },
+  };
+
+  return (
+    <AuthContext.Provider
+      value={value}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context =
+    useContext(AuthContext);
+
+  if (!context) {
+    throw new Error(
+      "useAuth must be used inside AuthProvider",
+    );
+  }
+
+  return context;
+}
