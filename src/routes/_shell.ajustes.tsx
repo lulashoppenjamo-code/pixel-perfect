@@ -57,6 +57,8 @@ import {
   PageHeader,
   PageShell,
 } from "@/components/PageHeader";
+import { BluetoothPrinterSettings } from "@/components/settings/BluetoothPrinterSettings";
+import { TicketPrinterSettings } from "@/components/settings/TicketPrinterSettings";
 
 export const Route = createFileRoute(
   "/_shell/ajustes",
@@ -1087,8 +1089,13 @@ function AjustesPage() {
         {isManager && (
           <TabsContent
             value="general"
-            className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-[1fr_340px]"
+            className="space-y-4"
           >
+            <BluetoothPrinterSettings />
+
+            <TicketPrinterSettings />
+
+            <div className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-[1fr_340px]">
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -1242,6 +1249,7 @@ function AjustesPage() {
                 </Button>
               </CardContent>
             </Card>
+            </div>
           </TabsContent>
         )}
       </Tabs>
