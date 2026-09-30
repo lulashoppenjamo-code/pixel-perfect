@@ -159,6 +159,10 @@ function InventarioPage() {
   const [limitMax, setLimitMax] = useState("");
 
   const [countFilter, setCountFilter] = useState("");
+  /** Filtro visual de existencias (client-side, no cambia consulta). */
+  const [stockStatusFilter, setStockStatusFilter] = useState<
+    "all" | "low" | "out"
+  >("all");
   const [countNotes, setCountNotes] = useState("");
 
   const [physicalCount, setPhysicalCount] =
@@ -331,6 +335,18 @@ function InventarioPage() {
       ),
     [inventory],
   );
+
+  const filteredInventory = useMemo(() => {
+    if (stockStatusFilter === "all") return inventory;
+    return inventory.filter((row) => {
+      const available = Number(row.available_stock);
+      const minimum = Number(row.min_stock);
+      if (stockStatusFilter === "out") return available <= 0;
+      if (stockStatusFilter === "low")
+        return available > 0 && available <= minimum;
+      return true;
+    });
+  }, [inventory, stockStatusFilter]);
 
   const filteredCountItems = useMemo(() => {
     const query = countFilter.trim().toLowerCase();
@@ -834,6 +850,29 @@ function InventarioPage() {
             </CardHeader>
 
             <CardContent className="px-3 sm:px-6">
+              <div className="mb-3 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+                {(
+                  [
+                    ["all", "Todos"],
+                    ["low", "Inventario bajo"],
+                    ["out", "Agotado"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setStockStatusFilter(key)}
+                    className={
+                      stockStatusFilter === key
+                        ? "shrink-0 rounded-full bg-[#7e57c2] px-3.5 py-1.5 text-[12px] font-semibold text-white"
+                        : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               {/* CELULAR / TABLET */}
               <div className="grid gap-2.5 lg:hidden">
                 {inventoryLoading && (
@@ -851,7 +890,15 @@ function InventarioPage() {
                   )}
 
                 {!inventoryLoading &&
-                  inventory.map(
+                  filteredInventory.length === 0 &&
+                  inventory.length > 0 && (
+                    <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
+                      Ningún ítem en este filtro.
+                    </div>
+                  )}
+
+                {!inventoryLoading &&
+                  filteredInventory.map(
                     (row: InventoryRow) => {
                       const available =
                         Number(
@@ -1031,7 +1078,7 @@ function InventarioPage() {
                         </TableRow>
                       )}
 
-                    {inventory.map(
+                    {filteredInventory.map(
                       (row: InventoryRow) => {
                         const available =
                           Number(
