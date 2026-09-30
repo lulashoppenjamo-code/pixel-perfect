@@ -602,37 +602,38 @@ function GastosPage() {
       )}
 
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal">
               Total filtrado
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#c62828] sm:text-2xl">
               {money(totalFiltered)}
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#9e9e9e]">
+              {filteredExpenses.length} gasto
+              {filteredExpenses.length === 1 ? "" : "s"}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              Gastos en efectivo
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal">
+              Efectivo
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
               {money(totalCash)}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              Tarjeta + transferencia
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal">
+              Tarjeta + transfer.
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
               {money(
                 totalCard + totalTransfer,
               )}
@@ -859,7 +860,7 @@ function GastosPage() {
               )}
 
               <Button
-                className="flex-1 gap-2"
+                className="h-11 flex-1 gap-2 rounded-xl bg-[#43a047] text-[15px] font-semibold text-white hover:bg-[#388e3c]"
                 disabled={
                   save.isPending ||
                   tableMissing ||
@@ -1025,6 +1026,92 @@ function GastosPage() {
                 Cargando gastos...
               </div>
             ) : (
+              <>
+              {/* Móvil: tarjetas */}
+              <div className="grid gap-2.5 lg:hidden">
+                {filteredExpenses.length === 0 ? (
+                  <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
+                    No hay gastos en este filtro.
+                  </div>
+                ) : (
+                  filteredExpenses.map((expense) => (
+                    <div
+                      key={expense.id}
+                      className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="break-words text-[15px] font-bold text-[#212121]">
+                            {expense.concept}
+                          </p>
+                          <p className="mt-0.5 text-xs text-[#757575]">
+                            {shortDate(expense.expense_date)}
+                            {" · "}
+                            {expense.category ?? "Sin categoría"}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-[#9e9e9e]">
+                            {paymentMethodLabel(
+                              expense.payment_method,
+                            )}
+                            {expense.payment_method ===
+                              "cash" &&
+                            expense.cash_session_id
+                              ? " · Ligado a caja"
+                              : ""}
+                          </p>
+                        </div>
+                        <p className="shrink-0 text-base font-bold text-[#c62828]">
+                          {money(Number(expense.amount))}
+                        </p>
+                      </div>
+                      <div className="mt-3 flex gap-1.5 border-t border-[#eeeeee] pt-2.5">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-9 flex-1 rounded-lg"
+                          onClick={() => {
+                            setEditingId(expense.id);
+                            setForm({
+                              concept: expense.concept,
+                              category:
+                                expense.category ??
+                                CATEGORIES[0],
+                              amount: String(
+                                expense.amount,
+                              ),
+                              expense_date:
+                                expense.expense_date,
+                              payment_method:
+                                expense.payment_method ??
+                                "cash",
+                              notes: expense.notes ?? "",
+                            });
+                          }}
+                        >
+                          <Pencil className="mr-1 h-3.5 w-3.5" />
+                          Editar
+                        </Button>
+                        {isManager ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-9 rounded-lg text-destructive"
+                            disabled={remove.isPending}
+                            onClick={() =>
+                              remove.mutate(expense.id)
+                            }
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Desktop: tabla */}
+              <div className="hidden overflow-x-auto lg:block">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1172,6 +1259,9 @@ function GastosPage() {
                   )}
                 </TableBody>
               </Table>
+              </div>
+              </>
+
             )}
           </CardContent>
         </Card>
