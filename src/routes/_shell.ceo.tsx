@@ -1414,7 +1414,7 @@ function CeoPage() {
           RESUMEN RÁPIDO
       ======================================================= */}
 
-      <div className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:mb-4 sm:gap-3 lg:grid-cols-4">
         <MiniKpi
           icon={DollarSign}
           label="Ventas 30 días"
@@ -1471,7 +1471,7 @@ function CeoPage() {
                   suggestion,
                 )
               }
-              className="rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+              className="rounded-full border border-[#e0e0e0] bg-white px-3 py-1.5 text-[11px] font-medium text-[#616161] shadow-sm transition-colors hover:border-[#1a73e8] hover:text-[#1a73e8]"
             >
               <Sparkles className="mr-1 inline h-3 w-3" />
               {
@@ -1538,7 +1538,7 @@ function CeoPage() {
           </ScrollArea>
 
           <form
-            className="flex gap-2 border-t p-3"
+            className="flex gap-2 border-t border-[#e0e0e0] p-2.5 sm:p-3"
             onSubmit={(
               event,
             ) => {
@@ -1556,13 +1556,14 @@ function CeoPage() {
                     .value,
                 )
               }
-              placeholder="Pregúntame cualquier cosa sobre el negocio…"
-              className="flex-1"
+              placeholder="Pregúntame sobre el negocio…"
+              className="h-11 flex-1 rounded-xl border-[#e0e0e0]"
             />
 
             <Button
               type="submit"
               size="icon"
+              className="h-11 w-11 shrink-0 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
               disabled={
                 thinking ||
                 !input.trim()
@@ -1587,18 +1588,18 @@ function MiniKpi({
   value: string;
 }) {
   return (
-    <Card>
-      <CardContent className="flex items-center gap-3 p-4">
-        <div className="rounded-lg bg-primary/10 p-2">
-          <Icon className="h-5 w-5 text-primary" />
+    <Card className="border-[#e0e0e0] shadow-sm">
+      <CardContent className="flex items-center gap-3 p-3 sm:p-4">
+        <div className="rounded-xl bg-[#e8f0fe] p-2">
+          <Icon className="h-5 w-5 text-[#1a73e8]" />
         </div>
 
-        <div className="min-w-0">
-          <p className="text-xs text-muted-foreground">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-xs sm:normal-case sm:tracking-normal sm:text-muted-foreground">
             {label}
           </p>
 
-          <p className="truncate text-lg font-bold">
+          <p className="truncate text-base font-bold text-[#212121] sm:text-lg">
             {value}
           </p>
         </div>
