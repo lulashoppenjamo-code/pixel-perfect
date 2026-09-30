@@ -194,6 +194,7 @@ function ProductosPage() {
             cost,
             tax_rate,
             emoji,
+            image_url,
             is_active,
             categories(name)
           `,
@@ -313,31 +314,41 @@ function ProductosPage() {
       }
 
       // productos.price solo puede actualizar price/cost/tax_rate
-      const payload =
-        form.id && canPrice && !canEdit
-          ? {
-              price: Number(form.price) || 0,
-              cost: Number(form.cost) || 0,
-              tax_rate: Number(form.tax_rate) || 0,
-            }
-          : {
-              sku: form.sku.trim() || null,
-              barcode: form.barcode.trim() || null,
-              name: form.name.trim(),
-              description:
-                form.description.trim() || null,
-              category_id:
-                form.category_id === "none"
-                  ? null
-                  : form.category_id,
-              price: Number(form.price) || 0,
-              cost: Number(form.cost) || 0,
-              tax_rate: Number(form.tax_rate) || 0,
-              emoji: form.emoji || "📦",
-              image_url:
-                form.image_url.trim() || null,
-              is_active: true,
-            };
+      // (vía RPC update_product_prices)
+      if (form.id && canPrice && !canEdit) {
+        const { error } = await supabase.rpc(
+          "update_product_prices",
+          {
+            _product_id: form.id,
+            _price: Number(form.price) || 0,
+            _cost: Number(form.cost) || 0,
+            _tax_rate: Number(form.tax_rate) || 0,
+          },
+        );
+
+        if (error) throw error;
+
+        return;
+      }
+
+      const payload = {
+        sku: form.sku.trim() || null,
+        barcode: form.barcode.trim() || null,
+        name: form.name.trim(),
+        description:
+          form.description.trim() || null,
+        category_id:
+          form.category_id === "none"
+            ? null
+            : form.category_id,
+        price: Number(form.price) || 0,
+        cost: Number(form.cost) || 0,
+        tax_rate: Number(form.tax_rate) || 0,
+        emoji: form.emoji || "📦",
+        image_url:
+          form.image_url.trim() || null,
+        is_active: true,
+      };
 
       if (form.id) {
         const { error } = await supabase
@@ -400,12 +411,12 @@ function ProductosPage() {
 
   const removeProduct = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("products")
-        .update({
-          is_active: false,
-        })
-        .eq("id", id);
+      const { error } = await supabase.rpc(
+        "deactivate_product",
+        {
+          _product_id: id,
+        },
+      );
 
       if (error) throw error;
     },
@@ -990,8 +1001,14 @@ function ProductosPage() {
                               "Sesión requerida para subir imagen",
                             );
                           }
-                          // Path {uid}/... exigido por política Storage
-                          const path = `${upUser.id}/${crypto.randomUUID()}.${ext}`;
+                          // Path {product_id}/... exigido por política Storage
+                          if (!form.id) {
+                            throw new Error(
+                              "Primero guarda el producto y después agrega la imagen.",
+                            );
+                          }
+
+                          const path = `${form.id}/${crypto.randomUUID()}.${ext}`;
                           const { error: upErr } =
                             await supabase.storage
                               .from("product-images")
