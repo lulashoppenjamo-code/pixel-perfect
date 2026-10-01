@@ -13,11 +13,19 @@
 
 import type { TicketData } from "@/components/pos/TicketModal";
 
-const DEVICE_NAME_KEY = "lula-printer-device-name";
-const AUTO_PRINT_KEY = "lula-printer-auto-print";
-const LAYOUT_CACHE_KEY = "lula-ticket-layout-cache";
+const DEVICE_NAME_KEY =
+  "lula-printer-device-name";
 
-/** Opciones visuales del ticket (settings.key = "ticket_layout") */
+const AUTO_PRINT_KEY =
+  "lula-printer-auto-print";
+
+const LAYOUT_CACHE_KEY =
+  "lula-ticket-layout-cache";
+
+const TICKET_LOGO_CACHE_KEY =
+  "lula-ticket-logo";
+
+/** Opciones visuales del ticket */
 export type TicketPrintLayout = {
   showBranch: boolean;
   showCashier: boolean;
@@ -44,35 +52,42 @@ export const DEFAULT_TICKET_LAYOUT: TicketPrintLayout = {
   copies: 1,
 };
 
-/**
- * Tipos locales para Web Bluetooth.
- *
- * Se mantienen aquí para que TypeScript no dependa
- * de interfaces Bluetooth globales que pueden no estar
- * incluidas en lib.dom.d.ts.
- */
 type BluetoothCharacteristic = {
   properties: {
     write: boolean;
     writeWithoutResponse: boolean;
   };
-  writeValue: (value: Uint8Array) => Promise<void>;
-  writeValueWithoutResponse: (value: Uint8Array) => Promise<void>;
+
+  writeValue: (
+    value: Uint8Array,
+  ) => Promise<void>;
+
+  writeValueWithoutResponse: (
+    value: Uint8Array,
+  ) => Promise<void>;
 };
 
 type BluetoothGATTService = {
-  getCharacteristics: () => Promise<BluetoothCharacteristic[]>;
+  getCharacteristics: () => Promise<
+    BluetoothCharacteristic[]
+  >;
 };
 
 type BluetoothGATTServer = {
   connected: boolean;
+
   connect: () => Promise<BluetoothGATTServer>;
+
   disconnect: () => void;
-  getPrimaryServices: () => Promise<BluetoothGATTService[]>;
+
+  getPrimaryServices: () => Promise<
+    BluetoothGATTService[]
+  >;
 };
 
 type BluetoothDevice = {
   name?: string | null;
+
   gatt?: BluetoothGATTServer | null;
 };
 
@@ -81,7 +96,10 @@ type BluetoothApi = {
     acceptAllDevices: boolean;
     optionalServices?: string[];
   }) => Promise<BluetoothDevice>;
-  getDevices?: () => Promise<BluetoothDevice[]>;
+
+  getDevices?: () => Promise<
+    BluetoothDevice[]
+  >;
 };
 
 type PrinterConnection = {
@@ -89,11 +107,14 @@ type PrinterConnection = {
   characteristic: BluetoothCharacteristic;
 };
 
-let activeConnection: PrinterConnection | null = null;
+let activeConnection:
+  | PrinterConnection
+  | null = null;
 
 function bluetoothSupported() {
   return (
-    typeof navigator !== "undefined" &&
+    typeof navigator !==
+      "undefined" &&
     "bluetooth" in navigator
   );
 }
@@ -113,40 +134,66 @@ function getBluetooth(): BluetoothApi {
 }
 
 function encode(text: string) {
-  return new TextEncoder().encode(text);
+  return new TextEncoder().encode(
+    text,
+  );
 }
 
-function concatBytes(...parts: Uint8Array[]) {
-  const length = parts.reduce(
-    (sum, part) => sum + part.length,
-    0,
-  );
+function concatBytes(
+  ...parts: Uint8Array[]
+) {
+  const length =
+    parts.reduce(
+      (sum, part) =>
+        sum + part.length,
+      0,
+    );
 
-  const result = new Uint8Array(length);
+  const result =
+    new Uint8Array(length);
 
   let offset = 0;
 
   for (const part of parts) {
-    result.set(part, offset);
-    offset += part.length;
+    result.set(
+      part,
+      offset,
+    );
+
+    offset +=
+      part.length;
   }
 
   return result;
 }
 
-function command(...bytes: number[]) {
-  return new Uint8Array(bytes);
+function command(
+  ...bytes: number[]
+) {
+  return new Uint8Array(
+    bytes,
+  );
 }
 
 function center() {
-  return command(0x1b, 0x61, 0x01);
+  return command(
+    0x1b,
+    0x61,
+    0x01,
+  );
 }
 
 function left() {
-  return command(0x1b, 0x61, 0x00);
+  return command(
+    0x1b,
+    0x61,
+    0x00,
+  );
 }
 
-function bold(enabled: boolean) {
+function bold(
+  enabled: boolean,
+) {
   return command(
     0x1b,
     0x45,
@@ -154,7 +201,9 @@ function bold(enabled: boolean) {
   );
 }
 
-function doubleSize(enabled: boolean) {
+function doubleSize(
+  enabled: boolean,
+) {
   return command(
     0x1d,
     0x21,
@@ -170,20 +219,38 @@ function cutPaper() {
   );
 }
 
-function moneyValue(value: number) {
-  return `$${Number(value || 0).toFixed(2)}`;
+function moneyValue(
+  value: number,
+) {
+  return `$${Number(
+    value || 0,
+  ).toFixed(2)}`;
 }
 
-function lineSeparator(width: number) {
-  return "-".repeat(width);
+function lineSeparator(
+  width: number,
+) {
+  return "-".repeat(
+    width,
+  );
 }
 
-function fit(text: string, width: number) {
-  if (text.length <= width) return text;
+function fit(
+  text: string,
+  width: number,
+) {
+  if (
+    text.length <= width
+  ) {
+    return text;
+  }
 
   return `${text.slice(
     0,
-    Math.max(0, width - 1),
+    Math.max(
+      0,
+      width - 1,
+    ),
   )}…`;
 }
 
@@ -192,15 +259,22 @@ function twoColumns(
   rightText: string,
   width: number,
 ) {
-  const right = rightText.length;
+  const right =
+    rightText.length;
 
-  const available = Math.max(
-    1,
-    width - right - 1,
-  );
+  const available =
+    Math.max(
+      1,
+      width -
+        right -
+        1,
+    );
 
   return (
-    fit(leftText, available) +
+    fit(
+      leftText,
+      available,
+    ) +
     " ".repeat(
       Math.max(
         1,
@@ -216,17 +290,25 @@ function twoColumns(
   );
 }
 
-/** Caracteres por línea según ancho de papel térmico */
+/**
+ * Caracteres por línea según
+ * ancho de papel térmico.
+ */
 function charsForPaper(
   paperWidth: 58 | 80,
 ): number {
-  return paperWidth === 80 ? 48 : 32;
+  return paperWidth === 80
+    ? 48
+    : 32;
 }
 
 export function normalizeTicketLayout(
   raw: unknown,
 ): TicketPrintLayout {
-  let obj: Record<string, unknown> = {};
+  let obj: Record<
+    string,
+    unknown
+  > = {};
 
   if (raw == null) {
     return {
@@ -234,18 +316,30 @@ export function normalizeTicketLayout(
     };
   }
 
-  if (typeof raw === "string") {
+  if (
+    typeof raw === "string"
+  ) {
     try {
-      obj = JSON.parse(
-        raw,
-      ) as Record<string, unknown>;
+      obj =
+        JSON.parse(
+          raw,
+        ) as Record<
+          string,
+          unknown
+        >;
     } catch {
       return {
         ...DEFAULT_TICKET_LAYOUT,
       };
     }
-  } else if (typeof raw === "object") {
-    obj = raw as Record<string, unknown>;
+  } else if (
+    typeof raw === "object"
+  ) {
+    obj =
+      raw as Record<
+        string,
+        unknown
+      >;
   }
 
   const paper =
@@ -256,25 +350,34 @@ export function normalizeTicketLayout(
       ? 80
       : 58;
 
-  const copies = Math.max(
-    1,
-    Math.min(
-      5,
-      Number(obj.copies) ||
-        DEFAULT_TICKET_LAYOUT.copies,
-    ),
-  );
+  const copies =
+    Math.max(
+      1,
+      Math.min(
+        5,
+        Number(
+          obj.copies,
+        ) ||
+          DEFAULT_TICKET_LAYOUT.copies,
+      ),
+    );
 
   const bool = (
     a: unknown,
     b: unknown,
     fallback: boolean,
   ) => {
-    if (typeof a === "boolean") {
+    if (
+      typeof a ===
+      "boolean"
+    ) {
       return a;
     }
 
-    if (typeof b === "boolean") {
+    if (
+      typeof b ===
+      "boolean"
+    ) {
       return b;
     }
 
@@ -282,57 +385,68 @@ export function normalizeTicketLayout(
   };
 
   return {
-    showBranch: bool(
-      obj.showBranch,
-      obj.show_branch,
-      DEFAULT_TICKET_LAYOUT.showBranch,
-    ),
+    showBranch:
+      bool(
+        obj.showBranch,
+        obj.show_branch,
+        DEFAULT_TICKET_LAYOUT.showBranch,
+      ),
 
-    showCashier: bool(
-      obj.showCashier,
-      obj.show_cashier,
-      DEFAULT_TICKET_LAYOUT.showCashier,
-    ),
+    showCashier:
+      bool(
+        obj.showCashier,
+        obj.show_cashier,
+        DEFAULT_TICKET_LAYOUT.showCashier,
+      ),
 
-    showCustomer: bool(
-      obj.showCustomer,
-      obj.show_customer,
-      DEFAULT_TICKET_LAYOUT.showCustomer,
-    ),
+    showCustomer:
+      bool(
+        obj.showCustomer,
+        obj.show_customer,
+        DEFAULT_TICKET_LAYOUT.showCustomer,
+      ),
 
-    showSku: bool(
-      obj.showSku,
-      obj.show_sku,
-      DEFAULT_TICKET_LAYOUT.showSku,
-    ),
+    showSku:
+      bool(
+        obj.showSku,
+        obj.show_sku,
+        DEFAULT_TICKET_LAYOUT.showSku,
+      ),
 
-    showDiscounts: bool(
-      obj.showDiscounts,
-      obj.show_discounts,
-      DEFAULT_TICKET_LAYOUT.showDiscounts,
-    ),
+    showDiscounts:
+      bool(
+        obj.showDiscounts,
+        obj.show_discounts,
+        DEFAULT_TICKET_LAYOUT.showDiscounts,
+      ),
 
-    showTaxes: bool(
-      obj.showTaxes,
-      obj.show_tax ??
-        obj.show_taxes,
-      DEFAULT_TICKET_LAYOUT.showTaxes,
-    ),
+    showTaxes:
+      bool(
+        obj.showTaxes,
+        obj.show_tax ??
+          obj.show_taxes,
+        DEFAULT_TICKET_LAYOUT.showTaxes,
+      ),
 
-    showCashReceived: bool(
-      obj.showCashReceived,
-      obj.show_cash_received,
-      DEFAULT_TICKET_LAYOUT.showCashReceived,
-    ),
+    showCashReceived:
+      bool(
+        obj.showCashReceived,
+        obj.show_cash_received,
+        DEFAULT_TICKET_LAYOUT.showCashReceived,
+      ),
 
-    showChange: bool(
-      obj.showChange,
-      obj.show_change,
-      DEFAULT_TICKET_LAYOUT.showChange,
-    ),
+    showChange:
+      bool(
+        obj.showChange,
+        obj.show_change,
+        DEFAULT_TICKET_LAYOUT.showChange,
+      ),
 
-    paperWidth: paper,
-    copies,
+    paperWidth:
+      paper,
+
+    copies:
+      copies,
   };
 }
 
@@ -342,7 +456,9 @@ export function cacheTicketLayout(
   try {
     localStorage.setItem(
       LAYOUT_CACHE_KEY,
-      JSON.stringify(layout),
+      JSON.stringify(
+        layout,
+      ),
     );
   } catch {
     // ignore
@@ -372,23 +488,396 @@ export function getCachedTicketLayout(): TicketPrintLayout {
   }
 }
 
-function buildTicketText(
+/**
+ * Obtiene el logo guardado en
+ * el dispositivo.
+ */
+function getCachedTicketLogo():
+  string {
+  try {
+    return (
+      localStorage.getItem(
+        TICKET_LOGO_CACHE_KEY,
+      ) ?? ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Carga una imagen desde data URL
+ * y la convierte en bitmap monocromo
+ * compatible con ESC/POS.
+ *
+ * Esto permite imprimir el logo
+ * en impresoras térmicas.
+ */
+async function imageToEscPos(
+  dataUrl: string,
+  paperWidth: 58 | 80,
+): Promise<Uint8Array | null> {
+  if (!dataUrl) {
+    return null;
+  }
+
+  if (
+    typeof document ===
+    "undefined"
+  ) {
+    return null;
+  }
+
+  try {
+    const image =
+      new Image();
+
+    const loaded =
+      new Promise<void>(
+        (
+          resolve,
+          reject,
+        ) => {
+          image.onload =
+            () => resolve();
+
+          image.onerror =
+            () =>
+              reject(
+                new Error(
+                  "No se pudo cargar el logo para impresión.",
+                ),
+              );
+        },
+      );
+
+    image.src =
+      dataUrl;
+
+    await loaded;
+
+    /**
+     * Anchura máxima aproximada:
+     *
+     * 58 mm -> 384 dots
+     * 80 mm -> 576 dots
+     *
+     * Se deja margen para evitar
+     * que la imagen salga cortada.
+     */
+    const maxWidth =
+      paperWidth === 80
+        ? 560
+        : 384;
+
+    const scale =
+      Math.min(
+        1,
+        maxWidth /
+          Math.max(
+            1,
+            image.naturalWidth,
+          ),
+      );
+
+    const width =
+      Math.max(
+        1,
+        Math.round(
+          image.naturalWidth *
+            scale,
+        ),
+      );
+
+    const height =
+      Math.max(
+        1,
+        Math.round(
+          image.naturalHeight *
+            scale,
+        ),
+      );
+
+    /**
+     * Limitar también la altura
+     * para evitar tickets enormes.
+     */
+    const maxHeight =
+      paperWidth === 80
+        ? 220
+        : 180;
+
+    const finalScale =
+      Math.min(
+        1,
+        maxHeight /
+          Math.max(
+            1,
+            height,
+          ),
+      );
+
+    const finalWidth =
+      Math.max(
+        1,
+        Math.round(
+          width *
+            finalScale,
+        ),
+      );
+
+    const finalHeight =
+      Math.max(
+        1,
+        Math.round(
+          height *
+            finalScale,
+        ),
+      );
+
+    const canvas =
+      document.createElement(
+        "canvas",
+      );
+
+    canvas.width =
+      finalWidth;
+
+    canvas.height =
+      finalHeight;
+
+    const context =
+      canvas.getContext(
+        "2d",
+        {
+          willReadFrequently:
+            true,
+        },
+      );
+
+    if (!context) {
+      return null;
+    }
+
+    context.fillStyle =
+      "#ffffff";
+
+    context.fillRect(
+      0,
+      0,
+      finalWidth,
+      finalHeight,
+    );
+
+    context.drawImage(
+      image,
+      0,
+      0,
+      finalWidth,
+      finalHeight,
+    );
+
+    const pixels =
+      context.getImageData(
+        0,
+        0,
+        finalWidth,
+        finalHeight,
+      ).data;
+
+    /**
+     * ESC/POS GS v 0
+     *
+     * 1 = bit de pixel negro
+     * 0 = blanco
+     */
+    const widthBytes =
+      Math.ceil(
+        finalWidth / 8,
+      );
+
+    const raster =
+      new Uint8Array(
+        widthBytes *
+          finalHeight,
+      );
+
+    for (
+      let y = 0;
+      y < finalHeight;
+      y += 1
+    ) {
+      for (
+        let x = 0;
+        x < finalWidth;
+        x += 1
+      ) {
+        const pixelIndex =
+          (y *
+            finalWidth +
+            x) *
+          4;
+
+        const red =
+          pixels[
+            pixelIndex
+          ];
+
+        const green =
+          pixels[
+            pixelIndex + 1
+          ];
+
+        const blue =
+          pixels[
+            pixelIndex + 2
+          ];
+
+        const alpha =
+          pixels[
+            pixelIndex + 3
+          ];
+
+        /**
+         * Fondo transparente =
+         * blanco.
+         */
+        if (
+          alpha < 40
+        ) {
+          continue;
+        }
+
+        const gray =
+          0.299 * red +
+          0.587 * green +
+          0.114 * blue;
+
+        /**
+         * Umbral para impresión
+         * térmica.
+         *
+         * 185 produce un logo
+         * suficientemente limpio
+         * sin llenar demasiado
+         * de negro el papel.
+         */
+        if (
+          gray <
+          185
+        ) {
+          const byteIndex =
+            y *
+              widthBytes +
+            Math.floor(
+              x / 8,
+            );
+
+          const bit =
+            7 -
+            (x % 8);
+
+          raster[
+            byteIndex
+          ] |=
+            1 << bit;
+        }
+      }
+    }
+
+    const header =
+      command(
+        0x1d,
+        0x76,
+        0x30,
+        0x00,
+        widthBytes & 0xff,
+        (widthBytes >>
+          8) &
+          0xff,
+        finalHeight &
+          0xff,
+        (finalHeight >>
+          8) &
+          0xff,
+      );
+
+    return concatBytes(
+      center(),
+      header,
+      raster,
+      encode("\n"),
+      left(),
+    );
+  } catch (
+    error
+  ) {
+    console.error(
+      "No se pudo convertir el logo para ESC/POS:",
+      error,
+    );
+
+    return null;
+  }
+}
+
+async function buildTicketText(
   ticket: TicketData,
   layout: TicketPrintLayout,
-) {
-  const width = charsForPaper(
-    layout.paperWidth,
-  );
+): Promise<Uint8Array> {
+  const width =
+    charsForPaper(
+      layout.paperWidth,
+    );
 
-  const chunks: Uint8Array[] = [];
+  const chunks: Uint8Array[] =
+    [];
 
   chunks.push(
-    command(0x1b, 0x40),
+    command(
+      0x1b,
+      0x40,
+    ),
   );
 
-  chunks.push(center());
+  /**
+   * Logo:
+   *
+   * Primero intenta usar el
+   * logo que venga en TicketData.
+   *
+   * Si no viene, utiliza el logo
+   * guardado localmente.
+   */
+  const logo =
+    ticket.logoDataUrl ||
+    getCachedTicketLogo();
 
-  chunks.push(bold(true));
+  if (logo) {
+    const logoBytes =
+      await imageToEscPos(
+        logo,
+        layout.paperWidth,
+      );
+
+    if (logoBytes) {
+      chunks.push(
+        logoBytes,
+      );
+
+      chunks.push(
+        encode("\n"),
+      );
+    }
+  }
+
+  chunks.push(
+    center(),
+  );
+
+  chunks.push(
+    bold(true),
+  );
 
   chunks.push(
     doubleSize(true),
@@ -404,9 +893,13 @@ function buildTicketText(
     doubleSize(false),
   );
 
-  chunks.push(bold(false));
+  chunks.push(
+    bold(false),
+  );
 
-  if (ticket.companyAddress) {
+  if (
+    ticket.companyAddress
+  ) {
     chunks.push(
       encode(
         `${ticket.companyAddress}\n`,
@@ -414,7 +907,9 @@ function buildTicketText(
     );
   }
 
-  if (ticket.companyPhone) {
+  if (
+    ticket.companyPhone
+  ) {
     chunks.push(
       encode(
         `Tel: ${ticket.companyPhone}\n`,
@@ -449,7 +944,9 @@ function buildTicketText(
     encode("\n"),
   );
 
-  chunks.push(left());
+  chunks.push(
+    left(),
+  );
 
   if (
     layout.showCashier &&
@@ -481,11 +978,15 @@ function buildTicketText(
 
   chunks.push(
     encode(
-      `${lineSeparator(width)}\n`,
+      `${lineSeparator(
+        width,
+      )}\n`,
     ),
   );
 
-  for (const line of ticket.lines) {
+  for (
+    const line of ticket.lines
+  ) {
     const name =
       layout.showSku &&
       line.sku
@@ -530,7 +1031,9 @@ function buildTicketText(
 
   chunks.push(
     encode(
-      `${lineSeparator(width)}\n`,
+      `${lineSeparator(
+        width,
+      )}\n`,
     ),
   );
 
@@ -546,7 +1049,9 @@ function buildTicketText(
     ),
   );
 
-  if (layout.showTaxes) {
+  if (
+    layout.showTaxes
+  ) {
     chunks.push(
       encode(
         twoColumns(
@@ -623,7 +1128,8 @@ function buildTicketText(
         twoColumns(
           "Cambio",
           moneyValue(
-            ticket.changeGiven ?? 0,
+            ticket.changeGiven ??
+              0,
           ),
           width,
         ) + "\n",
@@ -635,8 +1141,12 @@ function buildTicketText(
     encode("\n"),
   );
 
-  if (ticket.footer) {
-    chunks.push(center());
+  if (
+    ticket.footer
+  ) {
+    chunks.push(
+      center(),
+    );
 
     chunks.push(
       encode(
@@ -644,11 +1154,15 @@ function buildTicketText(
       ),
     );
 
-    chunks.push(left());
+    chunks.push(
+      left(),
+    );
   }
 
   chunks.push(
-    encode("\n\n\n"),
+    encode(
+      "\n\n\n",
+    ),
   );
 
   chunks.push(
@@ -677,11 +1191,15 @@ async function findWritableCharacteristic(
   const services =
     await server.getPrimaryServices();
 
-  for (const service of services) {
+  for (
+    const service of services
+  ) {
     const characteristics =
       await service.getCharacteristics();
 
-    for (const characteristic of characteristics) {
+    for (
+      const characteristic of characteristics
+    ) {
       const properties =
         characteristic.properties;
 
@@ -704,10 +1222,15 @@ export async function connectBluetoothPrinter() {
     getBluetooth();
 
   const device =
-    await bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [],
-    });
+    await bluetooth.requestDevice(
+      {
+        acceptAllDevices:
+          true,
+
+        optionalServices:
+          [],
+      },
+    );
 
   const characteristic =
     await findWritableCharacteristic(
@@ -736,7 +1259,9 @@ export async function reconnectBluetoothPrinter() {
   const bluetooth =
     getBluetooth();
 
-  if (!bluetooth.getDevices) {
+  if (
+    !bluetooth.getDevices
+  ) {
     throw new Error(
       "Este navegador no permite recuperar automáticamente impresoras Bluetooth.",
     );
@@ -787,13 +1312,17 @@ export function disconnectBluetoothPrinter() {
     // No bloquear la aplicación.
   }
 
-  activeConnection = null;
+  activeConnection =
+    null;
 }
 
 export function getBluetoothPrinterName() {
-  if (activeConnection?.device) {
+  if (
+    activeConnection?.device
+  ) {
     return (
-      activeConnection.device.name ??
+      activeConnection.device
+        .name ??
       "Impresora Bluetooth"
     );
   }
@@ -805,8 +1334,8 @@ export function getBluetoothPrinterName() {
 
 export function isBluetoothPrinterConnected() {
   return Boolean(
-    activeConnection?.device.gatt
-      ?.connected,
+    activeConnection?.device
+      .gatt?.connected,
   );
 }
 
@@ -814,24 +1343,28 @@ async function writeInChunks(
   characteristic: BluetoothCharacteristic,
   data: Uint8Array,
 ) {
-  const chunkSize = 180;
+  const chunkSize =
+    180;
 
   for (
     let offset = 0;
     offset < data.length;
-    offset += chunkSize
+    offset +=
+      chunkSize
   ) {
     const chunk =
       data.slice(
         offset,
         Math.min(
-          offset + chunkSize,
+          offset +
+            chunkSize,
           data.length,
         ),
       );
 
     if (
-      characteristic.properties
+      characteristic
+        .properties
         .writeWithoutResponse
     ) {
       await characteristic.writeValueWithoutResponse(
@@ -871,24 +1404,27 @@ export async function printTicketBluetooth(
     );
   }
 
-  const layout: TicketPrintLayout = {
-    ...getCachedTicketLayout(),
-    ...layoutOverride,
-  };
+  const layout: TicketPrintLayout =
+    {
+      ...getCachedTicketLayout(),
+      ...layoutOverride,
+    };
 
   const data =
-    buildTicketText(
+    await buildTicketText(
       ticket,
       layout,
     );
 
-  const copies = Math.max(
-    1,
-    Math.min(
-      5,
-      layout.copies || 1,
-    ),
-  );
+  const copies =
+    Math.max(
+      1,
+      Math.min(
+        5,
+        layout.copies ||
+          1,
+      ),
+    );
 
   for (
     let i = 0;
@@ -901,7 +1437,8 @@ export async function printTicketBluetooth(
     );
 
     if (
-      i < copies - 1
+      i <
+      copies - 1
     ) {
       await new Promise(
         (resolve) =>
@@ -936,20 +1473,27 @@ export function getBluetoothAutoPrint() {
 export async function printTestTicket(
   layoutOverride?: Partial<TicketPrintLayout>,
 ) {
-  const layout: TicketPrintLayout = {
-    ...getCachedTicketLayout(),
-    ...layoutOverride,
-  };
+  const layout: TicketPrintLayout =
+    {
+      ...getCachedTicketLayout(),
+      ...layoutOverride,
+    };
 
   const ticket: TicketData = {
-    companyName: "Lula Shop",
+    companyName:
+      "Lula Shop",
+
+    logoDataUrl:
+      getCachedTicketLogo() ||
+      undefined,
 
     branchName:
       layout.showBranch
         ? "Prueba de impresión"
         : undefined,
 
-    folio: "TEST",
+    folio:
+      "TEST",
 
     date:
       new Date().toLocaleString(
@@ -973,20 +1517,34 @@ export async function printTestTicket(
       {
         name:
           "Ticket de prueba",
-        quantity: 1,
-        unit_price: 10,
+
+        quantity:
+          1,
+
+        unit_price:
+          10,
+
         discount:
           layout.showDiscounts
             ? 0
             : 0,
-        total: 10,
+
+        total:
+          10,
       },
     ],
 
-    subtotal: 10,
-    tax: 0,
-    discount: 0,
-    total: 10,
+    subtotal:
+      10,
+
+    tax:
+      0,
+
+    discount:
+      0,
+
+    total:
+      10,
 
     cashReceived:
       layout.showCashReceived
