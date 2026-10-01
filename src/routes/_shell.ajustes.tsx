@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import {
   CheckCircle2,
   Settings,
+  Trash2,
   UserCheck,
   UserX,
 } from "lucide-react";
@@ -114,7 +115,7 @@ const ROLE_LABELS: Record<AppRole, string> = {
   admin: "Administrador",
   manager: "Encargado",
   cashier: "Cajero",
-  staff: "Colaborador",
+  staff: "Ayudante general",
 };
 
 type ProfileRow = {
@@ -176,6 +177,12 @@ function AjustesPage() {
     useState({
       key: "",
       value: "",
+    });
+
+  const [myProfileForm, setMyProfileForm] =
+    useState({
+      full_name: "",
+      branch_id: "none",
     });
 
   const {
@@ -333,6 +340,155 @@ function AjustesPage() {
           error instanceof Error
             ? error.message
             : "No se pudo crear la sucursal.",
+        ),
+    });
+
+  /*
+   * Eliminar sucursal = desactivar sucursal.
+   *
+   * NO elimina historial ni datos operativos.
+   * La operación está protegida por el RPC:
+   * admin_delete_branch(uuid)
+   */
+  const deleteBranch =
+    useMutation({
+      mutationFn:
+        async (
+          branchIdToDelete: string,
+        ) => {
+          if (!isAdmin) {
+            throw new Error(
+              "No tienes permiso para eliminar sucursales.",
+            );
+          }
+
+          const {
+            error,
+          } = await (
+            supabase as any
+          ).rpc(
+            "admin_delete_branch",
+            {
+              _branch_id:
+                branchIdToDelete,
+            },
+          );
+
+          if (error) {
+            throw error;
+          }
+        },
+
+      onSuccess: () => {
+        toast.success(
+          "Sucursal desactivada correctamente.",
+        );
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "branches",
+          ],
+        });
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "profiles",
+          ],
+        });
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "settings",
+          ],
+        });
+      },
+
+      onError: (error) =>
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "No se pudo eliminar la sucursal.",
+        ),
+    });
+
+  /*
+   * Guarda los datos básicos de la sesión actual.
+   *
+   * El usuario puede modificar su propio nombre
+   * y sucursal mediante la política u_own_profile.
+   *
+   * El rol no se modifica aquí cuando la cuenta
+   * actual es owner, porque el propietario principal
+   * debe permanecer protegido.
+   */
+  const saveMyProfile =
+    useMutation({
+      mutationFn:
+        async ({
+          fullName,
+          branchId: myBranchId,
+        }: {
+          fullName: string;
+          branchId: string | null;
+        }) => {
+          if (!user?.id) {
+            throw new Error(
+              "No hay una sesión de usuario válida.",
+            );
+          }
+
+          const name =
+            fullName.trim();
+
+          if (!name) {
+            throw new Error(
+              "El nombre es obligatorio.",
+            );
+          }
+
+          const {
+            error,
+          } = await supabase
+            .from("profiles")
+            .update({
+              full_name:
+                name,
+              branch_id:
+                myBranchId,
+            })
+            .eq(
+              "id",
+              user.id,
+            );
+
+          if (error) {
+            throw error;
+          }
+        },
+
+      onSuccess: () => {
+        toast.success(
+          "Mis datos fueron actualizados.",
+        );
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "profiles",
+          ],
+        });
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "branches",
+          ],
+        });
+      },
+
+      onError: (error) =>
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "No se pudieron actualizar tus datos.",
         ),
     });
 
@@ -606,14 +762,36 @@ function AjustesPage() {
         )
       : "Todas las sucursales";
 
+  useEffect(() => {
+    if (!currentProfile) {
+      return;
+    }
+
+    setMyProfileForm({
+      full_name:
+        currentProfile.full_name ??
+        "",
+      branch_id:
+        currentProfile.branch_id ??
+        "none",
+    });
+  }, [
+    currentProfile?.id,
+    currentProfile?.full_name,
+    currentProfile?.branch_id,
+  ]);
+
   const submitInvite = async () => {
     if (!canManageUsers) {
       toast.error("No autorizado");
       return;
     }
 
-    const email = inviteForm.email.trim();
-    const password = inviteForm.password;
+    const email =
+      inviteForm.email.trim();
+
+    const password =
+      inviteForm.password;
 
     if (!email || password.length < 6) {
       toast.error(
@@ -633,7 +811,9 @@ function AjustesPage() {
         sessionData.session?.access_token;
 
       if (!token) {
-        throw new Error("Sesión no válida");
+        throw new Error(
+          "Sesión no válida",
+        );
       }
 
       const res = await fetch(
@@ -641,9 +821,12 @@ function AjustesPage() {
         {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            "Content-Type":
+              "application/json",
             Authorization: `Bearer ${token}`,
-            apikey: import.meta.env.VITE_SUPABASE_ANON_KEY,
+            apikey:
+              import.meta.env
+                .VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
             email,
@@ -653,12 +836,14 @@ function AjustesPage() {
             role:
               inviteForm.role,
             branch_id:
-              inviteForm.branch_id || null,
+              inviteForm.branch_id ||
+              null,
           }),
         },
       );
 
-      const json = await res.json();
+      const json =
+        await res.json();
 
       if (!res.ok) {
         throw new Error(
@@ -682,7 +867,9 @@ function AjustesPage() {
       });
 
       void qc.invalidateQueries({
-        queryKey: ["profiles"],
+        queryKey: [
+          "profiles",
+        ],
       });
     } catch (err) {
       toast.error(
@@ -693,6 +880,31 @@ function AjustesPage() {
     } finally {
       setInvitePending(false);
     }
+  };
+
+  const handleDeleteBranch = (
+    branchIdToDelete: string,
+    branchName: string,
+  ) => {
+    if (!isAdmin) {
+      toast.error(
+        "No tienes permiso para eliminar sucursales.",
+      );
+      return;
+    }
+
+    const confirmed =
+      window.confirm(
+        `¿Desactivar la sucursal "${branchName}"?\n\nLa sucursal dejará de estar activa, pero no se eliminará el historial ni los datos operativos.`,
+      );
+
+    if (!confirmed) {
+      return;
+    }
+
+    deleteBranch.mutate(
+      branchIdToDelete,
+    );
   };
 
   return (
@@ -751,26 +963,53 @@ function AjustesPage() {
 
             <CardContent className="max-w-full overflow-x-auto px-3 sm:px-6">
               <div className="grid gap-2.5 lg:hidden">
-                {branches.map((item) => (
-                  <div
-                    key={item.id}
-                    className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
-                  >
-                    <p className="text-[15px] font-bold text-[#212121]">
-                      {item.name}
-                    </p>
+                {branches.map(
+                  (item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-[15px] font-bold text-[#212121]">
+                            {item.name}
+                          </p>
 
-                    <p className="mt-0.5 text-xs text-[#757575]">
-                      {item.address ??
-                        "Sin dirección"}
-                    </p>
+                          <p className="mt-0.5 text-xs text-[#757575]">
+                            {item.address ??
+                              "Sin dirección"}
+                          </p>
 
-                    <p className="mt-0.5 text-xs text-[#9e9e9e]">
-                      {item.phone ??
-                        "Sin teléfono"}
-                    </p>
-                  </div>
-                ))}
+                          <p className="mt-0.5 text-xs text-[#9e9e9e]">
+                            {item.phone ??
+                              "Sin teléfono"}
+                          </p>
+                        </div>
+
+                        {isAdmin && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            className="shrink-0 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700"
+                            disabled={
+                              deleteBranch.isPending
+                            }
+                            onClick={() =>
+                              handleDeleteBranch(
+                                item.id,
+                                item.name,
+                              )
+                            }
+                          >
+                            <Trash2 className="mr-1.5 h-4 w-4" />
+                            Eliminar
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ),
+                )}
 
                 {!branches.length && (
                   <p className="py-8 text-center text-sm text-muted-foreground">
@@ -794,6 +1033,12 @@ function AjustesPage() {
                       <TableHead>
                         Teléfono
                       </TableHead>
+
+                      {isAdmin && (
+                        <TableHead className="text-right">
+                          Acciones
+                        </TableHead>
+                      )}
                     </TableRow>
                   </TableHeader>
 
@@ -818,6 +1063,29 @@ function AjustesPage() {
                             {item.phone ??
                               "—"}
                           </TableCell>
+
+                          {isAdmin && (
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700"
+                                disabled={
+                                  deleteBranch.isPending
+                                }
+                                onClick={() =>
+                                  handleDeleteBranch(
+                                    item.id,
+                                    item.name,
+                                  )
+                                }
+                              >
+                                <Trash2 className="mr-1.5 h-4 w-4" />
+                                Eliminar
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ),
                     )}
@@ -825,7 +1093,11 @@ function AjustesPage() {
                     {!branches.length && (
                       <TableRow>
                         <TableCell
-                          colSpan={3}
+                          colSpan={
+                            isAdmin
+                              ? 4
+                              : 3
+                          }
                           className="py-8 text-center text-muted-foreground"
                         >
                           No hay sucursales activas
@@ -963,58 +1235,247 @@ function AjustesPage() {
                 </CardTitle>
 
                 <p className="text-sm text-muted-foreground">
-                  Esta es la cuenta con la que estás
-                  conectado actualmente.
+                  Puedes actualizar tu nombre y la
+                  sucursal asignada. La cuenta propietaria
+                  mantiene protegido su rol.
                 </p>
               </CardHeader>
 
-              <CardContent className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-xl border bg-[#f8f9fa] p-4">
-                  <p className="text-xs font-medium uppercase text-muted-foreground">
-                    Usuario
-                  </p>
+              <CardContent className="space-y-5">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="space-y-2">
+                    <Label>
+                      Nombre
+                    </Label>
 
-                  <p className="mt-1 font-semibold">
-                    {currentProfile?.full_name?.trim() ||
-                      "Sin nombre"}
-                  </p>
+                    <Input
+                      className="h-11"
+                      value={
+                        myProfileForm.full_name
+                      }
+                      onChange={(event) =>
+                        setMyProfileForm(
+                          (form) => ({
+                            ...form,
+                            full_name:
+                              event.target.value,
+                          }),
+                        )
+                      }
+                      placeholder="Nombre completo"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>
+                      Rol
+                    </Label>
+
+                    <Select
+                      value={
+                        currentRole
+                      }
+                      disabled={
+                        currentRole ===
+                        "owner"
+                      }
+                      onValueChange={(
+                        value,
+                      ) =>
+                        setUserAccess.mutate(
+                          {
+                            userId:
+                              user?.id ??
+                              "",
+                            role:
+                              value as AppRole,
+                            bid:
+                              currentProfile?.branch_id ??
+                              null,
+                            active:
+                              currentProfile?.is_active ??
+                              true,
+                          },
+                        )
+                      }
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {ROLES.map(
+                          (role) => (
+                            <SelectItem
+                              key={
+                                role
+                              }
+                              value={
+                                role
+                              }
+                            >
+                              {
+                                ROLE_LABELS[
+                                  role
+                                ]
+                              }
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+
+                    {currentRole ===
+                      "owner" && (
+                      <p className="text-xs text-amber-600">
+                        El rol Propietario está protegido
+                        para evitar bloquear la cuenta principal.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>
+                      Sucursal
+                    </Label>
+
+                    <Select
+                      value={
+                        myProfileForm.branch_id
+                      }
+                      onValueChange={(
+                        value,
+                      ) =>
+                        setMyProfileForm(
+                          (form) => ({
+                            ...form,
+                            branch_id:
+                              value,
+                          }),
+                        )
+                      }
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Sucursal" />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        <SelectItem value="none">
+                          Todas las sucursales
+                        </SelectItem>
+
+                        {branches.map(
+                          (item) => (
+                            <SelectItem
+                              key={
+                                item.id
+                              }
+                              value={
+                                item.id
+                              }
+                            >
+                              {
+                                item.name
+                              }
+                            </SelectItem>
+                          ),
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="rounded-xl border bg-[#f8f9fa] p-4">
-                  <p className="text-xs font-medium uppercase text-muted-foreground">
-                    Rol
-                  </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    className="min-h-11 rounded-xl bg-[#1a73e8] font-semibold hover:bg-[#1557b0]"
+                    disabled={
+                      !user?.id ||
+                      !myProfileForm.full_name.trim() ||
+                      saveMyProfile.isPending
+                    }
+                    onClick={() =>
+                      saveMyProfile.mutate(
+                        {
+                          fullName:
+                            myProfileForm.full_name,
+                          branchId:
+                            myProfileForm.branch_id ===
+                            "none"
+                              ? null
+                              : myProfileForm.branch_id,
+                        },
+                      )
+                    }
+                  >
+                    {saveMyProfile.isPending
+                      ? "Guardando..."
+                      : "Guardar mis datos"}
+                  </Button>
 
-                  <p className="mt-1 font-semibold">
+                  <Badge
+                    variant="outline"
+                    className="rounded-full"
+                  >
                     {currentRoleLabel}
-                  </p>
-                </div>
+                  </Badge>
 
-                <div className="rounded-xl border bg-[#f8f9fa] p-4">
-                  <p className="text-xs font-medium uppercase text-muted-foreground">
-                    Sucursal
-                  </p>
-
-                  <p className="mt-1 font-semibold">
+                  <Badge
+                    variant="outline"
+                    className="rounded-full"
+                  >
                     {currentBranchName}
-                  </p>
+                  </Badge>
                 </div>
 
-                <div className="flex flex-wrap gap-2 md:col-span-3">
-                  <Badge className="rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
-                    Sesión activa
-                  </Badge>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-xl border bg-[#f8f9fa] p-4">
+                    <p className="text-xs font-medium uppercase text-muted-foreground">
+                      Usuario
+                    </p>
 
-                  <Badge variant="outline">
-                    Acceso administrativo
-                  </Badge>
+                    <p className="mt-1 font-semibold">
+                      {currentProfile?.full_name?.trim() ||
+                        "Sin nombre"}
+                    </p>
+                  </div>
 
-                  {currentRole ===
-                    "owner" && (
-                    <Badge variant="outline">
-                      Propietario protegido
+                  <div className="rounded-xl border bg-[#f8f9fa] p-4">
+                    <p className="text-xs font-medium uppercase text-muted-foreground">
+                      Rol actual
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {currentRoleLabel}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border bg-[#f8f9fa] p-4">
+                    <p className="text-xs font-medium uppercase text-muted-foreground">
+                      Sucursal actual
+                    </p>
+
+                    <p className="mt-1 font-semibold">
+                      {currentBranchName}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 md:col-span-3">
+                    <Badge className="rounded-full border-transparent bg-[#e8f5e9] text-[#2e7d32]">
+                      Sesión activa
                     </Badge>
-                  )}
+
+                    <Badge variant="outline">
+                      Acceso administrativo
+                    </Badge>
+
+                    {currentRole ===
+                      "owner" && (
+                      <Badge variant="outline">
+                        Propietario protegido
+                      </Badge>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1153,7 +1614,7 @@ function AjustesPage() {
                               <p className="mt-2 text-[11px] text-[#9e9e9e]">
                                 Usa la vista de escritorio
                                 para cambiar rol, sucursal
-                                o activación.
+                                o activación de otros usuarios.
                               </p>
                             </div>
                           );
@@ -1213,12 +1674,13 @@ function AjustesPage() {
                                 );
 
                               /*
-                               * La sesión actual no se modifica
-                               * desde esta tabla para proteger
-                               * especialmente la cuenta propietaria.
+                               * La cuenta actual ahora sí puede
+                               * modificar su sucursal desde
+                               * "Mi sesión".
                                *
-                               * La configuración de la sesión
-                               * actual se muestra arriba.
+                               * En esta tabla no se permite
+                               * cambiar el estado de la propia
+                               * sesión para evitar bloquearla.
                                */
                               const canModify =
                                 !current;
