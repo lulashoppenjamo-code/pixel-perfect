@@ -103,7 +103,7 @@ const QUICK_REASONS: Record<MovementType, string[]> = {
   ],
 };
 
-function printArqueoReport(opts: {
+type ArqueoPrintOpts = {
   branchLabel: string;
   openedAt: string;
   closedAt?: string | null;
@@ -123,32 +123,29 @@ function printArqueoReport(opts: {
     reason: string | null;
     created_at: string;
   }[];
-}) {
-  const w = window.open("", "_blank", "width=320,height=720");
-  if (!w) {
-    toast.error("El navegador bloqueó la impresión.");
-    return;
-  }
+};
 
+function shortTicketTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString("es-MX", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+/** HTML del ticket 58mm (para vista previa e impresión) */
+function buildTicket58Html(opts: ArqueoPrintOpts): string {
   const esc = (s: string) =>
     s
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
-
-  const shortTime = (iso: string) => {
-    try {
-      return new Date(iso).toLocaleString("es-MX", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-    } catch {
-      return iso;
-    }
-  };
 
   const mvHtml =
     opts.movements.length === 0
@@ -163,7 +160,7 @@ function printArqueoReport(opts: {
             );
             return `<div class="mv">
   <div class="row"><span class="bold">${tipo}</span><span>${signo}${money(Number(m.amount))}</span></div>
-  <div class="muted">${shortTime(m.created_at)}</div>
+  <div class="muted">${shortTicketTime(m.created_at)}</div>
   <div class="muted">${reason}</div>
 </div>`;
           })
@@ -176,17 +173,14 @@ function printArqueoReport(opts: {
 <div class="row bold"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
       : "";
 
-  w.document.write(`<!DOCTYPE html>
+  return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Corte de caja 58mm</title>
   <style>
-    /* Ticket térmico 58mm (ancho útil ~48–52mm) */
-    @page {
-      size: 58mm auto;
-      margin: 0;
-    }
+    @page { size: 58mm auto; margin: 0; }
     * { box-sizing: border-box; }
     html, body {
       margin: 0;
@@ -240,13 +234,6 @@ function printArqueoReport(opts: {
       text-transform: uppercase;
       margin: 6px 0 2px;
     }
-    @media print {
-      html, body {
-        width: 58mm;
-        max-width: 58mm;
-      }
-      body { padding: 1mm 2mm 3mm; }
-    }
   </style>
 </head>
 <body>
@@ -254,10 +241,10 @@ function printArqueoReport(opts: {
   <p class="center bold">${esc(opts.branchLabel)}</p>
   <p class="center muted">Lula Shop</p>
   <div class="dash"></div>
-  <div class="row"><span>Abierta</span><span>${shortTime(opts.openedAt)}</span></div>
+  <div class="row"><span>Abierta</span><span>${shortTicketTime(opts.openedAt)}</span></div>
   ${
     opts.closedAt
-      ? `<div class="row"><span>Cerrada</span><span>${shortTime(opts.closedAt)}</span></div>`
+      ? `<div class="row"><span>Cerrada</span><span>${shortTicketTime(opts.closedAt)}</span></div>`
       : `<div class="center muted">Corte en curso</div>`
   }
   <div class="dash"></div>
@@ -276,16 +263,64 @@ function printArqueoReport(opts: {
   <div class="dash"></div>
   <p class="center muted">Fin del corte</p>
   <p class="center muted">Ticket 58mm</p>
-  <script>
-    window.onload = function () {
-      setTimeout(function () {
-        window.print();
-      }, 250);
-    };
-  </script>
 </body>
-</html>`);
+</html>`;
+}
+
+function printTicket58Html(html: string) {
+  // 1) Intentar iframe (mejor en móvil que window.open)
+  try {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute(
+      "style",
+      "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;",
+    );
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow?.document;
+    if (!doc) {
+      throw new Error("No se pudo crear el documento de impresión.");
+    }
+    doc.open();
+    doc.write(html);
+    doc.close();
+    const win = iframe.contentWindow;
+    if (!win) {
+      throw new Error("No se pudo abrir la vista de impresión.");
+    }
+    setTimeout(() => {
+      try {
+        win.focus();
+        win.print();
+      } catch {
+        // ignore
+      }
+      setTimeout(() => {
+        iframe.remove();
+      }, 1500);
+    }, 300);
+    return;
+  } catch {
+    // 2) Fallback ventana
+  }
+
+  const w = window.open("", "_blank");
+  if (!w) {
+    toast.error(
+      "No se pudo abrir la impresión. Revisa si el navegador bloqueó ventanas emergentes.",
+    );
+    return;
+  }
+  w.document.open();
+  w.document.write(html);
   w.document.close();
+  setTimeout(() => {
+    try {
+      w.focus();
+      w.print();
+    } catch {
+      // ignore
+    }
+  }, 300);
 }
 
 
@@ -372,6 +407,8 @@ export function CashDrawerPanel({
     emptyDenomCounts,
   );
   const [printingClosedId, setPrintingClosedId] = useState<string | null>(null);
+  const [ticketHtml, setTicketHtml] = useState<string | null>(null);
+  const [ticketTitle, setTicketTitle] = useState("Corte de caja");
 
   const invalidate = () => {
     void qc.invalidateQueries({
@@ -387,6 +424,12 @@ export function CashDrawerPanel({
     });
   };
 
+  const openTicketPreview = (opts: ArqueoPrintOpts, title = "Corte de caja") => {
+    const html = buildTicket58Html(opts);
+    setTicketTitle(title);
+    setTicketHtml(html);
+  };
+
   const printClosedSession = async (closedSession: {
     id: string;
     opened_at: string;
@@ -399,36 +442,41 @@ export function CashDrawerPanel({
     try {
       setPrintingClosedId(closedSession.id);
       const detail = await loadSessionPrintData(closedSession.id);
-      printArqueoReport({
-        branchLabel,
-        openedAt: closedSession.opened_at,
-        closedAt: closedSession.closed_at,
-        opening: Number(closedSession.opening_amount ?? 0),
-        cashSales: detail.cashSales,
-        mixedCash: detail.mixedCash,
-        deposits: detail.deposits,
-        withdrawals: detail.withdrawals,
-        cashExpenses: detail.cashExpenses,
-        expected: Number(
-          closedSession.expected_amount ??
-            Number(closedSession.opening_amount ?? 0) +
-              detail.cashSales +
-              detail.mixedCash +
-              detail.deposits -
-              detail.withdrawals -
-              detail.cashExpenses,
-        ),
-        counted: closedSession.closing_amount != null
-          ? Number(closedSession.closing_amount)
-          : null,
-        difference: closedSession.difference != null
-          ? Number(closedSession.difference)
-          : null,
-        movements: detail.movements,
-      });
+      openTicketPreview(
+        {
+          branchLabel,
+          openedAt: closedSession.opened_at,
+          closedAt: closedSession.closed_at,
+          opening: Number(closedSession.opening_amount ?? 0),
+          cashSales: detail.cashSales,
+          mixedCash: detail.mixedCash,
+          deposits: detail.deposits,
+          withdrawals: detail.withdrawals,
+          cashExpenses: detail.cashExpenses,
+          expected: Number(
+            closedSession.expected_amount ??
+              Number(closedSession.opening_amount ?? 0) +
+                detail.cashSales +
+                detail.mixedCash +
+                detail.deposits -
+                detail.withdrawals -
+                detail.cashExpenses,
+          ),
+          counted:
+            closedSession.closing_amount != null
+              ? Number(closedSession.closing_amount)
+              : null,
+          difference:
+            closedSession.difference != null
+              ? Number(closedSession.difference)
+              : null,
+          movements: detail.movements,
+        },
+        "Corte cerrado",
+      );
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : "No se pudo imprimir el corte.";
+        e instanceof Error ? e.message : "No se pudo cargar el corte.";
       toast.error(msg);
     } finally {
       setPrintingClosedId(null);
@@ -935,24 +983,27 @@ export function CashDrawerPanel({
                 className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] sm:w-auto"
                 onClick={() => {
                   if (!session) return;
-                  printArqueoReport({
-                    branchLabel,
-                    openedAt: session.opened_at,
-                    opening: Number(session.opening_amount ?? 0),
-                    cashSales: summary?.cashSales ?? 0,
-                    mixedCash: summary?.mixedCash ?? 0,
-                    deposits: summary?.deposits ?? 0,
-                    withdrawals: summary?.withdrawals ?? 0,
-                    cashExpenses: summary?.cashExpenses ?? 0,
-                    expected: summary?.expected ?? 0,
-                    movements: (summary?.movements ?? []).map((m) => ({
-                      id: m.id,
-                      type: m.type,
-                      amount: Number(m.amount ?? 0),
-                      reason: m.reason ?? null,
-                      created_at: m.created_at,
-                    })),
-                  });
+                  openTicketPreview(
+                    {
+                      branchLabel,
+                      openedAt: session.opened_at,
+                      opening: Number(session.opening_amount ?? 0),
+                      cashSales: summary?.cashSales ?? 0,
+                      mixedCash: summary?.mixedCash ?? 0,
+                      deposits: summary?.deposits ?? 0,
+                      withdrawals: summary?.withdrawals ?? 0,
+                      cashExpenses: summary?.cashExpenses ?? 0,
+                      expected: summary?.expected ?? 0,
+                      movements: (summary?.movements ?? []).map((m) => ({
+                        id: m.id,
+                        type: m.type,
+                        amount: Number(m.amount ?? 0),
+                        reason: m.reason ?? null,
+                        created_at: m.created_at,
+                      })),
+                    },
+                    "Corte en curso",
+                  );
                 }}
               >
                 <Printer className="mr-2 h-4 w-4" />
@@ -1430,6 +1481,65 @@ export function CashDrawerPanel({
               {closeBox.isPending
                 ? "Cerrando…"
                 : "Cerrar caja"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
+      {/* ======================================================
+       * VISTA PREVIA TICKET 58mm
+       * ====================================================== */}
+      <Dialog
+        open={!!ticketHtml}
+        onOpenChange={(open) => {
+          if (!open) {
+            setTicketHtml(null);
+          }
+        }}
+      >
+        <DialogContent className="flex max-h-[92vh] w-[calc(100%-1rem)] max-w-sm flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:w-full">
+          <DialogHeader className="border-b px-4 py-3 text-left">
+            <DialogTitle className="text-base">
+              {ticketTitle}
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              Vista previa ticket 58 mm · revisa y luego imprime
+            </p>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-[#f3f4f6] px-3 py-3">
+            {ticketHtml ? (
+              <div className="mx-auto w-[58mm] max-w-full overflow-hidden rounded-md border bg-white shadow-sm">
+                <iframe
+                  title="ticket-58mm"
+                  srcDoc={ticketHtml}
+                  className="block w-full border-0"
+                  style={{ height: "70vh", minHeight: 360 }}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <DialogFooter className="flex-col gap-2 border-t bg-white px-4 py-3 sm:flex-row">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 w-full rounded-xl sm:w-auto"
+              onClick={() => setTicketHtml(null)}
+            >
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              className="min-h-11 w-full rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
+              onClick={() => {
+                if (!ticketHtml) return;
+                printTicket58Html(ticketHtml);
+              }}
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              Imprimir ticket 58 mm
             </Button>
           </DialogFooter>
         </DialogContent>
