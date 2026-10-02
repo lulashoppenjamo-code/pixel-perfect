@@ -62,23 +62,39 @@ function MethodIcon({ method }: { method: string | null }) {
 async function loadHistoryFallback(
   customerId: string,
 ): Promise<CreditHistoryRow[]> {
-  const [salesRes, paymentsRes] = await Promise.all([
-    supabase
-      .from("sales")
-      .select("id, folio, total, payment_method, created_at, status")
-      .eq("customer_id", customerId)
-      .eq("payment_method", "credit")
-      .in("status", ["completed", "partially_refunded"]),
-    supabase
-      .from("credit_payments")
-      .select("id, amount, payment_method, notes, created_at")
-      .eq("customer_id", customerId),
-  ]);
+  const salesRes = await supabase
+    .from("sales")
+    .select("id, folio, total, payment_method, created_at, status")
+    .eq("customer_id", customerId)
+    .eq("payment_method", "credit")
+    .in("status", ["completed", "partially_refunded"]);
+
+  const paymentsRes = await supabase
+    .from("credit_payments")
+    .select("id, amount, payment_method, notes, created_at")
+    .eq("customer_id", customerId);
 
   if (salesRes.error) throw salesRes.error;
   if (paymentsRes.error) throw paymentsRes.error;
 
-  const sales: CreditHistoryRow[] = (salesRes.data ?? []).map((s) => ({
+  type SaleRow = {
+    id: string;
+    folio: number | null;
+    total: number | null;
+    created_at: string;
+  };
+  type PaymentRow = {
+    id: string;
+    amount: number | null;
+    payment_method: string | null;
+    notes: string | null;
+    created_at: string;
+  };
+
+  const salesData = (salesRes.data ?? []) as unknown as SaleRow[];
+  const paymentsData = (paymentsRes.data ?? []) as unknown as PaymentRow[];
+
+  const sales: CreditHistoryRow[] = salesData.map((s) => ({
     movement_type: "credit_sale",
     movement_id: s.id,
     movement_date: s.created_at,
@@ -88,7 +104,7 @@ async function loadHistoryFallback(
     sale_folio: s.folio != null ? String(s.folio) : null,
   }));
 
-  const payments: CreditHistoryRow[] = (paymentsRes.data ?? []).map((p) => ({
+  const payments: CreditHistoryRow[] = paymentsData.map((p) => ({
     movement_type: "payment",
     movement_id: p.id,
     movement_date: p.created_at,
@@ -177,13 +193,22 @@ export function CreditHistoryDialog({
     queryFn: async () => {
       if (!customerId) return [];
 
-      const { data, error } = await (supabase as any).rpc(
-        "get_customer_credit_history",
-        { _customer_id: customerId },
-      );
+      const { data, error } = await (
+        supabase as unknown as {
+          rpc: (
+            fn: string,
+            args: Record<string, unknown>,
+          ) => Promise<{
+            data: unknown;
+            error: { message?: string } | null;
+          }>;
+        }
+      ).rpc("get_customer_credit_history", {
+        _customer_id: customerId,
+      });
 
       if (!error) {
-        return (data ?? []) as CreditHistoryRow[];
+        return (Array.isArray(data) ? data : []) as CreditHistoryRow[];
       }
 
       const msg = String(error.message ?? "").toLowerCase();
