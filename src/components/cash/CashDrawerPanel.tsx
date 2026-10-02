@@ -107,6 +107,8 @@ type ArqueoPrintOpts = {
   branchLabel: string;
   openedAt: string;
   closedAt?: string | null;
+  /** Nombre de quien abrió la sesión de caja */
+  openedByName?: string | null;
   opening: number;
   cashSales: number;
   mixedCash: number;
@@ -156,12 +158,12 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
               m.type === "deposit" ? "ENTRADA" : "SALIDA";
             const signo = m.type === "deposit" ? "+" : "-";
             const reason = esc(
-              (m.reason || "Sin motivo").slice(0, 28),
+              (m.reason && m.reason.trim()) || "Sin motivo",
             );
             return `<div class="mv">
   <div class="row"><span class="bold">${tipo}</span><span>${signo}${money(Number(m.amount))}</span></div>
   <div class="muted">${shortTicketTime(m.created_at)}</div>
-  <div class="muted">${reason}</div>
+  <div class="muted">Motivo: ${reason}</div>
 </div>`;
           })
           .join("");
@@ -242,6 +244,7 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
   <p class="center muted">Lula Shop</p>
   <div class="dash"></div>
   <div class="row"><span>Abierta</span><span>${shortTicketTime(opts.openedAt)}</span></div>
+  <div class="row"><span>Responsable</span><span>${esc((opts.openedByName || "—").slice(0, 18))}</span></div>
   ${
     opts.closedAt
       ? `<div class="row"><span>Cerrada</span><span>${shortTicketTime(opts.closedAt)}</span></div>`
@@ -324,7 +327,20 @@ function printTicket58Html(html: string) {
 }
 
 
+async function resolveProfileName(userId: string | null | undefined): Promise<string> {
+  if (!userId) return "—";
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", userId)
+    .maybeSingle();
+  if (error) return "—";
+  const name = (data?.full_name ?? "").trim();
+  return name || "—";
+}
+
 async function loadSessionPrintData(sessionId: string) {
+
   const [mvRes, cashRes, mixedRes, expRes] = await Promise.all([
     supabase
       .from("cash_movements")
@@ -434,6 +450,7 @@ export function CashDrawerPanel({
     id: string;
     opened_at: string;
     closed_at: string | null;
+    opened_by?: string | null;
     opening_amount: number;
     expected_amount: number | null;
     closing_amount: number | null;
@@ -441,12 +458,16 @@ export function CashDrawerPanel({
   }) => {
     try {
       setPrintingClosedId(closedSession.id);
-      const detail = await loadSessionPrintData(closedSession.id);
+      const [detail, openedByName] = await Promise.all([
+        loadSessionPrintData(closedSession.id),
+        resolveProfileName(closedSession.opened_by),
+      ]);
       openTicketPreview(
         {
           branchLabel,
           openedAt: closedSession.opened_at,
           closedAt: closedSession.closed_at,
+          openedByName,
           opening: Number(closedSession.opening_amount ?? 0),
           cashSales: detail.cashSales,
           mixedCash: detail.mixedCash,
@@ -983,27 +1004,33 @@ export function CashDrawerPanel({
                 className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] sm:w-auto"
                 onClick={() => {
                   if (!session) return;
-                  openTicketPreview(
-                    {
-                      branchLabel,
-                      openedAt: session.opened_at,
-                      opening: Number(session.opening_amount ?? 0),
-                      cashSales: summary?.cashSales ?? 0,
-                      mixedCash: summary?.mixedCash ?? 0,
-                      deposits: summary?.deposits ?? 0,
-                      withdrawals: summary?.withdrawals ?? 0,
-                      cashExpenses: summary?.cashExpenses ?? 0,
-                      expected: summary?.expected ?? 0,
-                      movements: (summary?.movements ?? []).map((m) => ({
-                        id: m.id,
-                        type: m.type,
-                        amount: Number(m.amount ?? 0),
-                        reason: m.reason ?? null,
-                        created_at: m.created_at,
-                      })),
-                    },
-                    "Corte en curso",
-                  );
+                  void (async () => {
+                    const openedByName = await resolveProfileName(
+                      session.opened_by,
+                    );
+                    openTicketPreview(
+                      {
+                        branchLabel,
+                        openedAt: session.opened_at,
+                        openedByName,
+                        opening: Number(session.opening_amount ?? 0),
+                        cashSales: summary?.cashSales ?? 0,
+                        mixedCash: summary?.mixedCash ?? 0,
+                        deposits: summary?.deposits ?? 0,
+                        withdrawals: summary?.withdrawals ?? 0,
+                        cashExpenses: summary?.cashExpenses ?? 0,
+                        expected: summary?.expected ?? 0,
+                        movements: (summary?.movements ?? []).map((m) => ({
+                          id: m.id,
+                          type: m.type,
+                          amount: Number(m.amount ?? 0),
+                          reason: m.reason ?? null,
+                          created_at: m.created_at,
+                        })),
+                      },
+                      "Corte en curso",
+                    );
+                  })();
                 }}
               >
                 <Printer className="mr-2 h-4 w-4" />
