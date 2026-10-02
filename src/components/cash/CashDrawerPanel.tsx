@@ -51,6 +51,44 @@ type MovementType = "deposit" | "withdrawal";
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString("es-MX");
 
+
+/** Fondo fijo de apertura (pesos) */
+const DEFAULT_FONDO = 400;
+
+/** Denominaciones MXN para el tablero de conteo */
+const DENOMINATIONS: { value: number; label: string }[] = [
+  { value: 1000, label: "$1,000" },
+  { value: 500, label: "$500" },
+  { value: 200, label: "$200" },
+  { value: 100, label: "$100" },
+  { value: 50, label: "$50" },
+  { value: 20, label: "$20" },
+  { value: 10, label: "$10" },
+  { value: 5, label: "$5" },
+  { value: 2, label: "$2" },
+  { value: 1, label: "$1" },
+  { value: 0.5, label: "$0.50" },
+];
+
+function emptyDenomCounts(): Record<string, string> {
+  const o: Record<string, string> = {};
+  for (const d of DENOMINATIONS) {
+    o[String(d.value)] = "";
+  }
+  return o;
+}
+
+function sumDenominations(counts: Record<string, string>): number {
+  let total = 0;
+  for (const d of DENOMINATIONS) {
+    const n = Number(counts[String(d.value)] || 0);
+    if (Number.isFinite(n) && n > 0) {
+      total += n * d.value;
+    }
+  }
+  return Math.round(total * 100) / 100;
+}
+
 const QUICK_REASONS: Record<MovementType, string[]> = {
   deposit: [
     "Ventas perfumes (otro sistema)",
@@ -68,6 +106,7 @@ const QUICK_REASONS: Record<MovementType, string[]> = {
 function printArqueoReport(opts: {
   branchLabel: string;
   openedAt: string;
+  closedAt?: string | null;
   opening: number;
   cashSales: number;
   mixedCash: number;
@@ -75,6 +114,8 @@ function printArqueoReport(opts: {
   withdrawals: number;
   cashExpenses: number;
   expected: number;
+  counted?: number | null;
+  difference?: number | null;
   movements: {
     id: string;
     type: string;
@@ -119,6 +160,7 @@ function printArqueoReport(opts: {
   <h1>Arqueo de caja</h1>
   <p class="muted">${opts.branchLabel}</p>
   <p class="muted">Abierta: ${dateTime(opts.openedAt)}</p>
+  ${opts.closedAt ? `<p class="muted">Cerrada: ${dateTime(opts.closedAt)}</p>` : ""}
   <div class="box">
     <div class="row"><span>Fondo inicial</span><span>${money(opts.opening)}</span></div>
     <div class="row"><span>Ventas en efectivo</span><span>+ ${money(opts.cashSales + opts.mixedCash)}</span></div>
@@ -126,6 +168,12 @@ function printArqueoReport(opts: {
     <div class="row"><span>Salidas manuales</span><span>− ${money(opts.withdrawals)}</span></div>
     <div class="row"><span>Gastos en efectivo</span><span>− ${money(opts.cashExpenses)}</span></div>
     <div class="row big"><span>Debe haber en cajón</span><span>${money(opts.expected)}</span></div>
+    ${
+      opts.counted != null
+        ? `<div class="row"><span>Contado</span><span>${money(opts.counted)}</span></div>
+           <div class="row big"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
+        : ""
+    }
   </div>
   <h2 style="font-size:14px;margin:16px 0 0">Movimientos</h2>
   ${
@@ -158,6 +206,68 @@ function getSupabaseErrorMessage(error: unknown): string {
   return e.message || e.details || e.hint || "";
 }
 
+
+async function loadSessionPrintData(sessionId: string) {
+  const [mvRes, cashRes, mixedRes, expRes] = await Promise.all([
+    supabase
+      .from("cash_movements")
+      .select("id, type, amount, reason, created_at")
+      .eq("cash_session_id", sessionId)
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("sales")
+      .select("total")
+      .eq("cash_session_id", sessionId)
+      .eq("payment_method", "cash")
+      .in("status", ["completed", "partially_refunded"]),
+    supabase
+      .from("sales")
+      .select("cash_received")
+      .eq("cash_session_id", sessionId)
+      .eq("payment_method", "mixed")
+      .in("status", ["completed", "partially_refunded"]),
+    supabase
+      .from("expenses")
+      .select("amount")
+      .eq("cash_session_id", sessionId),
+  ]);
+
+  const movements = mvRes.data ?? [];
+  const deposits = movements
+    .filter((m) => m.type === "deposit")
+    .reduce((t, m) => t + Number(m.amount ?? 0), 0);
+  const withdrawals = movements
+    .filter((m) => m.type === "withdrawal")
+    .reduce((t, m) => t + Number(m.amount ?? 0), 0);
+  const cashSales = (cashRes.data ?? []).reduce(
+    (t, r) => t + Number(r.total ?? 0),
+    0,
+  );
+  const mixedCash = (mixedRes.data ?? []).reduce(
+    (t, r) => t + Number(r.cash_received ?? 0),
+    0,
+  );
+  const cashExpenses = (expRes.data ?? []).reduce(
+    (t, r) => t + Number(r.amount ?? 0),
+    0,
+  );
+
+  return {
+    movements: movements.map((m) => ({
+      id: m.id,
+      type: m.type,
+      amount: Number(m.amount ?? 0),
+      reason: m.reason ?? null,
+      created_at: m.created_at,
+    })),
+    deposits,
+    withdrawals,
+    cashSales,
+    mixedCash,
+    cashExpenses,
+  };
+}
+
 export function CashDrawerPanel({
   className,
 }: {
@@ -169,13 +279,17 @@ export function CashDrawerPanel({
     branches.find((b) => b.id === branchId)?.name ?? "Sucursal";
   const qc = useQueryClient();
 
-  const [opening, setOpening] = useState("");
+  const [opening, setOpening] = useState(String(DEFAULT_FONDO));
   const [mvType, setMvType] =
     useState<MovementType>("withdrawal");
   const [mvAmount, setMvAmount] = useState("");
   const [mvReason, setMvReason] = useState("");
   const [closeOpen, setCloseOpen] = useState(false);
   const [counted, setCounted] = useState("");
+  const [denomCounts, setDenomCounts] = useState<Record<string, string>>(
+    emptyDenomCounts,
+  );
+  const [printingClosedId, setPrintingClosedId] = useState<string | null>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({
@@ -190,6 +304,55 @@ export function CashDrawerPanel({
       queryKey: ["closed-sessions"],
     });
   };
+
+  const printClosedSession = async (closedSession: {
+    id: string;
+    opened_at: string;
+    closed_at: string | null;
+    opening_amount: number;
+    expected_amount: number | null;
+    closing_amount: number | null;
+    difference: number | null;
+  }) => {
+    try {
+      setPrintingClosedId(closedSession.id);
+      const detail = await loadSessionPrintData(closedSession.id);
+      printArqueoReport({
+        branchLabel,
+        openedAt: closedSession.opened_at,
+        closedAt: closedSession.closed_at,
+        opening: Number(closedSession.opening_amount ?? 0),
+        cashSales: detail.cashSales,
+        mixedCash: detail.mixedCash,
+        deposits: detail.deposits,
+        withdrawals: detail.withdrawals,
+        cashExpenses: detail.cashExpenses,
+        expected: Number(
+          closedSession.expected_amount ??
+            Number(closedSession.opening_amount ?? 0) +
+              detail.cashSales +
+              detail.mixedCash +
+              detail.deposits -
+              detail.withdrawals -
+              detail.cashExpenses,
+        ),
+        counted: closedSession.closing_amount != null
+          ? Number(closedSession.closing_amount)
+          : null,
+        difference: closedSession.difference != null
+          ? Number(closedSession.difference)
+          : null,
+        movements: detail.movements,
+      });
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : "No se pudo imprimir el corte.";
+      toast.error(msg);
+    } finally {
+      setPrintingClosedId(null);
+    }
+  };
+
 
   /*
    * ============================================================
@@ -409,16 +572,11 @@ export function CashDrawerPanel({
         );
       }
 
-      const amount = Number(opening);
-
-      if (
-        !Number.isFinite(amount) ||
-        amount < 0
-      ) {
-        throw new Error(
-          "El efectivo inicial debe ser 0 o mayor.",
-        );
-      }
+      // Fondo fijo de operación: $400 (se puede ajustar si hace falta)
+      const amount =
+        Number(opening) >= 0 && Number.isFinite(Number(opening))
+          ? Number(opening)
+          : DEFAULT_FONDO;
 
       const { error } = await supabase
         .from("cash_sessions")
@@ -437,7 +595,7 @@ export function CashDrawerPanel({
     onSuccess: () => {
       toast.success("Caja abierta correctamente.");
 
-      setOpening("");
+      setOpening(String(DEFAULT_FONDO));
 
       invalidate();
     },
@@ -744,8 +902,12 @@ export function CashDrawerPanel({
           </h2>
 
           <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
-            ¿Con cuánto efectivo arranca el
-            cajón? Puedes dejarlo en 0.
+            El fondo de caja es fijo:{" "}
+            <strong className="text-[#1a1d26]">
+              {money(DEFAULT_FONDO)}
+            </strong>
+            . Solo cambia el monto si ese día
+            el fondo es distinto.
           </p>
 
           <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -759,7 +921,7 @@ export function CashDrawerPanel({
                   event.target.value,
                 )
               }
-              placeholder="0.00"
+              placeholder={String(DEFAULT_FONDO)}
               className="h-11 w-full rounded-xl border-[#e2e8f0] sm:w-40"
             />
 
@@ -1041,22 +1203,74 @@ export function CashDrawerPanel({
         open={closeOpen}
         onOpenChange={setCloseOpen}
       >
-        <DialogContent className="w-[calc(100%-1.5rem)] max-w-sm rounded-2xl sm:w-full">
+        <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto rounded-2xl sm:w-full">
           <DialogHeader>
             <DialogTitle className="text-base sm:text-lg">
-              Cerrar caja
+              Cerrar caja — conteo
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3 py-1">
             <p className="text-sm leading-6 text-muted-foreground">
-              Debería haber{" "}
+              Debe haber{" "}
               <span className="font-bold text-foreground">
                 {money(expected)}
               </span>
-              . Escribe el efectivo que
-              contaste en el cajón.
+              . Cuenta billetes y monedas; el
+              total se calcula solo.
             </p>
+
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {DENOMINATIONS.map((d) => {
+                const key = String(d.value);
+                const qty = Number(denomCounts[key] || 0);
+                const sub =
+                  Number.isFinite(qty) && qty > 0
+                    ? qty * d.value
+                    : 0;
+                return (
+                  <label
+                    key={key}
+                    className="rounded-xl border border-[#e8ecf4] bg-[#fafbfe] p-2"
+                  >
+                    <span className="text-[11px] font-semibold text-[#4169e2]">
+                      {d.label}
+                    </span>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      inputMode="numeric"
+                      value={denomCounts[key]}
+                      onChange={(e) => {
+                        const next = {
+                          ...denomCounts,
+                          [key]: e.target.value,
+                        };
+                        setDenomCounts(next);
+                        setCounted(
+                          String(sumDenominations(next)),
+                        );
+                      }}
+                      placeholder="0"
+                      className="mt-1 h-9 rounded-lg text-sm"
+                    />
+                    <span className="mt-0.5 block text-[10px] text-[#9aa3b8]">
+                      = {money(sub)}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+
+            <div className="rounded-xl border border-[#4169e2]/25 bg-[#eef2fe] p-3">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-[#4169e2]">
+                Total contado
+              </p>
+              <p className="text-2xl font-black text-[#4169e2]">
+                {money(countedNum)}
+              </p>
+            </div>
 
             <Input
               type="number"
@@ -1064,55 +1278,45 @@ export function CashDrawerPanel({
               step="0.01"
               value={counted}
               onChange={(event) =>
-                setCounted(
-                  event.target.value,
-                )
+                setCounted(event.target.value)
               }
-              placeholder="0.00"
-              className="h-12 rounded-xl text-base"
+              placeholder="Ajuste manual (opcional)"
+              className="h-11 rounded-xl text-sm"
             />
+            <p className="text-[11px] text-[#9aa3b8]">
+              Si prefieres, puedes corregir el
+              total a mano.
+            </p>
 
             {counted !== "" && (
               <div
                 className={cn(
                   "rounded-xl border p-3 text-sm font-semibold",
-                  Math.abs(
-                    countedNum - expected,
-                  ) < 0.01
+                  Math.abs(countedNum - expected) < 0.01
                     ? "border-[#30a46c]/30 bg-[#e8f7ee]"
-                    : countedNum >
-                        expected
+                    : countedNum > expected
                       ? "border-[#4169e2]/30 bg-[#eef2fe]"
                       : "border-[#e5484d]/30 bg-[#fff0f0]",
                 )}
               >
                 <p
                   className={cn(
-                    Math.abs(
-                      countedNum -
-                        expected,
-                    ) < 0.01
+                    Math.abs(countedNum - expected) < 0.01
                       ? "text-[#30a46c]"
-                      : countedNum >
-                          expected
+                      : countedNum > expected
                         ? "text-[#4169e2]"
                         : "text-[#e5484d]",
                   )}
                 >
-                  {Math.abs(
-                    countedNum - expected,
-                  ) < 0.01
+                  {Math.abs(countedNum - expected) < 0.01
                     ? "Cuadre exacto"
-                    : countedNum >
-                        expected
-                      ? `Sobran ${money(
-                          countedNum -
-                            expected,
-                        )}`
-                      : `Faltan ${money(
-                          expected -
-                            countedNum,
-                        )}`}
+                    : countedNum > expected
+                      ? `Sobran ${money(countedNum - expected)}`
+                      : `Faltan ${money(expected - countedNum)}`}
+                </p>
+                <p className="mt-1 text-[11px] font-normal text-muted-foreground">
+                  Esperado {money(expected)} · Contado{" "}
+                  {money(countedNum)}
                 </p>
               </div>
             )}
@@ -1263,6 +1467,22 @@ export function CashDrawerPanel({
                           </p>
                         </div>
                       </div>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="mt-3 min-h-10 w-full rounded-xl"
+                        disabled={printingClosedId === closedSession.id}
+                        onClick={() => {
+                          void printClosedSession(closedSession);
+                        }}
+                      >
+                        <Printer className="mr-2 h-4 w-4" />
+                        {printingClosedId === closedSession.id
+                          ? "Preparando…"
+                          : "Imprimir corte"}
+                      </Button>
                     </div>
                   );
                 },
@@ -1286,8 +1506,12 @@ export function CashDrawerPanel({
                       Contado
                     </th>
 
-                    <th className="py-2 font-semibold">
+                    <th className="py-2 pr-4 font-semibold">
                       Diferencia
+                    </th>
+
+                    <th className="py-2 font-semibold">
+                      Corte
                     </th>
                   </tr>
                 </thead>
@@ -1332,7 +1556,7 @@ export function CashDrawerPanel({
                             )}
                           </td>
 
-                          <td className="py-2">
+                          <td className="py-2 pr-4">
                             <Badge
                               variant="outline"
                               className={cn(
@@ -1349,6 +1573,25 @@ export function CashDrawerPanel({
                                 : ""}
                               {money(diff)}
                             </Badge>
+                          </td>
+                          <td className="py-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-lg px-2 text-xs"
+                              disabled={
+                                printingClosedId === closedSession.id
+                              }
+                              onClick={() => {
+                                void printClosedSession(closedSession);
+                              }}
+                            >
+                              <Printer className="mr-1 h-3.5 w-3.5" />
+                              {printingClosedId === closedSession.id
+                                ? "…"
+                                : "Imprimir"}
+                            </Button>
                           </td>
                         </tr>
                       );
