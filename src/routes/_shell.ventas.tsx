@@ -22,6 +22,7 @@ import { RequireNavAccess } from "@/components/RequireNavAccess";
 import {
   useMutation,
   useQuery,
+  useQueryClient,
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -263,6 +264,9 @@ function VentasPage() {
 
   const [listTab, setListTab] = useState<"tpv" | "online">("tpv");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [activeSaleId, setActiveSaleId] = useState<string | null>(null);
+  const [activeSaleStatus, setActiveSaleStatus] = useState<string | null>(null);
+  const qc = useQueryClient();
 
   const {
     data: rows = [],
@@ -769,6 +773,36 @@ function VentasPage() {
         ),
     });
 
+  const cancelSale = useMutation({
+    mutationFn: async ({
+      saleId,
+      reason,
+    }: {
+      saleId: string;
+      reason?: string;
+    }) => {
+      const { data, error } = await supabase.rpc("cancel_sale", {
+        _sale_id: saleId,
+        _reason: reason ?? "Cancelación desde Hoy",
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["sales-history"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["open-cash"] });
+      setTicketOpen(false);
+      setTicket(null);
+      setActiveSaleId(null);
+      setActiveSaleStatus(null);
+      toast.success("Venta cancelada. Stock restaurado.");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "No se pudo cancelar la venta");
+    },
+  });
+
   const activeBranchName =
     branches.find((b) => b.id === branchId)?.name ?? "Sucursal";
 
@@ -1012,7 +1046,11 @@ function VentasPage() {
                         variant="outline"
                         className="h-9 flex-1 rounded-lg border-[#e0e0e0] text-xs"
                         disabled={reprint.isPending}
-                        onClick={() => reprint.mutate(row.id)}
+                        onClick={() => {
+                          setActiveSaleId(row.id);
+                          setActiveSaleStatus(row.status);
+                          reprint.mutate(row.id);
+                        }}
                       >
                         <Printer className="mr-1.5 h-3.5 w-3.5" />
                         Ver ticket
@@ -1039,8 +1077,32 @@ function VentasPage() {
 
       <TicketModal
         open={ticketOpen}
-        onOpenChange={setTicketOpen}
+        onOpenChange={(open) => {
+          setTicketOpen(open);
+          if (!open) {
+            setActiveSaleId(null);
+            setActiveSaleStatus(null);
+          }
+        }}
         ticket={ticket}
+        variant="fullscreen"
+        canDelete={activeSaleStatus === "completed"}
+        actionsPending={cancelSale.isPending}
+        onReturn={() => {
+          setTicketOpen(false);
+          navigate({ to: "/devoluciones" });
+        }}
+        onDelete={() => {
+          if (!activeSaleId) return;
+          const ok = window.confirm(
+            "¿Borrar esta venta? Se cancelará el ticket y se restaurará el stock.",
+          );
+          if (!ok) return;
+          cancelSale.mutate({ saleId: activeSaleId });
+        }}
+        onEdit={() => {
+          toast.message("La edición de tickets estará disponible pronto.");
+        }}
       />
     </div>
   );
