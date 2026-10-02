@@ -517,6 +517,36 @@ function ClientesPage() {
         );
 
       if (error) {
+        const msg = String(error.message ?? "").toLowerCase();
+        if (
+          msg.includes("could not find the function") ||
+          (msg.includes("register_credit_payment") and
+            msg.includes("schema cache"))
+        ) {
+          throw new Error(
+            "Falta la función de abonos en la base de datos. Ejecuta en Supabase el SQL FIX_register_credit_payment.sql y recarga la app.",
+          );
+        }
+        if (msg.includes("no open cash session")) {
+          throw new Error(
+            "Para abonar en efectivo debes tener la caja abierta en esta sucursal.",
+          );
+        }
+        if (msg.includes("no outstanding balance")) {
+          throw new Error(
+            "Este cliente no tiene saldo pendiente.",
+          );
+        }
+        if (msg.includes("exceeds customer balance")) {
+          throw new Error(
+            "El abono supera el saldo pendiente del cliente.",
+          );
+        }
+        if (msg.includes("not authorized")) {
+          throw new Error(
+            "No tienes permiso para registrar abonos.",
+          );
+        }
         throw error;
       }
 
