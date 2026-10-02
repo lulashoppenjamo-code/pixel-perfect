@@ -25,6 +25,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Lock,
+  Printer,
   Unlock,
   Wallet,
 } from "lucide-react";
@@ -46,8 +47,97 @@ import {
 
 type MovementType = "deposit" | "withdrawal";
 
+
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString("es-MX");
+
+const QUICK_REASONS: Record<MovementType, string[]> = {
+  deposit: [
+    "Ventas perfumes (otro sistema)",
+    "Fondo adicional",
+    "Otros ingresos en efectivo",
+  ],
+  withdrawal: [
+    "Pedido domicilio no cobrado",
+    "Pago proveedor / pedido",
+    "Gasto menor",
+    "Retiro a dueño",
+  ],
+};
+
+function printArqueoReport(opts: {
+  branchLabel: string;
+  openedAt: string;
+  opening: number;
+  cashSales: number;
+  mixedCash: number;
+  deposits: number;
+  withdrawals: number;
+  cashExpenses: number;
+  expected: number;
+  movements: {
+    id: string;
+    type: string;
+    amount: number;
+    reason: string | null;
+    created_at: string;
+  }[];
+}) {
+  const w = window.open("", "_blank", "width=420,height=720");
+  if (!w) {
+    toast.error("El navegador bloqueó la impresión.");
+    return;
+  }
+
+  const mvRows = opts.movements
+    .map((m) => {
+      const tipo = m.type === "deposit" ? "ENTRADA" : "SALIDA";
+      const signo = m.type === "deposit" ? "+" : "−";
+      return `<tr>
+        <td>${dateTime(m.created_at)}</td>
+        <td>${tipo}</td>
+        <td>${(m.reason || "—").replace(/</g, "&lt;")}</td>
+        <td style="text-align:right">${signo}${money(Number(m.amount))}</td>
+      </tr>`;
+    })
+    .join("");
+
+  w.document.write(`<!DOCTYPE html>
+<html><head><title>Arqueo de caja</title>
+<style>
+  body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;margin:16px;color:#111}
+  h1{font-size:18px;margin:0 0 4px}
+  .muted{color:#666;font-size:12px}
+  table{width:100%;border-collapse:collapse;margin-top:10px}
+  th,td{border-bottom:1px solid #ddd;padding:6px 4px;text-align:left;vertical-align:top}
+  th{font-size:11px;text-transform:uppercase;color:#555}
+  .row{display:flex;justify-content:space-between;margin:4px 0}
+  .big{font-size:16px;font-weight:700}
+  .box{border:1px solid #ccc;border-radius:8px;padding:10px;margin:12px 0}
+  @media print{body{margin:8px}}
+</style></head><body>
+  <h1>Arqueo de caja</h1>
+  <p class="muted">${opts.branchLabel}</p>
+  <p class="muted">Abierta: ${dateTime(opts.openedAt)}</p>
+  <div class="box">
+    <div class="row"><span>Fondo inicial</span><span>${money(opts.opening)}</span></div>
+    <div class="row"><span>Ventas en efectivo</span><span>+ ${money(opts.cashSales + opts.mixedCash)}</span></div>
+    <div class="row"><span>Entradas manuales</span><span>+ ${money(opts.deposits)}</span></div>
+    <div class="row"><span>Salidas manuales</span><span>− ${money(opts.withdrawals)}</span></div>
+    <div class="row"><span>Gastos en efectivo</span><span>− ${money(opts.cashExpenses)}</span></div>
+    <div class="row big"><span>Debe haber en cajón</span><span>${money(opts.expected)}</span></div>
+  </div>
+  <h2 style="font-size:14px;margin:16px 0 0">Movimientos</h2>
+  ${
+    opts.movements.length === 0
+      ? '<p class="muted">Sin entradas ni salidas manuales</p>'
+      : `<table><thead><tr><th>Hora</th><th>Tipo</th><th>Motivo</th><th style="text-align:right">Monto</th></tr></thead><tbody>${mvRows}</tbody></table>`
+  }
+  <p class="muted" style="margin-top:16px">Documento de entrega de corte — Lula Shop</p>
+  <script>window.onload=function(){window.print();setTimeout(function(){window.close()},400)}</script>
+</body></html>`);
+  w.document.close();
+}
 
 function getSupabaseErrorMessage(error: unknown): string {
   if (!error || typeof error !== "object") {
@@ -73,8 +163,10 @@ export function CashDrawerPanel({
 }: {
   className?: string;
 }) {
-  const { branchId } = useBranch();
+  const { branchId, branches } = useBranch();
   const { user } = useAuth();
+  const branchLabel =
+    branches.find((b) => b.id === branchId)?.name ?? "Sucursal";
   const qc = useQueryClient();
 
   const [opening, setOpening] = useState("");
@@ -596,16 +688,47 @@ export function CashDrawerPanel({
           </div>
 
           {session && (
-            <Button
-              variant="outline"
-              className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d] sm:w-auto"
-              onClick={() =>
-                setCloseOpen(true)
-              }
-            >
-              <Lock className="mr-2 h-4 w-4" />
-              Cerrar caja
-            </Button>
+            <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] sm:w-auto"
+                onClick={() => {
+                  if (!session) return;
+                  printArqueoReport({
+                    branchLabel,
+                    openedAt: session.opened_at,
+                    opening: Number(session.opening_amount ?? 0),
+                    cashSales: summary?.cashSales ?? 0,
+                    mixedCash: summary?.mixedCash ?? 0,
+                    deposits: summary?.deposits ?? 0,
+                    withdrawals: summary?.withdrawals ?? 0,
+                    cashExpenses: summary?.cashExpenses ?? 0,
+                    expected: summary?.expected ?? 0,
+                    movements: (summary?.movements ?? []).map((m) => ({
+                      id: m.id,
+                      type: m.type,
+                      amount: Number(m.amount ?? 0),
+                      reason: m.reason ?? null,
+                      created_at: m.created_at,
+                    })),
+                  });
+                }}
+              >
+                <Printer className="mr-2 h-4 w-4" />
+                Imprimir corte
+              </Button>
+              <Button
+                variant="outline"
+                className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d] sm:w-auto"
+                onClick={() =>
+                  setCloseOpen(true)
+                }
+              >
+                <Lock className="mr-2 h-4 w-4" />
+                Cerrar caja
+              </Button>
+            </div>
           )}
         </div>
       </div>
@@ -813,6 +936,29 @@ export function CashDrawerPanel({
                   : "Agregar"}
               </Button>
             </div>
+
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {QUICK_REASONS[mvType].map((reason) => (
+                <button
+                  key={reason}
+                  type="button"
+                  onClick={() => setMvReason(reason)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+                    mvReason === reason
+                      ? "border-[#4169e2] bg-[#eef2fe] text-[#4169e2]"
+                      : "border-[#e0e0e0] bg-white text-[#616161]",
+                  )}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
+
+            <p className="mt-2 text-[11px] leading-4 text-[#9aa3b8]">
+              Ejemplo: domicilio no cobrado → <strong>Salida</strong>.
+              Dinero de perfumes (otro sistema) → <strong>Entrada</strong>.
+            </p>
 
             <div className="mt-4 space-y-2">
               {(summary?.movements ?? [])
