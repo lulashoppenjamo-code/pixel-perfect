@@ -26,9 +26,11 @@ import {
 import { toast } from "sonner";
 import {
   Printer,
-  Receipt,
   RotateCcw,
   Search,
+  ChevronDown,
+  ChevronUp,
+  Banknote,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -95,6 +97,8 @@ type SaleRow = {
   status: string;
   created_at: string;
   customerName: string | null;
+  itemCount: number;
+  items: { name: string; quantity: number }[];
 };
 
 type TicketSettingRow = {
@@ -107,6 +111,36 @@ const ALL = "all";
 
 const dayInput = (d: Date) =>
   d.toISOString().slice(0, 10);
+
+function paymentLabel(method: string) {
+  switch (method) {
+    case "cash":
+      return "Cash";
+    case "transfer":
+      return "Transferencia";
+    case "card":
+      return "Tarjeta";
+    case "credit":
+      return "Crédito";
+    case "mixed":
+      return "Mixto";
+    default:
+      return method;
+  }
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const minutes = Math.max(0, Math.floor(diff / 60000));
+  if (minutes < 1) return "hace un momento";
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return hours === 1 ? "hace 1 hora" : `hace ${hours} horas`;
+  }
+  const days = Math.floor(hours / 24);
+  return days === 1 ? "hace 1 día" : `hace ${days} días`;
+}
 
 function readSettingValue(
   rows: TicketSettingRow[],
@@ -181,17 +215,11 @@ function VentasPage() {
 
   const today = new Date();
 
-  const weekAgo =
-    new Date(
-      today.getTime() -
-        6 * 86400000,
-    );
-
   const [
     from,
     setFrom,
   ] = useState(
-    dayInput(weekAgo),
+    dayInput(today),
   );
 
   const [
@@ -233,6 +261,9 @@ function VentasPage() {
     setTicketOpen,
   ] = useState(false);
 
+  const [listTab, setListTab] = useState<"tpv" | "online">("tpv");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
   const {
     data: rows = [],
     isLoading,
@@ -253,7 +284,7 @@ function VentasPage() {
       let q = supabase
         .from("sales")
         .select(
-          "id, folio, total, payment_method, status, created_at, customer_id, customers(name)",
+          "id, folio, total, payment_method, status, created_at, customer_id, customers(name), sale_items(name_snapshot, quantity)",
         )
         .eq(
           "branch_id",
@@ -356,6 +387,27 @@ function VentasPage() {
                 null
               );
 
+        const rawItems = (
+          row as {
+            sale_items?:
+              | {
+                  name_snapshot?: string | null;
+                  quantity?: number | null;
+                }[]
+              | null;
+          }
+        ).sale_items;
+
+        const items = (rawItems ?? []).map((item) => ({
+          name: item.name_snapshot ?? "Artículo",
+          quantity: Number(item.quantity ?? 0),
+        }));
+
+        const itemCount = items.reduce(
+          (sum, item) => sum + item.quantity,
+          0,
+        );
+
         return {
           id: row.id,
           folio: row.folio,
@@ -369,6 +421,8 @@ function VentasPage() {
           created_at:
             row.created_at,
           customerName,
+          itemCount,
+          items,
         } satisfies SaleRow;
       });
     },
@@ -715,377 +769,277 @@ function VentasPage() {
         ),
     });
 
+  const activeBranchName =
+    branches.find((b) => b.id === branchId)?.name ?? "Sucursal";
+
+  const folioLabel = (folio: number) => {
+    const prefix = activeBranchName
+      .replace(/[^A-Za-z]/g, "")
+      .slice(0, 4)
+      .toUpperCase() || "LULA";
+    return `${prefix}-${folio}`;
+  };
+
   return (
-    <div className="space-y-4">
-      {/* Encabezado */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold text-[#212121]">
-            Hoy
-          </h1>
-
-          <p className="text-sm text-[#757575]">
-            Tickets de la sucursal activa. Para vender usa la Caja.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="rounded-xl border-[#e0e0e0]"
-            onClick={() =>
-              navigate({
-                to: "/devoluciones",
-              })
-            }
-          >
-            <RotateCcw className="mr-2 h-4 w-4" />
-            Devoluciones
-          </Button>
-        </div>
+    <div className="mx-auto max-w-lg space-y-3 pb-2 md:max-w-3xl">
+      {/* Tabs estilo Zobaze: Recibos de TPV | Pedidos en línea */}
+      <div className="flex overflow-hidden rounded-lg border border-[#e0e0e0] bg-white shadow-sm">
+        <button
+          type="button"
+          onClick={() => setListTab("tpv")}
+          className={cn(
+            "flex-1 px-3 py-2.5 text-sm font-semibold transition-colors",
+            listTab === "tpv"
+              ? "bg-[#1a73e8] text-white"
+              : "bg-white text-[#1a73e8]",
+          )}
+        >
+          Recibos de TPV
+        </button>
+        <button
+          type="button"
+          onClick={() => setListTab("online")}
+          className={cn(
+            "flex-1 px-3 py-2.5 text-sm font-semibold transition-colors",
+            listTab === "online"
+              ? "bg-[#1a73e8] text-white"
+              : "bg-white text-[#1a73e8]",
+          )}
+        >
+          Pedidos en línea
+        </button>
       </div>
 
-      {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-[#e0e0e0] bg-white p-3">
-        <div className="flex items-center gap-1.5">
-          <Input
-            type="date"
-            value={from}
-            onChange={(event) =>
-              setFrom(
-                event.target.value,
-              )
-            }
-            className="h-9 w-36 rounded-xl border-[#e0e0e0]"
-          />
-
-          <span className="text-xs text-[#9aa3b8]">
-            a
-          </span>
-
-          <Input
-            type="date"
-            value={to}
-            onChange={(event) =>
-              setTo(
-                event.target.value,
-              )
-            }
-            className="h-9 w-36 rounded-xl border-[#e0e0e0]"
-          />
-        </div>
-
-        <Select
-          value={method}
-          onValueChange={
-            setMethod
-          }
-        >
-          <SelectTrigger className="h-9 w-36 rounded-xl border-[#e0e0e0] text-sm">
+      {/* Filtros compactos (misma lógica, UI más ligera) */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e0e0e0] bg-white p-2.5">
+        <Input
+          type="date"
+          value={from}
+          onChange={(event) => setFrom(event.target.value)}
+          className="h-9 w-[8.5rem] rounded-lg border-[#e0e0e0] text-xs"
+        />
+        <span className="text-xs text-[#9aa3b8]">a</span>
+        <Input
+          type="date"
+          value={to}
+          onChange={(event) => setTo(event.target.value)}
+          className="h-9 w-[8.5rem] rounded-lg border-[#e0e0e0] text-xs"
+        />
+        <Select value={method} onValueChange={setMethod}>
+          <SelectTrigger className="h-9 w-32 rounded-lg border-[#e0e0e0] text-xs">
             <SelectValue placeholder="Método" />
           </SelectTrigger>
-
           <SelectContent>
-            <SelectItem value={ALL}>
-              Todos los métodos
-            </SelectItem>
-
-            <SelectItem value="cash">
-              Efectivo
-            </SelectItem>
-
-            <SelectItem value="card">
-              Tarjeta
-            </SelectItem>
-
-            <SelectItem value="transfer">
-              Transferencia
-            </SelectItem>
-
-            <SelectItem value="credit">
-              Crédito
-            </SelectItem>
-
-            <SelectItem value="mixed">
-              Mixto
-            </SelectItem>
+            <SelectItem value={ALL}>Todos</SelectItem>
+            <SelectItem value="cash">Efectivo</SelectItem>
+            <SelectItem value="card">Tarjeta</SelectItem>
+            <SelectItem value="transfer">Transferencia</SelectItem>
+            <SelectItem value="credit">Crédito</SelectItem>
+            <SelectItem value="mixed">Mixto</SelectItem>
           </SelectContent>
         </Select>
-
-        <Select
-          value={status}
-          onValueChange={
-            setStatus
-          }
-        >
-          <SelectTrigger className="h-9 w-40 rounded-xl border-[#e0e0e0] text-sm">
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="h-9 w-32 rounded-lg border-[#e0e0e0] text-xs">
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
-
           <SelectContent>
-            <SelectItem value={ALL}>
-              Todos los estados
-            </SelectItem>
-
-            <SelectItem value="completed">
-              Completada
-            </SelectItem>
-
-            <SelectItem value="cancelled">
-              Cancelada
-            </SelectItem>
-
-            <SelectItem value="refunded">
-              Reembolsada
-            </SelectItem>
-
-            <SelectItem value="partially_refunded">
-              Parcial
-            </SelectItem>
+            <SelectItem value={ALL}>Todos</SelectItem>
+            <SelectItem value="completed">Completada</SelectItem>
+            <SelectItem value="cancelled">Cancelada</SelectItem>
+            <SelectItem value="refunded">Reembolsada</SelectItem>
+            <SelectItem value="partially_refunded">Parcial</SelectItem>
           </SelectContent>
         </Select>
-
-        <div className="relative min-w-[180px] flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9aa3b8]" />
-
+        <div className="relative min-w-[10rem] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9e9e9e]" />
           <Input
             value={query}
-            onChange={(event) =>
-              setQuery(
-                event.target.value,
-              )
-            }
+            onChange={(event) => setQuery(event.target.value)}
             placeholder="Buscar folio o cliente"
-            className="h-9 rounded-xl border-[#e0e0e0] pl-9"
+            className="h-9 rounded-lg border-[#e0e0e0] pl-8 text-xs"
           />
         </div>
-
         <Button
           variant="outline"
           size="sm"
-          className="rounded-xl border-[#e0e0e0]"
+          className="h-9 rounded-lg border-[#e0e0e0] text-xs"
           onClick={() => {
-            setFrom(
-              dayInput(
-                weekAgo,
-              ),
-            );
-
-            setTo(
-              dayInput(
-                today,
-              ),
-            );
-
-            setMethod(
-              ALL,
-            );
-
-            setStatus(
-              ALL,
-            );
-
+            setFrom(dayInput(today));
+            setTo(dayInput(today));
+            setMethod(ALL);
+            setStatus(ALL);
             setQuery("");
           }}
         >
-          Recargar
+          Hoy
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 rounded-lg border-[#e0e0e0] text-xs"
+          onClick={() => navigate({ to: "/devoluciones" })}
+        >
+          <RotateCcw className="mr-1 h-3.5 w-3.5" />
+          Devoluciones
         </Button>
       </div>
 
-      {/* Error */}
       {isError && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          No se pudo cargar el historial
-          de ventas. Revisa tu conexión o
-          permisos.
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          No se pudo cargar el historial de ventas. Revisa tu conexión o permisos.
         </div>
       )}
 
-      {/* Totales */}
-      <div className="grid grid-cols-3 gap-3">
-        <Card
-          label="Tickets"
-          value={String(
-            totals.tickets,
-          )}
-        />
-
-        <Card
-          label="Ventas del periodo"
-          value={money(
-            totals.sum,
-          )}
-        />
-
-        <Card
-          label="Ticket promedio"
-          value={money(
-            totals.avg,
-          )}
-        />
+      {/* Resumen del periodo (conservado) */}
+      <div className="grid grid-cols-3 gap-2">
+        <Card label="Tickets" value={String(totals.tickets)} />
+        <Card label="Ventas" value={money(totals.sum)} />
+        <Card label="Promedio" value={money(totals.avg)} />
       </div>
 
-      {/* Lista */}
-      <div className="overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white">
-        {isLoading ? (
-          <p className="py-10 text-center text-sm text-[#9aa3b8]">
-            Cargando…
+      {/* Lista estilo Zobaze */}
+      {listTab === "online" ? (
+        <div className="rounded-xl border border-[#e0e0e0] bg-white px-4 py-12 text-center">
+          <p className="text-base font-bold text-[#212121]">
+            Pedidos en línea
           </p>
-        ) : visible.length ===
-          0 ? (
-          <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f0fe] text-4xl">
-              📭
-            </div>
-            <div>
-              <p className="text-base font-bold text-[#212121]">
-                No hay transacciones hoy
-              </p>
-              <p className="mt-1 text-sm text-[#757575]">
-                Ajusta el filtro de fechas o realiza una venta en Caja
-              </p>
-            </div>
+          <p className="mt-1 text-sm text-[#757575]">
+            No hay pedidos en línea por ahora.
+          </p>
+        </div>
+      ) : isLoading ? (
+        <p className="py-10 text-center text-sm text-[#9aa3b8]">
+          Cargando…
+        </p>
+      ) : visible.length === 0 ? (
+        <div className="flex flex-col items-center gap-3 rounded-xl border border-[#e0e0e0] bg-white px-6 py-14 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-3xl">
+            📭
           </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-[#f8fafd] text-left text-xs text-[#9aa3b8]">
-                <tr>
-                  <th className="px-4 py-2.5 font-semibold">
-                    Folio
-                  </th>
+          <div>
+            <p className="text-base font-bold text-[#212121]">
+              No hay transacciones hoy
+            </p>
+            <p className="mt-1 text-sm text-[#757575]">
+              Ajusta el filtro de fechas o realiza una venta en Caja
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {visible.map((row) => {
+            const open = expandedId === row.id;
+            const units =
+              row.itemCount > 0
+                ? row.itemCount
+                : 0;
+            return (
+              <div
+                key={row.id}
+                className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm"
+              >
+                <button
+                  type="button"
+                  className="flex w-full items-start gap-3 px-3 py-3 text-left active:bg-[#fafafa]"
+                  onClick={() =>
+                    setExpandedId(open ? null : row.id)
+                  }
+                >
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e8f5e9] text-[#2e7d32]">
+                    <Banknote className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-bold text-[#212121]">
+                      {folioLabel(row.folio)}
+                    </p>
+                    <p className="text-sm text-[#616161]">
+                      por {paymentLabel(row.payment_method)}
+                    </p>
+                    <p className="text-xs text-[#9e9e9e]">
+                      {units}{" "}
+                      {units === 1 ? "Artículo" : "Artículos"}{" "}
+                      {timeAgo(row.created_at)}
+                      {row.status !== "completed" && (
+                        <span className="ml-1 text-[#e5484d]">
+                          ·{" "}
+                          {row.status === "cancelled"
+                            ? "Cancelada"
+                            : row.status === "refunded"
+                              ? "Reembolsada"
+                              : row.status === "partially_refunded"
+                                ? "Parcial"
+                                : row.status}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <span className="text-base font-bold text-[#1a73e8]">
+                      {money(row.total)}
+                    </span>
+                    {open ? (
+                      <ChevronUp className="h-4 w-4 text-[#9e9e9e]" />
+                    ) : (
+                      <ChevronDown className="h-4 w-4 text-[#9e9e9e]" />
+                    )}
+                  </div>
+                </button>
 
-                  <th className="px-4 py-2.5 font-semibold">
-                    Fecha
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Cliente
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Método
-                  </th>
-
-                  <th className="px-4 py-2.5 font-semibold">
-                    Estado
-                  </th>
-
-                  <th className="px-4 py-2.5 text-right font-semibold">
-                    Total
-                  </th>
-
-                  <th className="px-4 py-2.5" />
-                </tr>
-              </thead>
-
-              <tbody className="divide-y divide-[#eef1f8]">
-                {visible.map(
-                  (row) => (
-                    <tr
-                      key={
-                        row.id
-                      }
-                      className="hover:bg-[#fafbfe]"
-                    >
-                      <td className="px-4 py-2.5 font-bold text-[#212121]">
-                        #
-                        {
-                          row.folio
-                        }
-                      </td>
-
-                      <td className="px-4 py-2.5 text-[#4b5563]">
-                        {new Date(
-                          row.created_at,
-                        ).toLocaleString(
-                          "es-MX",
-                        )}
-                      </td>
-
-                      <td className="px-4 py-2.5 text-[#4b5563]">
-                        {row.customerName ||
-                          "Mostrador"}
-                      </td>
-
-                      <td className="px-4 py-2.5 capitalize text-[#4b5563]">
-                        {
-                          row.payment_method
-                        }
-                      </td>
-
-                      <td className="px-4 py-2.5">
-                        <Badge
-                          variant="outline"
-                          className={cn(
-                            "text-xs",
-
-                            row.status ===
-                              "completed"
-                              ? "border-[#30a46c]/40 text-[#30a46c]"
-                              : row.status ===
-                                  "cancelled"
-                                ? "border-[#e5484d]/40 text-[#e5484d]"
-                                : "border-[#f5a623]/50 text-[#b47707]",
-                          )}
+                {open && (
+                  <div className="border-t border-[#eeeeee] bg-white">
+                    {row.items.length > 0 ? (
+                      row.items.map((item, idx) => (
+                        <div
+                          key={`${row.id}-${idx}`}
+                          className="flex items-center justify-between border-b border-[#f0f0f0] px-3 py-2 last:border-b-0"
                         >
-                          {row.status ===
-                          "completed"
-                            ? "Completada"
-                            : row.status ===
-                                "cancelled"
-                              ? "Cancelada"
-                              : row.status ===
-                                  "refunded"
-                                ? "Reembolsada"
-                                : row.status ===
-                                    "partially_refunded"
-                                  ? "Parcial"
-                                  : row.status}
-                        </Badge>
-                      </td>
-
-                      <td className="px-4 py-2.5 text-right font-bold text-[#212121]">
-                        {money(
-                          row.total,
-                        )}
-                      </td>
-
-                      <td className="px-4 py-2.5 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 rounded-lg border-[#e0e0e0]"
-                          disabled={
-                            reprint.isPending
-                          }
-                          onClick={() =>
-                            reprint.mutate(
-                              row.id,
-                            )
-                          }
-                        >
-                          <Printer className="mr-1 h-3.5 w-3.5" />
-
-                          Ticket
-                        </Button>
-                      </td>
-                    </tr>
-                  ),
+                          <span className="min-w-0 flex-1 truncate text-sm text-[#616161]">
+                            {item.name}
+                          </span>
+                          <span className="ml-3 shrink-0 text-sm text-[#757575]">
+                            x {item.quantity}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="px-3 py-2 text-xs text-[#9e9e9e]">
+                        Sin detalle de artículos
+                      </p>
+                    )}
+                    <div className="flex gap-2 border-t border-[#eeeeee] p-2.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-9 flex-1 rounded-lg border-[#e0e0e0] text-xs"
+                        disabled={reprint.isPending}
+                        onClick={() => reprint.mutate(row.id)}
+                      >
+                        <Printer className="mr-1.5 h-3.5 w-3.5" />
+                        Ver ticket
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-9 flex-1 rounded-lg border-[#e0e0e0] text-xs"
+                        onClick={() =>
+                          navigate({ to: "/devoluciones" })
+                        }
+                      >
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                        Devolver
+                      </Button>
+                    </div>
+                  </div>
                 )}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <TicketModal
-        open={
-          ticketOpen
-        }
-        onOpenChange={
-          setTicketOpen
-        }
+        open={ticketOpen}
+        onOpenChange={setTicketOpen}
         ticket={ticket}
       />
     </div>
