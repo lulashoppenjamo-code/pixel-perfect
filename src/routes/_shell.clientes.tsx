@@ -520,7 +520,7 @@ function ClientesPage() {
         const msg = String(error.message ?? "").toLowerCase();
         if (
           msg.includes("could not find the function") ||
-          (msg.includes("register_credit_payment") and
+          (msg.includes("register_credit_payment") &&
             msg.includes("schema cache"))
         ) {
           throw new Error(
