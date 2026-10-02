@@ -344,11 +344,12 @@ function AjustesPage() {
     });
 
   /*
-   * Eliminar sucursal = desactivar sucursal.
+   * Eliminar sucursal = desactivar sucursal (is_active = false).
    *
    * NO elimina historial ni datos operativos.
-   * La operación está protegida por el RPC:
-   * admin_delete_branch(uuid)
+   * Preferimos el RPC admin_delete_branch(uuid).
+   * Si el RPC no existe en el proyecto remoto, usamos
+   * un fallback seguro con UPDATE directo (solo admin).
    */
   const deleteBranch =
     useMutation({
@@ -362,21 +363,93 @@ function AjustesPage() {
             );
           }
 
-          const {
-            error,
-          } = await (
-            supabase as any
-          ).rpc(
-            "admin_delete_branch",
-            {
-              _branch_id:
-                branchIdToDelete,
-            },
-          );
-
-          if (error) {
-            throw error;
+          if (!branchIdToDelete) {
+            throw new Error(
+              "No se indicó la sucursal a eliminar.",
+            );
           }
+
+          const activeCount =
+            branches.length;
+
+          if (activeCount <= 1) {
+            throw new Error(
+              "No puedes eliminar la última sucursal activa.",
+            );
+          }
+
+          const mapRpcError = (
+            raw: string,
+          ) => {
+            const msg = raw.toLowerCase();
+            if (
+              msg.includes("not authorized") ||
+              msg.includes("permission")
+            ) {
+              return "No tienes permiso de administrador para eliminar sucursales.";
+            }
+            if (
+              msg.includes("last active") ||
+              msg.includes("última")
+            ) {
+              return "No puedes eliminar la última sucursal activa.";
+            }
+            if (msg.includes("not found")) {
+              return "La sucursal no existe o ya fue eliminada.";
+            }
+            if (msg.includes("not authenticated")) {
+              return "Sesión expirada. Vuelve a iniciar sesión.";
+            }
+            return raw || "No se pudo eliminar la sucursal.";
+          };
+
+          // 1) RPC oficial (desactiva + limpia profiles.branch_id)
+          const { error: rpcError } = await (
+            supabase as unknown as {
+              rpc: (
+                fn: string,
+                args: Record<string, unknown>,
+              ) => Promise<{ error: { message?: string; code?: string } | null }>;
+            }
+          ).rpc("admin_delete_branch", {
+            _branch_id: branchIdToDelete,
+          });
+
+          if (!rpcError) {
+            return;
+          }
+
+          const rpcMsg = rpcError.message ?? "";
+          const rpcCode = rpcError.code ?? "";
+          const rpcMissing =
+            rpcCode === "PGRST202" ||
+            rpcMsg.toLowerCase().includes("could not find the function") ||
+            rpcMsg.toLowerCase().includes("admin_delete_branch");
+
+          // 2) Fallback: soft-delete directo si el RPC no está desplegado
+          if (rpcMissing) {
+            const { error: updateError } = await supabase
+              .from("branches")
+              .update({ is_active: false })
+              .eq("id", branchIdToDelete);
+
+            if (updateError) {
+              throw new Error(
+                mapRpcError(updateError.message) ||
+                  "No se pudo desactivar la sucursal (permisos RLS).",
+              );
+            }
+
+            // Quitar la sucursal de perfiles (best-effort)
+            await supabase
+              .from("profiles")
+              .update({ branch_id: null })
+              .eq("branch_id", branchIdToDelete);
+
+            return;
+          }
+
+          throw new Error(mapRpcError(rpcMsg));
         },
 
       onSuccess: () => {
@@ -403,12 +476,23 @@ function AjustesPage() {
         });
       },
 
-      onError: (error) =>
-        toast.error(
+      onError: (error) => {
+        const message =
           error instanceof Error
             ? error.message
-            : "No se pudo eliminar la sucursal.",
-        ),
+            : typeof error === "object" &&
+                error !== null &&
+                "message" in error
+              ? String(
+                  (error as { message?: unknown }).message ??
+                    "",
+                )
+              : "";
+
+        toast.error(
+          message || "No se pudo eliminar la sucursal.",
+        );
+      },
     });
 
   /*
