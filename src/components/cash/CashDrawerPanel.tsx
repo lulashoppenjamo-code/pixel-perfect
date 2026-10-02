@@ -124,86 +124,168 @@ function printArqueoReport(opts: {
     created_at: string;
   }[];
 }) {
-  const w = window.open("", "_blank", "width=420,height=720");
+  const w = window.open("", "_blank", "width=320,height=720");
   if (!w) {
     toast.error("El navegador bloqueó la impresión.");
     return;
   }
 
-  const mvRows = opts.movements
-    .map((m) => {
-      const tipo = m.type === "deposit" ? "ENTRADA" : "SALIDA";
-      const signo = m.type === "deposit" ? "+" : "−";
-      return `<tr>
-        <td>${dateTime(m.created_at)}</td>
-        <td>${tipo}</td>
-        <td>${(m.reason || "—").replace(/</g, "&lt;")}</td>
-        <td style="text-align:right">${signo}${money(Number(m.amount))}</td>
-      </tr>`;
-    })
-    .join("");
+  const esc = (s: string) =>
+    s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
 
-  w.document.write(`<!DOCTYPE html>
-<html><head><title>Arqueo de caja</title>
-<style>
-  body{font-family:system-ui,-apple-system,sans-serif;font-size:13px;margin:16px;color:#111}
-  h1{font-size:18px;margin:0 0 4px}
-  .muted{color:#666;font-size:12px}
-  table{width:100%;border-collapse:collapse;margin-top:10px}
-  th,td{border-bottom:1px solid #ddd;padding:6px 4px;text-align:left;vertical-align:top}
-  th{font-size:11px;text-transform:uppercase;color:#555}
-  .row{display:flex;justify-content:space-between;margin:4px 0}
-  .big{font-size:16px;font-weight:700}
-  .box{border:1px solid #ccc;border-radius:8px;padding:10px;margin:12px 0}
-  @media print{body{margin:8px}}
-</style></head><body>
-  <h1>Arqueo de caja</h1>
-  <p class="muted">${opts.branchLabel}</p>
-  <p class="muted">Abierta: ${dateTime(opts.openedAt)}</p>
-  ${opts.closedAt ? `<p class="muted">Cerrada: ${dateTime(opts.closedAt)}</p>` : ""}
-  <div class="box">
-    <div class="row"><span>Fondo inicial</span><span>${money(opts.opening)}</span></div>
-    <div class="row"><span>Ventas en efectivo</span><span>+ ${money(opts.cashSales + opts.mixedCash)}</span></div>
-    <div class="row"><span>Entradas manuales</span><span>+ ${money(opts.deposits)}</span></div>
-    <div class="row"><span>Salidas manuales</span><span>− ${money(opts.withdrawals)}</span></div>
-    <div class="row"><span>Gastos en efectivo</span><span>− ${money(opts.cashExpenses)}</span></div>
-    <div class="row big"><span>Debe haber en cajón</span><span>${money(opts.expected)}</span></div>
-    ${
-      opts.counted != null
-        ? `<div class="row"><span>Contado</span><span>${money(opts.counted)}</span></div>
-           <div class="row big"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
-        : ""
+  const shortTime = (iso: string) => {
+    try {
+      return new Date(iso).toLocaleString("es-MX", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } catch {
+      return iso;
     }
-  </div>
-  <h2 style="font-size:14px;margin:16px 0 0">Movimientos</h2>
-  ${
-    opts.movements.length === 0
-      ? '<p class="muted">Sin entradas ni salidas manuales</p>'
-      : `<table><thead><tr><th>Hora</th><th>Tipo</th><th>Motivo</th><th style="text-align:right">Monto</th></tr></thead><tbody>${mvRows}</tbody></table>`
-  }
-  <p class="muted" style="margin-top:16px">Documento de entrega de corte — Lula Shop</p>
-  <script>window.onload=function(){window.print();setTimeout(function(){window.close()},400)}</script>
-</body></html>`);
-  w.document.close();
-}
-
-function getSupabaseErrorMessage(error: unknown): string {
-  if (!error || typeof error !== "object") {
-    return "";
-  }
-
-  const e = error as {
-    message?: string;
-    code?: string;
-    details?: string;
-    hint?: string;
   };
 
-  if (e.code === "23505") {
-    return "Ya existe una caja abierta para esta sucursal. Cierra la caja actual antes de abrir otra.";
-  }
+  const mvHtml =
+    opts.movements.length === 0
+      ? `<div class="center muted">Sin entradas ni salidas</div>`
+      : opts.movements
+          .map((m) => {
+            const tipo =
+              m.type === "deposit" ? "ENTRADA" : "SALIDA";
+            const signo = m.type === "deposit" ? "+" : "-";
+            const reason = esc(
+              (m.reason || "Sin motivo").slice(0, 28),
+            );
+            return `<div class="mv">
+  <div class="row"><span class="bold">${tipo}</span><span>${signo}${money(Number(m.amount))}</span></div>
+  <div class="muted">${shortTime(m.created_at)}</div>
+  <div class="muted">${reason}</div>
+</div>`;
+          })
+          .join("");
 
-  return e.message || e.details || e.hint || "";
+  const countedBlock =
+    opts.counted != null
+      ? `<div class="dash"></div>
+<div class="row"><span>Contado</span><span>${money(opts.counted)}</span></div>
+<div class="row bold"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
+      : "";
+
+  w.document.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Corte de caja 58mm</title>
+  <style>
+    /* Ticket térmico 58mm (ancho útil ~48–52mm) */
+    @page {
+      size: 58mm auto;
+      margin: 0;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 58mm;
+      max-width: 58mm;
+      background: #fff;
+      color: #000;
+    }
+    body {
+      font-family: "Courier New", Courier, ui-monospace, monospace;
+      font-size: 11px;
+      line-height: 1.25;
+      padding: 2mm 2.5mm 4mm;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .center { text-align: center; }
+    .bold { font-weight: 700; }
+    .muted { color: #333; font-size: 10px; }
+    .title {
+      font-size: 13px;
+      font-weight: 700;
+      text-align: center;
+      margin: 0 0 2px;
+      text-transform: uppercase;
+    }
+    .dash {
+      border-top: 1px dashed #000;
+      margin: 6px 0;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 4px;
+      margin: 2px 0;
+    }
+    .row span:last-child {
+      white-space: nowrap;
+      text-align: right;
+    }
+    .mv {
+      margin: 4px 0 6px;
+      padding-bottom: 4px;
+      border-bottom: 1px dotted #999;
+    }
+    .mv:last-child { border-bottom: none; }
+    .sec {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      margin: 6px 0 2px;
+    }
+    @media print {
+      html, body {
+        width: 58mm;
+        max-width: 58mm;
+      }
+      body { padding: 1mm 2mm 3mm; }
+    }
+  </style>
+</head>
+<body>
+  <p class="title">Corte de caja</p>
+  <p class="center bold">${esc(opts.branchLabel)}</p>
+  <p class="center muted">Lula Shop</p>
+  <div class="dash"></div>
+  <div class="row"><span>Abierta</span><span>${shortTime(opts.openedAt)}</span></div>
+  ${
+    opts.closedAt
+      ? `<div class="row"><span>Cerrada</span><span>${shortTime(opts.closedAt)}</span></div>`
+      : `<div class="center muted">Corte en curso</div>`
+  }
+  <div class="dash"></div>
+  <div class="sec">Resumen</div>
+  <div class="row"><span>Fondo inicial</span><span>${money(opts.opening)}</span></div>
+  <div class="row"><span>Ventas efectivo</span><span>+${money(opts.cashSales + opts.mixedCash)}</span></div>
+  <div class="row"><span>Entradas</span><span>+${money(opts.deposits)}</span></div>
+  <div class="row"><span>Salidas</span><span>-${money(opts.withdrawals)}</span></div>
+  <div class="row"><span>Gastos efectivo</span><span>-${money(opts.cashExpenses)}</span></div>
+  <div class="dash"></div>
+  <div class="row bold"><span>Debe haber</span><span>${money(opts.expected)}</span></div>
+  ${countedBlock}
+  <div class="dash"></div>
+  <div class="sec">Movimientos del dia</div>
+  ${mvHtml}
+  <div class="dash"></div>
+  <p class="center muted">Fin del corte</p>
+  <p class="center muted">Ticket 58mm</p>
+  <script>
+    window.onload = function () {
+      setTimeout(function () {
+        window.print();
+      }, 250);
+    };
+  </script>
+</body>
+</html>`);
+  w.document.close();
 }
 
 
