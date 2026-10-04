@@ -70,6 +70,7 @@ import {
 import { BluetoothPrinterSettings } from "@/components/settings/BluetoothPrinterSettings";
 import { TicketPrinterSettings } from "@/components/settings/TicketPrinterSettings";
 import { PosDeviceAuthorization } from "@/components/settings/PosDeviceAuthorization";
+import { UserBranchAccessManager } from "@/components/settings/UserBranchAccessManager";
 
 export const Route = createFileRoute(
   "/_shell/ajustes",
@@ -191,6 +192,21 @@ function AjustesPage() {
       full_name: "",
       branch_id: "none",
     });
+
+  /*
+   * Usuario cuyas sucursales adicionales
+   * se están administrando.
+   *
+   * La sucursal principal continúa siendo
+   * profile.branch_id.
+   *
+   * Las adicionales se gestionan mediante
+   * user_branch_access y sus RPC seguros.
+   */
+  const [
+    selectedBranchAccessUserId,
+    setSelectedBranchAccessUserId,
+  ] = useState<string | null>(null);
 
   const {
     data: profiles = [],
@@ -351,12 +367,9 @@ function AjustesPage() {
     });
 
   /*
-   * Eliminar sucursal = desactivar sucursal (is_active = false).
+   * Eliminar sucursal = desactivar sucursal.
    *
    * NO elimina historial ni datos operativos.
-   * Preferimos el RPC admin_delete_branch(uuid).
-   * Si el RPC no existe en el proyecto remoto, usamos
-   * un fallback seguro con UPDATE directo (solo admin).
    */
   const deleteBranch =
     useMutation({
@@ -418,7 +431,6 @@ function AjustesPage() {
             );
           };
 
-          // 1) RPC oficial
           const { error: rpcError } =
             await (
               supabase as unknown as {
@@ -466,7 +478,6 @@ function AjustesPage() {
                 "admin_delete_branch",
               );
 
-          // 2) Fallback
           if (rpcMissing) {
             const {
               error: updateError,
@@ -527,6 +538,12 @@ function AjustesPage() {
         void qc.invalidateQueries({
           queryKey: [
             "settings",
+          ],
+        });
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "user-branch-access",
           ],
         });
       },
@@ -683,6 +700,12 @@ function AjustesPage() {
         void qc.invalidateQueries({
           queryKey: [
             "profiles",
+          ],
+        });
+
+        void qc.invalidateQueries({
+          queryKey: [
+            "user-branch-access",
           ],
         });
       },
@@ -872,6 +895,13 @@ function AjustesPage() {
         )
       : "Todas las sucursales";
 
+  const selectedBranchAccessProfile =
+    profiles.find(
+      (profile) =>
+        profile.id ===
+        selectedBranchAccessUserId,
+    );
+
   useEffect(() => {
     if (!currentProfile) {
       return;
@@ -895,11 +925,12 @@ function AjustesPage() {
    * Crea colaborador usando:
    * Nombre + PIN + Rol + Sucursal.
    *
-   * El correo y contraseña ya NO se capturan
-   * en la interfaz.
-   *
    * El Edge Function genera internamente
    * las credenciales técnicas de Supabase.
+   *
+   * Se utiliza supabase.functions.invoke()
+   * para evitar depender directamente de
+   * VITE_SUPABASE_URL en el navegador.
    */
   const submitInvite = async () => {
     if (!canManageUsers) {
@@ -942,52 +973,58 @@ function AjustesPage() {
 
     try {
       const {
-        data: sessionData,
+        data: json,
+        error: functionError,
       } =
-        await supabase.auth.getSession();
+        await supabase.functions.invoke(
+          "admin-create-user",
+          {
+            body: {
+              full_name:
+                fullName,
+              pin,
+              role:
+                inviteForm.role,
+              branch_id:
+                inviteForm.branch_id ||
+                null,
+            },
+          },
+        );
 
-      const token =
-        sessionData.session
-          ?.access_token;
+      if (functionError) {
+        let message =
+          functionError.message ||
+          "No se pudo crear el colaborador.";
 
-      if (!token) {
+        try {
+          const context =
+            (functionError as any)
+              .context;
+
+          if (context?.json) {
+            const body =
+              await context.json();
+
+            message =
+              body?.error ||
+              body?.detail ||
+              message;
+          }
+        } catch {
+          // Mantener el mensaje original
+          // si la respuesta no es JSON.
+        }
+
         throw new Error(
-          "Sesión no válida",
+          message,
         );
       }
 
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-create-user`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type":
-              "application/json",
-            Authorization:
-              `Bearer ${token}`,
-            apikey:
-              import.meta.env
-                .VITE_SUPABASE_ANON_KEY,
-          },
-          body: JSON.stringify({
-            full_name:
-              fullName,
-            pin,
-            role:
-              inviteForm.role,
-            branch_id:
-              inviteForm.branch_id ||
-              null,
-          }),
-        },
-      );
-
-      const json =
-        await res.json();
-
-      if (!res.ok) {
+      if (!json?.ok) {
         throw new Error(
-          json.error ||
+          json?.error ||
+            json?.detail ||
             "No se pudo crear el colaborador.",
         );
       }
@@ -1045,6 +1082,13 @@ function AjustesPage() {
       branchIdToDelete,
     );
   };
+
+  const openBranchAccess =
+    (profile: ProfileRow) => {
+      setSelectedBranchAccessUserId(
+        profile.id,
+      );
+    };
 
   return (
     <PageShell>
@@ -1745,7 +1789,7 @@ function AjustesPage() {
 
                                 <div>
                                   <p className="text-[10px] font-medium uppercase text-[#757575]">
-                                    Sucursal
+                                    Sucursal principal
                                   </p>
 
                                   <p className="mt-0.5 font-semibold text-[#212121]">
@@ -1756,10 +1800,29 @@ function AjustesPage() {
                                 </div>
                               </div>
 
+                              {!current &&
+                                !isUserOwner(
+                                  profile,
+                                ) && (
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="mt-3 min-h-10 w-full rounded-xl"
+                                    onClick={() =>
+                                      openBranchAccess(
+                                        profile,
+                                      )
+                                    }
+                                  >
+                                    Administrar sucursales
+                                  </Button>
+                                )}
+
                               <p className="mt-2 text-[11px] text-[#9e9e9e]">
                                 Usa la vista de escritorio
                                 para cambiar rol, sucursal
-                                o activación de otros usuarios.
+                                principal o activación.
                               </p>
                             </div>
                           );
@@ -1991,52 +2054,70 @@ function AjustesPage() {
                                   </TableCell>
 
                                   <TableCell className="text-right">
-                                    {current ? (
-                                      <Badge variant="outline">
-                                        Sesión actual
-                                      </Badge>
-                                    ) : owner ? (
-                                      <Badge variant="outline">
-                                        Propietario
-                                      </Badge>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        variant={
-                                          profile.is_active
-                                            ? "outline"
-                                            : "default"
-                                        }
-                                        disabled={
-                                          setUserAccess.isPending
-                                        }
-                                        onClick={() =>
-                                          setUserAccess.mutate(
-                                            {
-                                              userId:
-                                                profile.id,
-                                              role,
-                                              bid:
-                                                profile.branch_id,
-                                              active:
-                                                !profile.is_active,
-                                            },
-                                          )
-                                        }
-                                      >
-                                        {profile.is_active ? (
-                                          <>
-                                            <UserX className="mr-1.5 h-4 w-4" />
-                                            Desactivar
-                                          </>
-                                        ) : (
-                                          <>
-                                            <UserCheck className="mr-1.5 h-4 w-4" />
-                                            Activar
-                                          </>
+                                    <div className="flex flex-wrap justify-end gap-2">
+                                      {!current &&
+                                        !owner && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="rounded-lg"
+                                            onClick={() =>
+                                              openBranchAccess(
+                                                profile,
+                                              )
+                                            }
+                                          >
+                                            Administrar sucursales
+                                          </Button>
                                         )}
-                                      </Button>
-                                    )}
+
+                                      {current ? (
+                                        <Badge variant="outline">
+                                          Sesión actual
+                                        </Badge>
+                                      ) : owner ? (
+                                        <Badge variant="outline">
+                                          Propietario
+                                        </Badge>
+                                      ) : (
+                                        <Button
+                                          size="sm"
+                                          variant={
+                                            profile.is_active
+                                              ? "outline"
+                                              : "default"
+                                          }
+                                          disabled={
+                                            setUserAccess.isPending
+                                          }
+                                          onClick={() =>
+                                            setUserAccess.mutate(
+                                              {
+                                                userId:
+                                                  profile.id,
+                                                role,
+                                                bid:
+                                                  profile.branch_id,
+                                                active:
+                                                  !profile.is_active,
+                                              },
+                                            )
+                                          }
+                                        >
+                                          {profile.is_active ? (
+                                            <>
+                                              <UserX className="mr-1.5 h-4 w-4" />
+                                              Desactivar
+                                            </>
+                                          ) : (
+                                            <>
+                                              <UserCheck className="mr-1.5 h-4 w-4" />
+                                              Activar
+                                            </>
+                                          )}
+                                        </Button>
+                                      )}
+                                    </div>
                                   </TableCell>
                                 </TableRow>
                               );
@@ -2060,6 +2141,25 @@ function AjustesPage() {
                 )}
               </CardContent>
             </Card>
+
+            {/* ================================================== */}
+            {/* ADMINISTRACIÓN DE SUCURSALES ADICIONALES */}
+            {/* ================================================== */}
+
+            {selectedBranchAccessProfile && (
+              <UserBranchAccessManager
+                userId={
+                  selectedBranchAccessProfile.id
+                }
+                userName={
+                  selectedBranchAccessProfile.full_name?.trim() ||
+                  "Usuario"
+                }
+                primaryBranchId={
+                  selectedBranchAccessProfile.branch_id
+                }
+              />
+            )}
           </TabsContent>
         )}
 
@@ -2375,7 +2475,7 @@ function AjustesPage() {
 
             <div className="space-y-1.5">
               <Label>
-                Sucursal
+                Sucursal principal
               </Label>
 
               <Select
@@ -2419,6 +2519,12 @@ function AjustesPage() {
                   )}
                 </SelectContent>
               </Select>
+
+              <p className="text-xs text-muted-foreground">
+                Si después necesita trabajar en otra
+                sucursal, podrás agregarla desde
+                "Administrar sucursales".
+              </p>
             </div>
 
             <Button
