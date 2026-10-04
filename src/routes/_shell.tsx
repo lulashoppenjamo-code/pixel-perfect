@@ -53,6 +53,8 @@ import {
   Crown,
   ChevronLeft,
   ChevronRight,
+  LayoutGrid,
+  Store,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_shell")({
@@ -277,19 +279,19 @@ function ShellLayout() {
     {
       label: "Hoy",
       path: "/ventas",
-      icon: CalendarDays,
+      icon: Receipt,
       key: "ventas" as NavKey,
     },
     {
       label: "Caja",
       path: "/caja",
-      icon: ShoppingBag,
+      icon: Store,
       key: "caja" as NavKey,
     },
     {
       label: "Artículos",
       path: "/productos",
-      icon: Package,
+      icon: LayoutGrid,
       key: "productos" as NavKey,
     },
   ].filter((item) =>
@@ -556,16 +558,24 @@ function ShellLayout() {
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold tracking-tight text-white sm:text-[15px]">
+            <p className="truncate text-[15px] font-semibold tracking-tight text-white">
               {location.pathname.startsWith("/productos")
                 ? "Artículos"
                 : location.pathname.startsWith("/caja")
-                  ? "Caja"
+                  ? activeBranchName
                   : location.pathname.startsWith("/reportes")
                     ? "Informes"
                     : location.pathname.startsWith("/ventas")
                       ? "Hoy"
-                      : activeBranchName}
+                      : location.pathname.startsWith("/gastos")
+                        ? "Gastos"
+                        : location.pathname.startsWith("/inventario")
+                          ? "Inventario"
+                          : location.pathname.startsWith("/clientes")
+                            ? "Clientes"
+                            : location.pathname.startsWith("/ajustes")
+                              ? "Ajustes"
+                              : activeBranchName}
             </p>
           </div>
 
@@ -611,14 +621,14 @@ function ShellLayout() {
               type="button"
               onPointerDown={() => preloadRoute(item.path)}
               onClick={() => goTo(item.path)}
-              className={`flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold transition-colors ${
+              className={`flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold transition-colors ${
                 isActive
                   ? "bg-[#1a73e8] text-white"
                   : "bg-transparent text-[#5f6368]"
               }`}
             >
               <Icon
-                className={`h-[22px] w-[22px] ${
+                className={`h-6 w-6 ${
                   isActive ? "text-white" : "text-[#5f6368]"
                 }`}
                 strokeWidth={isActive ? 2.25 : 1.75}
@@ -634,9 +644,9 @@ function ShellLayout() {
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className="flex min-h-[3.25rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
+            className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
           >
-            <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.75} />
+            <MoreHorizontal className="h-6 w-6" strokeWidth={1.75} />
             <span className="leading-tight">Más</span>
           </button>
         )}
