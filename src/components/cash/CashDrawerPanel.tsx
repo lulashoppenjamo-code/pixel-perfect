@@ -33,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
+import { printTextBluetooth } from "@/lib/bluetoothPrinter";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -270,6 +271,53 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
 </html>`;
 }
 
+
+function buildCorteText(opts: ArqueoPrintOpts): string {
+  const moneyFmt = (n: number) => `$${Number(n || 0).toFixed(2)}`;
+  const lines: string[] = [];
+  lines.push("CORTE DE CAJA");
+  lines.push(opts.branchLabel);
+  lines.push("Lula Shop");
+  lines.push("--------------------------------");
+  lines.push(`Abierta: ${shortTicketTime(opts.openedAt)}`);
+  lines.push(`Responsable: ${(opts.openedByName || "—").slice(0, 18)}`);
+  if (opts.closedAt) {
+    lines.push(`Cerrada: ${shortTicketTime(opts.closedAt)}`);
+  } else {
+    lines.push("Corte en curso");
+  }
+  lines.push("--------------------------------");
+  lines.push("RESUMEN");
+  lines.push(`Fondo inicial    ${moneyFmt(opts.opening)}`);
+  lines.push(`Ventas efectivo  +${moneyFmt(opts.cashSales + opts.mixedCash)}`);
+  lines.push(`Entradas         +${moneyFmt(opts.deposits)}`);
+  lines.push(`Salidas          -${moneyFmt(opts.withdrawals)}`);
+  lines.push(`Gastos efectivo  -${moneyFmt(opts.cashExpenses)}`);
+  lines.push("--------------------------------");
+  lines.push(`DEBE HABER       ${moneyFmt(opts.expected)}`);
+  if (opts.counted != null) {
+    lines.push(`Contado          ${moneyFmt(opts.counted)}`);
+    lines.push(`Diferencia       ${moneyFmt(Number(opts.difference ?? 0))}`);
+  }
+  lines.push("--------------------------------");
+  lines.push("MOVIMIENTOS");
+  if (opts.movements.length === 0) {
+    lines.push("Sin entradas ni salidas");
+  } else {
+    for (const m of opts.movements) {
+      const tipo = m.type === "deposit" ? "ENTRADA" : "SALIDA";
+      const signo = m.type === "deposit" ? "+" : "-";
+      lines.push(`${tipo} ${signo}${moneyFmt(Number(m.amount))}`);
+      lines.push(`  ${shortTicketTime(m.created_at)}`);
+      lines.push(`  ${(m.reason && m.reason.trim()) || "Sin motivo"}`);
+    }
+  }
+  lines.push("--------------------------------");
+  lines.push("Fin del corte");
+  lines.push("");
+  return lines.join("\n");
+}
+
 function printTicket58Html(html: string) {
   // 1) Intentar iframe (mejor en móvil que window.open)
   try {
@@ -425,6 +473,7 @@ export function CashDrawerPanel({
   const [printingClosedId, setPrintingClosedId] = useState<string | null>(null);
   const [ticketHtml, setTicketHtml] = useState<string | null>(null);
   const [ticketTitle, setTicketTitle] = useState("Corte de caja");
+  const [ticketOpts, setTicketOpts] = useState<ArqueoPrintOpts | null>(null);
 
   const invalidate = () => {
     void qc.invalidateQueries({
@@ -443,6 +492,7 @@ export function CashDrawerPanel({
   const openTicketPreview = (opts: ArqueoPrintOpts, title = "Corte de caja") => {
     const html = buildTicket58Html(opts);
     setTicketTitle(title);
+    setTicketOpts(opts);
     setTicketHtml(html);
   };
 
@@ -1522,6 +1572,7 @@ export function CashDrawerPanel({
         onOpenChange={(open) => {
           if (!open) {
             setTicketHtml(null);
+            setTicketOpts(null);
           }
         }}
       >
@@ -1553,20 +1604,37 @@ export function CashDrawerPanel({
               type="button"
               variant="outline"
               className="min-h-11 w-full rounded-xl sm:w-auto"
-              onClick={() => setTicketHtml(null)}
+              onClick={() => {
+                setTicketHtml(null);
+                setTicketOpts(null);
+              }}
             >
               Cerrar
             </Button>
             <Button
               type="button"
               className="min-h-11 w-full rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
-              onClick={() => {
+              onClick={async () => {
                 if (!ticketHtml) return;
+                try {
+                  if (ticketOpts) {
+                    await printTextBluetooth(buildCorteText(ticketOpts));
+                    toast.success("Corte enviado a la impresora Bluetooth");
+                    return;
+                  }
+                } catch (e) {
+                  console.warn("Bluetooth falló, usando impresión del sistema:", e);
+                  toast.message(
+                    e instanceof Error
+                      ? e.message
+                      : "Bluetooth no disponible, abriendo impresión del sistema",
+                  );
+                }
                 printTicket58Html(ticketHtml);
               }}
             >
               <Printer className="mr-2 h-4 w-4" />
-              Imprimir ticket 58 mm
+              Imprimir en térmica
             </Button>
           </DialogFooter>
         </DialogContent>
