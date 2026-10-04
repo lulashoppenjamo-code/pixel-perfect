@@ -57,6 +57,10 @@ import {
   normalizeTicketLayout,
   printTicketBluetooth,
 } from "@/lib/bluetoothPrinter";
+import {
+  BARCODE_EVENT,
+  consumePendingBarcode,
+} from "@/lib/globalBarcode";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1107,6 +1111,48 @@ export function POSPanel({
 
     return false;
   };
+
+  // Escaneo global (pistola): agregar al carrito aunque se haya pistoleado en otra pantalla
+  useEffect(() => {
+    const tryAdd = (code: string) => {
+      const ok = resolveAndAddByCode(code);
+      if (ok) {
+        if (sequential) {
+          setMobileStep("cart");
+        }
+        toast.success("Producto agregado por código");
+      } else {
+        toast.error(`No se encontró el código: ${code}`);
+      }
+    };
+
+    const pending = consumePendingBarcode();
+    if (pending && products.length > 0) {
+      tryAdd(pending);
+    }
+
+    const onScan = (event: Event) => {
+      const detail = (event as CustomEvent<{ code: string }>).detail;
+      const code = detail?.code?.trim();
+      if (!code) return;
+      if (products.length === 0) {
+        // Guardar de nuevo hasta que carguen productos
+        try {
+          sessionStorage.setItem("lula-pending-barcode", code);
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      tryAdd(code);
+    };
+
+    window.addEventListener(BARCODE_EVENT, onScan as EventListener);
+    return () => {
+      window.removeEventListener(BARCODE_EVENT, onScan as EventListener);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [products, sequential, allVariants]);
 
   const handleSearchKey = (
     event: React.KeyboardEvent<HTMLInputElement>,
