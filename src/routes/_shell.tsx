@@ -10,6 +10,11 @@ import {
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
 import { autoConnectBluetoothPrinter } from "@/lib/bluetoothPrinter";
+import {
+  startGlobalBarcodeListener,
+  setPendingBarcode,
+  dispatchBarcode,
+} from "@/lib/globalBarcode";
 
 import { Button } from "@/components/ui/button";
 
@@ -139,6 +144,18 @@ function ShellLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const router = useRouter();
+
+  // Pistola de código de barras: cualquier pantalla → Caja y vender
+  useEffect(() => {
+    const stop = startGlobalBarcodeListener((code) => {
+      setPendingBarcode(code);
+      dispatchBarcode(code);
+      if (!location.pathname.startsWith("/caja")) {
+        navigate({ to: "/caja" });
+      }
+    });
+    return stop;
+  }, [navigate, location.pathname]);
 
   const preloadRoute = (path: string) => {
     void router
