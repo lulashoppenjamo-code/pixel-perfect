@@ -18,6 +18,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { consumeOpenPosFlag } from "@/lib/globalBarcode";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { RequireNavAccess } from "@/components/RequireNavAccess";
@@ -73,6 +74,20 @@ function CajaPage() {
   // Solo afecta la UI móvil/tablet: home estilo Zobaze vs POS/Arqueo
   const [mobileView, setMobileView] =
     useState<MobileView>("home");
+
+  // Si se pistoleó un código, abrir el POS de inmediato
+  useEffect(() => {
+    const openPos = () => {
+      setTab("pos");
+      setMobileView("pos");
+    };
+    if (consumeOpenPosFlag()) {
+      openPos();
+    }
+    const onScan = () => openPos();
+    window.addEventListener("lula-barcode-scan", onScan);
+    return () => window.removeEventListener("lula-barcode-scan", onScan);
+  }, []);
 
   // Tablet (cualquier orientación) y teléfono: flujo secuencial con home
   const [isCompact, setIsCompact] = useState(true);
