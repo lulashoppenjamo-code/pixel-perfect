@@ -990,7 +990,7 @@ async function buildTicketText(
     const name =
       layout.showSku &&
       line.sku
-        ? `${line.name} (${line.sku})`
+        ? `\( {line.name} ( \){line.sku})`
         : line.name;
 
     chunks.push(
@@ -1218,24 +1218,23 @@ async function findWritableCharacteristic(
 }
 
 export async function connectBluetoothPrinter() {
-  const bluetooth =
-    getBluetooth();
+  const bluetooth = getBluetooth();
 
-  const device =
-    await bluetooth.requestDevice(
-      {
-        acceptAllDevices:
-          true,
+  const device = await bluetooth.requestDevice({
+    acceptAllDevices: true,
+    optionalServices: [
+      "0000ffe0-0000-1000-8000-00805f9b34fb",
+      "0000ff00-0000-1000-8000-00805f9b34fb",
+      "00001101-0000-1000-8000-00805f9b34fb",
+      "000018f0-0000-1000-8000-00805f9b34fb",
+      "000018f1-0000-1000-8000-00805f9b34fb",
+      "0000ae30-0000-1000-8000-00805f9b34fb",
+      "0000fff0-0000-1000-8000-00805f9b34fb",
+      "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+    ],
+  });
 
-        optionalServices:
-          [],
-      },
-    );
-
-  const characteristic =
-    await findWritableCharacteristic(
-      device,
-    );
+  const characteristic = await findWritableCharacteristic(device);
 
   activeConnection = {
     device,
@@ -1244,14 +1243,11 @@ export async function connectBluetoothPrinter() {
 
   localStorage.setItem(
     DEVICE_NAME_KEY,
-    device.name ??
-      "Impresora Bluetooth",
+    device.name ?? "Impresora Bluetooth",
   );
 
   return {
-    name:
-      device.name ??
-      "Impresora Bluetooth",
+    name: device.name ?? "Impresora Bluetooth",
   };
 }
 
