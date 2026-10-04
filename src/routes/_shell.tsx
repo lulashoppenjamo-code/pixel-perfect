@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   createFileRoute,
   Outlet,
@@ -9,6 +9,7 @@ import {
 
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
+import { autoConnectBluetoothPrinter } from "@/lib/bluetoothPrinter";
 
 import { Button } from "@/components/ui/button";
 
@@ -107,6 +108,33 @@ function ShellLayout() {
     setBranchId,
     branches,
   } = useBranch();
+
+  // Conectar impresora Bluetooth en segundo plano al abrir la app
+  useEffect(() => {
+    let cancelled = false;
+
+    const tryConnect = () => {
+      if (cancelled) return;
+      void autoConnectBluetoothPrinter();
+    };
+
+    tryConnect();
+
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        tryConnect();
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisible);
+    const t = window.setTimeout(tryConnect, 3000);
+
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearTimeout(t);
+    };
+  }, []);
 
   const navigate = useNavigate();
   const location = useLocation();
