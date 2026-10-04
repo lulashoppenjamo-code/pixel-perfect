@@ -3062,7 +3062,7 @@ export function POSPanel({
                   type="button"
                   disabled={cart.length === 0}
                   onClick={() => setCart([])}
-                  className="h-10 flex-1 rounded-md bg-[#ef9a9a] text-[13px] font-semibold text-white disabled:opacity-40"
+                  className="h-14 min-h-14 flex-1 touch-manipulation rounded-xl bg-[#ef9a9a] text-[16px] font-bold text-white active:scale-[0.98] disabled:opacity-40"
                 >
                   Borrar
                 </button>
@@ -3070,7 +3070,7 @@ export function POSPanel({
                   type="button"
                   disabled={cart.length === 0}
                   onClick={() => void parkCurrentSale()}
-                  className="h-10 flex-1 rounded-md bg-[#ffb74d] text-[13px] font-semibold text-white disabled:opacity-40"
+                  className="h-14 min-h-14 flex-1 touch-manipulation rounded-xl bg-[#ffb74d] text-[16px] font-bold text-white active:scale-[0.98] disabled:opacity-40"
                 >
                   Guardar para más
                 </button>
@@ -3296,7 +3296,7 @@ export function POSPanel({
                   checkout.mutate();
                 }
               }}
-              className="flex h-12 min-w-0 flex-1 items-center justify-center gap-2 rounded-md bg-[#43a047] text-[16px] font-bold text-white shadow-sm transition active:scale-[0.98] disabled:opacity-50"
+              className="flex h-16 min-h-16 min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#43a047] text-[20px] font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
                 ? "Procesando…"
