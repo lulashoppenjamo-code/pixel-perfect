@@ -1,16 +1,21 @@
 /**
  * Edge Function: admin-create-user
  *
- * Lula OS v1.1
+ * Crea colaboradores para Lula OS usando:
+ * - nombre
+ * - PIN de 4 dígitos
+ * - rol
+ * - sucursal
  *
- * - Autoriza al usuario llamador mediante su JWT.
- * - Requiere is_admin o usuarios.manage.
- * - Solo owner puede asignar owner.
- * - Crea el usuario mediante service role.
- * - Crea/actualiza profile mediante service role.
- * - Asigna rol/sucursal mediante el JWT del llamador.
- * - Si falla profile o asignación de acceso, intenta hacer rollback.
- * - No modifica inventario, ventas ni create_sale.
+ * El correo y contraseña NO los captura el usuario.
+ * Se generan internamente para conservar una identidad
+ * real de Supabase Auth.
+ *
+ * IMPORTANTE:
+ * - auth.uid() del colaborador sigue siendo real.
+ * - cashier_id de las ventas no cambia.
+ * - permisos existentes no cambian.
+ * - inventario y create_sale() no se modifican.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -28,6 +33,16 @@ const ALLOWED_ROLES = new Set([
   "cashier",
   "staff",
 ]);
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...cors,
+      "Content-Type": "application/json",
+    },
+  });
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -78,11 +93,10 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * Cliente del usuario que está haciendo la solicitud.
+     * Cliente del administrador.
      *
-     * Es importante que admin_set_user_access se ejecute
-     * con este cliente y NO con service role porque esa función
-     * utiliza auth.uid().
+     * Se mantiene el JWT real del usuario que está
+     * ejecutando la operación.
      */
     const userClient = createClient(
       supabaseUrl,
@@ -125,7 +139,7 @@ Deno.serve(async (req) => {
 
     if (adminCheckError) {
       console.error(
-        "is_admin check:",
+        "is_admin:",
         adminCheckError.message,
       );
     }
@@ -147,7 +161,7 @@ Deno.serve(async (req) => {
 
       if (permissionError) {
         console.error(
-          "usuarios.manage check:",
+          "usuarios.manage:",
           permissionError.message,
         );
       }
@@ -197,18 +211,12 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
 
-    const email = String(
-      body.email ?? "",
-    )
-      .trim()
-      .toLowerCase();
-
-    const password = String(
-      body.password ?? "",
-    );
-
     const full_name = String(
       body.full_name ?? "",
+    ).trim();
+
+    const pin = String(
+      body.pin ?? "",
     ).trim();
 
     const role = String(
@@ -221,23 +229,23 @@ Deno.serve(async (req) => {
         ? String(body.branch_id).trim()
         : null;
 
-    if (!email || !email.includes("@")) {
+    if (!full_name) {
       return json(
         {
-          error: "valid email required",
+          error: "name required",
         },
         400,
       );
     }
 
-    if (
-      !password ||
-      password.length < 6
-    ) {
+    /*
+     * El PIN es exactamente de 4 dígitos.
+     */
+    if (!/^\d{4}$/.test(pin)) {
       return json(
         {
           error:
-            "password min 6 characters",
+            "PIN must contain exactly 4 digits",
         },
         400,
       );
@@ -252,6 +260,23 @@ Deno.serve(async (req) => {
       );
     }
 
+    /*
+     * El PIN está pensado para colaboradores.
+     * El owner conserva su cuenta maestra.
+     */
+    if (role === "owner") {
+      return json(
+        {
+          error:
+            "owner accounts cannot use collaborator PIN",
+        },
+        400,
+      );
+    }
+
+    /*
+     * Un administrador tampoco puede crear owner.
+     */
     if (
       role === "owner" &&
       !callerIsOwner
@@ -278,20 +303,34 @@ Deno.serve(async (req) => {
 
     /*
      * ----------------------------------------------------------
-     * CREAR USUARIO AUTH
+     * CREAR IDENTIDAD AUTH INTERNA
      * ----------------------------------------------------------
+     *
+     * El colaborador nunca necesita conocer este correo.
+     * Se utiliza solamente para conservar un usuario real
+     * de Supabase.
      */
+
+    const internalId =
+      crypto.randomUUID();
+
+    const internalEmail =
+      `collaborator_${internalId}@auth.lulashop.local`;
+
+    const internalPassword =
+      `${crypto.randomUUID()}-${crypto.randomUUID()}`;
 
     const {
       data: created,
       error: createError,
     } =
       await admin.auth.admin.createUser({
-        email,
-        password,
+        email: internalEmail,
+        password: internalPassword,
         email_confirm: true,
         user_metadata: {
           full_name,
+          auth_mode: "collaborator_pin",
         },
       });
 
@@ -314,7 +353,7 @@ Deno.serve(async (req) => {
 
     /*
      * ----------------------------------------------------------
-     * CREAR / ACTUALIZAR PROFILE
+     * PROFILE
      * ----------------------------------------------------------
      */
 
@@ -336,9 +375,6 @@ Deno.serve(async (req) => {
         profileError.message,
       );
 
-      /*
-       * Rollback del usuario Auth.
-       */
       const {
         error: rollbackError,
       } =
@@ -347,11 +383,6 @@ Deno.serve(async (req) => {
         );
 
       if (rollbackError) {
-        console.error(
-          "rollback auth user:",
-          rollbackError.message,
-        );
-
         return json(
           {
             error:
@@ -380,12 +411,11 @@ Deno.serve(async (req) => {
 
     /*
      * ----------------------------------------------------------
-     * ASIGNAR ROL + SUCURSAL
-     *
-     * IMPORTANTE:
-     * usar userClient porque admin_set_user_access
-     * depende de auth.uid().
+     * ROL + SUCURSAL
      * ----------------------------------------------------------
+     *
+     * Sigue pasando por admin_set_user_access().
+     * No hacemos INSERT directo a user_roles.
      */
 
     const {
@@ -396,10 +426,12 @@ Deno.serve(async (req) => {
         {
           _user_id:
             createdUserId,
-          _role: role,
+          _role:
+            role,
           _branch_id:
             branch_id,
-          _is_active: true,
+          _is_active:
+            true,
         },
       );
 
@@ -409,30 +441,14 @@ Deno.serve(async (req) => {
         accessError.message,
       );
 
-      /*
-       * Primero eliminamos el profile.
-       */
-      const {
-        error: profileRollbackError,
-      } =
-        await admin
-          .from("profiles")
-          .delete()
-          .eq(
-            "id",
-            createdUserId,
-          );
-
-      if (profileRollbackError) {
-        console.error(
-          "profile rollback:",
-          profileRollbackError.message,
+      await admin
+        .from("profiles")
+        .delete()
+        .eq(
+          "id",
+          createdUserId,
         );
-      }
 
-      /*
-       * Después eliminamos el usuario Auth.
-       */
       const {
         error: authRollbackError,
       } =
@@ -441,20 +457,12 @@ Deno.serve(async (req) => {
         );
 
       if (authRollbackError) {
-        console.error(
-          "auth rollback:",
-          authRollbackError.message,
-        );
-
         return json(
           {
             error:
               "role assignment failed and rollback failed",
             detail:
               accessError.message,
-            profile_rollback:
-              profileRollbackError?.message ??
-              null,
             auth_rollback:
               authRollbackError.message,
             user_id:
@@ -477,6 +485,101 @@ Deno.serve(async (req) => {
 
     /*
      * ----------------------------------------------------------
+     * PIN
+     * ----------------------------------------------------------
+     *
+     * El RPC existente:
+     * admin_set_collaborator_pin()
+     *
+     * se encarga de validar:
+     * - exactamente 4 dígitos
+     * - colaborador activo
+     * - no owner
+     * - hash bcrypt
+     */
+
+    const {
+      error: pinError,
+    } =
+      await userClient.rpc(
+        "admin_set_collaborator_pin",
+        {
+          _user_id:
+            createdUserId,
+          _pin:
+            pin,
+        },
+      );
+
+    if (pinError) {
+      console.error(
+        "admin_set_collaborator_pin:",
+        pinError.message,
+      );
+
+      /*
+       * Rollback completo.
+       */
+      await admin
+        .from("collaborator_pin_credentials")
+        .delete()
+        .eq(
+          "user_id",
+          createdUserId,
+        );
+
+      await admin
+        .from("user_roles")
+        .delete()
+        .eq(
+          "user_id",
+          createdUserId,
+        );
+
+      await admin
+        .from("profiles")
+        .delete()
+        .eq(
+          "id",
+          createdUserId,
+        );
+
+      const {
+        error: authRollbackError,
+      } =
+        await admin.auth.admin.deleteUser(
+          createdUserId,
+        );
+
+      if (authRollbackError) {
+        return json(
+          {
+            error:
+              "PIN assignment failed and rollback failed",
+            detail:
+              pinError.message,
+            auth_rollback:
+              authRollbackError.message,
+            user_id:
+              createdUserId,
+          },
+          500,
+        );
+      }
+
+      return json(
+        {
+          error:
+            "PIN assignment failed",
+          detail:
+            pinError.message,
+        },
+        500,
+      );
+    }
+
+    /*
+     * ----------------------------------------------------------
      * ÉXITO
      * ----------------------------------------------------------
      */
@@ -486,9 +589,11 @@ Deno.serve(async (req) => {
         ok: true,
         user_id:
           createdUserId,
-        email,
+        full_name,
         role,
         branch_id,
+        auth_mode:
+          "collaborator_pin",
       },
       200,
     );
@@ -497,6 +602,44 @@ Deno.serve(async (req) => {
       "admin-create-user:",
       error,
     );
+
+    /*
+     * Si ocurrió una excepción después de crear Auth,
+     * intentamos limpiar el usuario.
+     */
+    if (createdUserId) {
+      try {
+        const supabaseUrl =
+          Deno.env.get(
+            "SUPABASE_URL",
+          );
+
+        const serviceKey =
+          Deno.env.get(
+            "SUPABASE_SERVICE_ROLE_KEY",
+          );
+
+        if (
+          supabaseUrl &&
+          serviceKey
+        ) {
+          const admin =
+            createClient(
+              supabaseUrl,
+              serviceKey,
+            );
+
+          await admin.auth.admin.deleteUser(
+            createdUserId,
+          );
+        }
+      } catch (rollbackError) {
+        console.error(
+          "exception rollback:",
+          rollbackError,
+        );
+      }
+    }
 
     return json(
       {
@@ -509,20 +652,3 @@ Deno.serve(async (req) => {
     );
   }
 });
-
-function json(
-  body: unknown,
-  status: number,
-) {
-  return new Response(
-    JSON.stringify(body),
-    {
-      status,
-      headers: {
-        ...cors,
-        "Content-Type":
-          "application/json",
-      },
-    },
-  );
-}
