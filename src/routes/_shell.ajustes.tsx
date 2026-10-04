@@ -69,6 +69,7 @@ import {
 
 import { BluetoothPrinterSettings } from "@/components/settings/BluetoothPrinterSettings";
 import { TicketPrinterSettings } from "@/components/settings/TicketPrinterSettings";
+import { PosDeviceAuthorization } from "@/components/settings/PosDeviceAuthorization";
 
 export const Route = createFileRoute(
   "/_shell/ajustes",
@@ -1617,6 +1618,12 @@ function AjustesPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* ================================================== */}
+            {/* DISPOSITIVOS POS */}
+            {/* ================================================== */}
+
+            <PosDeviceAuthorization />
 
             {/* ================================================== */}
             {/* USUARIOS Y PERMISOS */}
