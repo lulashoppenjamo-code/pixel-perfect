@@ -20,6 +20,11 @@ export type Branch = {
   is_active: boolean;
 };
 
+type UserBranchAccessRow = {
+  user_id: string;
+  branch_id: string;
+};
+
 type BranchState = {
   branches: Branch[];
   branchId: string | null;
@@ -56,6 +61,65 @@ export function useBranches() {
       }
 
       return (data ?? []) as Branch[];
+    },
+  });
+}
+
+/*
+ * Sucursales adicionales autorizadas para el usuario.
+ *
+ * IMPORTANTE:
+ * - Owner/admin no necesitan esta consulta porque ya
+ *   tienen acceso a todas las sucursales activas.
+ * - El filtro user_id garantiza que el cliente solamente
+ *   utilice las asignaciones del usuario actual.
+ * - La seguridad real continúa estando en RLS y
+ *   can_access_branch().
+ */
+function useUserBranchAccess() {
+  const { user, profile, roles } = useAuth();
+
+  const isOwnerOrAdmin =
+    roles.includes("owner") ||
+    roles.includes("admin");
+
+  return useQuery({
+    queryKey: [
+      "user-branch-access",
+      user?.id,
+    ],
+
+    enabled:
+      !!user &&
+      !!profile &&
+      profile.is_active === true &&
+      !isOwnerOrAdmin,
+
+    queryFn: async () => {
+      if (!user?.id) {
+        return [] as UserBranchAccessRow[];
+      }
+
+      const {
+        data,
+        error,
+      } = await supabase
+        .from("user_branch_access")
+        .select(
+          "user_id, branch_id",
+        )
+        .eq(
+          "user_id",
+          user.id,
+        );
+
+      if (error) {
+        throw error;
+      }
+
+      return (
+        data ?? []
+      ) as UserBranchAccessRow[];
     },
   });
 }
@@ -104,13 +168,23 @@ export function BranchProvider({
 }: {
   children: ReactNode;
 }) {
-  const { profile, roles, user } = useAuth();
+  const {
+    profile,
+    roles,
+    user,
+  } = useAuth();
 
   const {
     data: allBranches = [],
-    isLoading,
-    isFetching,
+    isLoading: branchesLoading,
+    isFetching: branchesFetching,
   } = useBranches();
+
+  const {
+    data: userBranchAccess = [],
+    isLoading: accessLoading,
+    isFetching: accessFetching,
+  } = useUserBranchAccess();
 
   const isOwnerOrAdmin =
     roles.includes("owner") ||
@@ -121,7 +195,10 @@ export function BranchProvider({
    * pueden trabajar con cualquier sucursal activa.
    *
    * Manager/cashier/staff:
-   * solamente con la sucursal asignada al perfil.
+   * pueden trabajar con:
+   *   1. su sucursal principal (profiles.branch_id)
+   *   2. cualquier sucursal adicional autorizada
+   *      en user_branch_access.
    */
   const branches = useMemo(() => {
     if (isOwnerOrAdmin) {
@@ -129,17 +206,36 @@ export function BranchProvider({
     }
 
     if (!profile?.branch_id) {
-      return [];
+      return allBranches.filter(
+        (branch) =>
+          userBranchAccess.some(
+            (access) =>
+              access.branch_id ===
+              branch.id,
+          ),
+      );
     }
+
+    const allowedBranchIds =
+      new Set<string>([
+        profile.branch_id,
+        ...userBranchAccess.map(
+          (access) =>
+            access.branch_id,
+        ),
+      ]);
 
     return allBranches.filter(
       (branch) =>
-        branch.id === profile.branch_id,
+        allowedBranchIds.has(
+          branch.id,
+        ),
     );
   }, [
     allBranches,
     isOwnerOrAdmin,
     profile?.branch_id,
+    userBranchAccess,
   ]);
 
   /*
@@ -157,8 +253,7 @@ export function BranchProvider({
   );
 
   /*
-   * Cuando cambia de usuario, no debemos conservar
-   * la sucursal del usuario anterior.
+   * Identifica el usuario de la selección actual.
    */
   const [
     branchUserId,
@@ -176,11 +271,6 @@ export function BranchProvider({
       setBranchUserId(
         currentUserId,
       );
-
-      /*
-       * No eliminamos todavía el valor almacenado.
-       * Primero verificamos abajo si sigue siendo válido.
-       */
     }
   }, [
     user?.id,
@@ -192,7 +282,10 @@ export function BranchProvider({
    * respecto a las sucursales realmente permitidas.
    */
   useEffect(() => {
-    if (!user || !profile?.is_active) {
+    if (
+      !user ||
+      !profile?.is_active
+    ) {
       if (branchId !== null) {
         setBranchIdState(null);
       }
@@ -201,10 +294,16 @@ export function BranchProvider({
     }
 
     /*
-     * Mientras se están cargando las sucursales
-     * no cambiamos la selección actual.
+     * Mientras se cargan las sucursales o los
+     * permisos adicionales no cambiamos la
+     * selección actual.
      */
-    if (isLoading || isFetching) {
+    if (
+      branchesLoading ||
+      branchesFetching ||
+      accessLoading ||
+      accessFetching
+    ) {
       return;
     }
 
@@ -229,13 +328,20 @@ export function BranchProvider({
       );
 
     if (currentIsValid) {
-      writeStoredBranchId(branchId);
+      writeStoredBranchId(
+        branchId,
+      );
+
       return;
     }
 
     /*
      * 2. Para usuarios limitados por perfil,
-     *    siempre debe ganar branch_id del perfil.
+     *    su sucursal principal es el primer valor
+     *    por defecto.
+     *
+     *    Las sucursales adicionales siguen disponibles
+     *    para selección manual.
      */
     if (
       !isOwnerOrAdmin &&
@@ -259,8 +365,8 @@ export function BranchProvider({
 
     /*
      * 3. Owner/admin:
-     *    si la sucursal guardada ya no existe,
-     *    usamos la primera disponible.
+     *    si la sucursal guardada sigue existiendo,
+     *    la conservamos.
      */
     const stored =
       readStoredBranchId();
@@ -274,12 +380,13 @@ export function BranchProvider({
       )
     ) {
       setBranchIdState(stored);
+
       return;
     }
 
     /*
      * 4. Último recurso:
-     *    primera sucursal activa.
+     *    primera sucursal activa permitida.
      */
     const first =
       branches[0]?.id ?? null;
@@ -293,8 +400,10 @@ export function BranchProvider({
     branches,
     branchId,
     isOwnerOrAdmin,
-    isLoading,
-    isFetching,
+    branchesLoading,
+    branchesFetching,
+    accessLoading,
+    accessFetching,
   ]);
 
   /*
@@ -323,9 +432,18 @@ export function BranchProvider({
   /*
    * Si cambia el usuario autenticado, eliminamos
    * cualquier selección que no corresponda a su acceso.
+   *
+   * Para usuarios normales, la sucursal principal
+   * sigue siendo la selección inicial.
+   *
+   * No forzamos este efecto al cambiar manualmente
+   * de sucursal.
    */
   useEffect(() => {
-    if (!user || !profile?.is_active) {
+    if (
+      !user ||
+      !profile?.is_active
+    ) {
       writeStoredBranchId(null);
       return;
     }
@@ -334,15 +452,30 @@ export function BranchProvider({
       !isOwnerOrAdmin &&
       profile.branch_id
     ) {
-      writeStoredBranchId(
-        profile.branch_id,
-      );
+      const currentStored =
+        readStoredBranchId();
+
+      const userCanUseStoredBranch =
+        branches.some(
+          (branch) =>
+            branch.id ===
+            currentStored,
+        );
+
+      if (
+        !userCanUseStoredBranch
+      ) {
+        writeStoredBranchId(
+          profile.branch_id,
+        );
+      }
     }
   }, [
     user?.id,
     profile?.is_active,
     profile?.branch_id,
     isOwnerOrAdmin,
+    branches,
   ]);
 
   const value = useMemo(
@@ -350,14 +483,21 @@ export function BranchProvider({
       branches,
       branchId,
       setBranchId,
-      // Solo bloquear en la carga inicial. Los refetches
-      // en segundo plano (isFetching) no deben ocultar Caja.
-      loading: isLoading,
+
+      /*
+       * Solo bloquear en la carga inicial.
+       * Los refetches en segundo plano no deben
+       * ocultar Caja.
+       */
+      loading:
+        branchesLoading ||
+        accessLoading,
     }),
     [
       branches,
       branchId,
-      isLoading,
+      branchesLoading,
+      accessLoading,
     ],
   );
 
@@ -369,7 +509,8 @@ export function BranchProvider({
 }
 
 export function useBranch() {
-  const ctx = useContext(Ctx);
+  const ctx =
+    useContext(Ctx);
 
   if (!ctx) {
     throw new Error(
@@ -378,4 +519,4 @@ export function useBranch() {
   }
 
   return ctx;
-} 
+}
