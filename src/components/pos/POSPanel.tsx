@@ -7,6 +7,9 @@
  * - NO consulta la tabla legacy inventory para determinar existencias.
  * - branchId sigue utilizándose para registrar la venta y la caja.
  * - create_sale() se mantiene como RPC central de venta.
+ *
+ * BLOQUE 2 — Visual POS (tarjetas, Agotado, grilla, Ir al mostrador).
+ * Solo clases/presentación. Sin tocar create_sale ni inventario.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -2720,7 +2723,7 @@ export function POSPanel({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-3 sm:gap-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map((product) => {
                 const outOfStock = product.stock <= 0;
                 const cartQty = cart
@@ -2737,12 +2740,12 @@ export function POSPanel({
                       (settings?.blockWithoutStock && outOfStock)
                     }
                     onClick={() => addProduct(product)}
-                    className="group relative flex flex-col overflow-hidden rounded-lg border border-[#e8e8e8] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                    className="group relative flex flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     {/* Imagen / emoji / inicial */}
                     <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-[#fafafa]">
                       {outOfStock && (
-                        <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-[#f8bbd0] px-1.5 py-0.5 text-[10px] font-semibold text-[#c2185b]">
+                        <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
                           Agotado
                         </span>
                       )}
@@ -2763,22 +2766,22 @@ export function POSPanel({
                           {product.emoji}
                         </span>
                       ) : (
-                        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e3f2fd] text-xl font-bold text-[#1a73e8]">
+                        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-2xl font-bold text-[#1a73e8]">
                           {initial}
                         </span>
                       )}
                     </div>
 
-                    <div className="flex flex-1 flex-col px-1.5 pb-1.5 pt-1">
-                      <p className="line-clamp-2 min-h-[2rem] text-center text-[11px] font-bold leading-tight text-[#212121] sm:text-xs">
+                    <div className="flex flex-1 flex-col px-2 pb-2 pt-1.5">
+                      <p className="line-clamp-2 min-h-[2.25rem] text-center text-[12px] font-bold leading-snug text-[#212121] sm:text-[13px]">
                         {product.name}
                       </p>
                       {product.sku ? (
-                        <p className="mt-0.5 truncate text-center text-[10px] font-medium text-[#757575]">
+                        <p className="mt-0.5 truncate text-center text-[10px] font-medium text-[#9e9e9e]">
                           {product.sku}
                         </p>
                       ) : null}
-                      <p className="mt-auto pt-1 text-center text-[15px] font-bold text-[#1a73e8]">
+                      <p className="mt-auto pt-1 text-center text-[15px] font-bold leading-none text-[#1a73e8]">
                         {money(product.price)}
                       </p>
                     </div>
@@ -2791,11 +2794,11 @@ export function POSPanel({
 
         {/* Barra Ir al mostrador (solo sequential con carrito) */}
         {sequential && cart.length > 0 && (
-          <div className="border-t border-[#e0e0e0] bg-white p-2.5 pb-[calc(0.5rem+3.75rem+env(safe-area-inset-bottom))]">
+          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[calc(0.75rem+3.75rem+env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
             <button
               type="button"
               onClick={() => setMobileStep("cart")}
-              className="flex h-11 w-full touch-manipulation items-center justify-center rounded-md bg-[#4caf50] text-[15px] font-bold text-white shadow-sm active:scale-[0.98]"
+              className="flex h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#34a853] text-[15px] font-bold tracking-wide text-white shadow-md active:scale-[0.98]"
             >
               Ir al mostrador · {cart.reduce((s, l) => s + l.quantity, 0)} art.
             </button>
@@ -3342,7 +3345,7 @@ export function POSPanel({
                   checkout.mutate();
                 }
               }}
-              className="flex h-16 min-h-16 min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#43a047] text-[20px] font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-50"
+              className="flex h-16 min-h-16 min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#34a853] text-[20px] font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
                 ? "Procesando…"
@@ -4220,7 +4223,7 @@ export function POSPanel({
                 setMobileStep("shop");
                 setTicketOpen(false);
               }}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#1a73e8] text-base font-bold uppercase tracking-wide text-white"
+              className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-base font-bold uppercase tracking-wide text-white shadow-sm active:scale-[0.98]"
             >
               NUEVA VENTA
             </button>
