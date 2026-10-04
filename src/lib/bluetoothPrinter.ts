@@ -13,17 +13,10 @@
 
 import type { TicketData } from "@/components/pos/TicketModal";
 
-const DEVICE_NAME_KEY =
-  "lula-printer-device-name";
-
-const AUTO_PRINT_KEY =
-  "lula-printer-auto-print";
-
-const LAYOUT_CACHE_KEY =
-  "lula-ticket-layout-cache";
-
-const TICKET_LOGO_CACHE_KEY =
-  "lula-ticket-logo";
+const DEVICE_NAME_KEY = "lula-printer-device-name";
+const AUTO_PRINT_KEY = "lula-printer-auto-print";
+const LAYOUT_CACHE_KEY = "lula-ticket-layout-cache";
+const TICKET_LOGO_CACHE_KEY = "lula-ticket-logo";
 
 /** Opciones visuales del ticket */
 export type TicketPrintLayout = {
@@ -57,37 +50,23 @@ type BluetoothCharacteristic = {
     write: boolean;
     writeWithoutResponse: boolean;
   };
-
-  writeValue: (
-    value: Uint8Array,
-  ) => Promise<void>;
-
-  writeValueWithoutResponse: (
-    value: Uint8Array,
-  ) => Promise<void>;
+  writeValue: (value: Uint8Array) => Promise<void>;
+  writeValueWithoutResponse: (value: Uint8Array) => Promise<void>;
 };
 
 type BluetoothGATTService = {
-  getCharacteristics: () => Promise<
-    BluetoothCharacteristic[]
-  >;
+  getCharacteristics: () => Promise<BluetoothCharacteristic[]>;
 };
 
 type BluetoothGATTServer = {
   connected: boolean;
-
   connect: () => Promise<BluetoothGATTServer>;
-
   disconnect: () => void;
-
-  getPrimaryServices: () => Promise<
-    BluetoothGATTService[]
-  >;
+  getPrimaryServices: () => Promise<BluetoothGATTService[]>;
 };
 
 type BluetoothDevice = {
   name?: string | null;
-
   gatt?: BluetoothGATTServer | null;
 };
 
@@ -96,10 +75,7 @@ type BluetoothApi = {
     acceptAllDevices: boolean;
     optionalServices?: string[];
   }) => Promise<BluetoothDevice>;
-
-  getDevices?: () => Promise<
-    BluetoothDevice[]
-  >;
+  getDevices?: () => Promise<BluetoothDevice[]>;
 };
 
 type PrinterConnection = {
@@ -107,16 +83,10 @@ type PrinterConnection = {
   characteristic: BluetoothCharacteristic;
 };
 
-let activeConnection:
-  | PrinterConnection
-  | null = null;
+let activeConnection: PrinterConnection | null = null;
 
 function bluetoothSupported() {
-  return (
-    typeof navigator !==
-      "undefined" &&
-    "bluetooth" in navigator
-  );
+  return typeof navigator !== "undefined" && "bluetooth" in navigator;
 }
 
 function getBluetooth(): BluetoothApi {
@@ -125,341 +95,117 @@ function getBluetooth(): BluetoothApi {
       "Este dispositivo o navegador no permite Bluetooth desde la aplicación. Web Bluetooth requiere Chrome/Edge y una impresora BLE/GATT compatible (no Bluetooth clásico/SPP).",
     );
   }
-
-  return (
-    navigator as Navigator & {
-      bluetooth: BluetoothApi;
-    }
-  ).bluetooth;
+  return (navigator as Navigator & { bluetooth: BluetoothApi }).bluetooth;
 }
 
 function encode(text: string) {
-  return new TextEncoder().encode(
-    text,
-  );
+  return new TextEncoder().encode(text);
 }
 
-function concatBytes(
-  ...parts: Uint8Array[]
-) {
-  const length =
-    parts.reduce(
-      (sum, part) =>
-        sum + part.length,
-      0,
-    );
-
-  const result =
-    new Uint8Array(length);
-
+function concatBytes(...parts: Uint8Array[]) {
+  const length = parts.reduce((sum, part) => sum + part.length, 0);
+  const result = new Uint8Array(length);
   let offset = 0;
-
   for (const part of parts) {
-    result.set(
-      part,
-      offset,
-    );
-
-    offset +=
-      part.length;
+    result.set(part, offset);
+    offset += part.length;
   }
-
   return result;
 }
 
-function command(
-  ...bytes: number[]
-) {
-  return new Uint8Array(
-    bytes,
-  );
+function command(...bytes: number[]) {
+  return new Uint8Array(bytes);
 }
 
 function center() {
-  return command(
-    0x1b,
-    0x61,
-    0x01,
-  );
+  return command(0x1b, 0x61, 0x01);
 }
 
 function left() {
-  return command(
-    0x1b,
-    0x61,
-    0x00,
-  );
+  return command(0x1b, 0x61, 0x00);
 }
 
-function bold(
-  enabled: boolean,
-) {
-  return command(
-    0x1b,
-    0x45,
-    enabled ? 0x01 : 0x00,
-  );
+function bold(enabled: boolean) {
+  return command(0x1b, 0x45, enabled ? 0x01 : 0x00);
 }
 
-function doubleSize(
-  enabled: boolean,
-) {
-  return command(
-    0x1d,
-    0x21,
-    enabled ? 0x11 : 0x00,
-  );
+function doubleSize(enabled: boolean) {
+  return command(0x1d, 0x21, enabled ? 0x11 : 0x00);
 }
 
 function cutPaper() {
-  return command(
-    0x1d,
-    0x56,
-    0x00,
-  );
+  return command(0x1d, 0x56, 0x00);
 }
 
-function moneyValue(
-  value: number,
-) {
-  return `$${Number(
-    value || 0,
-  ).toFixed(2)}`;
+function moneyValue(value: number) {
+  return `$${Number(value || 0).toFixed(2)}`;
 }
 
-function lineSeparator(
-  width: number,
-) {
-  return "-".repeat(
-    width,
-  );
+function lineSeparator(width: number) {
+  return "-".repeat(width);
 }
 
-function fit(
-  text: string,
-  width: number,
-) {
-  if (
-    text.length <= width
-  ) {
-    return text;
-  }
-
-  return `${text.slice(
-    0,
-    Math.max(
-      0,
-      width - 1,
-    ),
-  )}…`;
+function fit(text: string, width: number) {
+  if (text.length <= width) return text;
+  return `${text.slice(0, Math.max(0, width - 1))}…`;
 }
 
-function twoColumns(
-  leftText: string,
-  rightText: string,
-  width: number,
-) {
-  const right =
-    rightText.length;
-
-  const available =
-    Math.max(
-      1,
-      width -
-        right -
-        1,
-    );
-
+function twoColumns(leftText: string, rightText: string, width: number) {
+  const right = rightText.length;
+  const available = Math.max(1, width - right - 1);
   return (
-    fit(
-      leftText,
-      available,
-    ) +
-    " ".repeat(
-      Math.max(
-        1,
-        width -
-          Math.min(
-            leftText.length,
-            available,
-          ) -
-          right,
-      ),
-    ) +
+    fit(leftText, available) +
+    " ".repeat(Math.max(1, width - Math.min(leftText.length, available) - right)) +
     rightText
   );
 }
 
-/**
- * Caracteres por línea según
- * ancho de papel térmico.
- */
-function charsForPaper(
-  paperWidth: 58 | 80,
-): number {
-  return paperWidth === 80
-    ? 48
-    : 32;
+/** Caracteres por línea según ancho de papel térmico */
+function charsForPaper(paperWidth: 58 | 80): number {
+  return paperWidth === 80 ? 48 : 32;
 }
 
-export function normalizeTicketLayout(
-  raw: unknown,
-): TicketPrintLayout {
-  let obj: Record<
-    string,
-    unknown
-  > = {};
+export function normalizeTicketLayout(raw: unknown): TicketPrintLayout {
+  let obj: Record<string, unknown> = {};
 
-  if (raw == null) {
-    return {
-      ...DEFAULT_TICKET_LAYOUT,
-    };
-  }
+  if (raw == null) return { ...DEFAULT_TICKET_LAYOUT };
 
-  if (
-    typeof raw === "string"
-  ) {
+  if (typeof raw === "string") {
     try {
-      obj =
-        JSON.parse(
-          raw,
-        ) as Record<
-          string,
-          unknown
-        >;
+      obj = JSON.parse(raw) as Record<string, unknown>;
     } catch {
-      return {
-        ...DEFAULT_TICKET_LAYOUT,
-      };
+      return { ...DEFAULT_TICKET_LAYOUT };
     }
-  } else if (
-    typeof raw === "object"
-  ) {
-    obj =
-      raw as Record<
-        string,
-        unknown
-      >;
+  } else if (typeof raw === "object") {
+    obj = raw as Record<string, unknown>;
   }
 
-  const paper =
-    Number(
-      obj.paperWidth ??
-        obj.paper_width_mm,
-    ) === 80
-      ? 80
-      : 58;
+  const paper = Number(obj.paperWidth ?? obj.paper_width_mm) === 80 ? 80 : 58;
+  const copies = Math.max(1, Math.min(5, Number(obj.copies) || DEFAULT_TICKET_LAYOUT.copies));
 
-  const copies =
-    Math.max(
-      1,
-      Math.min(
-        5,
-        Number(
-          obj.copies,
-        ) ||
-          DEFAULT_TICKET_LAYOUT.copies,
-      ),
-    );
-
-  const bool = (
-    a: unknown,
-    b: unknown,
-    fallback: boolean,
-  ) => {
-    if (
-      typeof a ===
-      "boolean"
-    ) {
-      return a;
-    }
-
-    if (
-      typeof b ===
-      "boolean"
-    ) {
-      return b;
-    }
-
+  const bool = (a: unknown, b: unknown, fallback: boolean) => {
+    if (typeof a === "boolean") return a;
+    if (typeof b === "boolean") return b;
     return fallback;
   };
 
   return {
-    showBranch:
-      bool(
-        obj.showBranch,
-        obj.show_branch,
-        DEFAULT_TICKET_LAYOUT.showBranch,
-      ),
-
-    showCashier:
-      bool(
-        obj.showCashier,
-        obj.show_cashier,
-        DEFAULT_TICKET_LAYOUT.showCashier,
-      ),
-
-    showCustomer:
-      bool(
-        obj.showCustomer,
-        obj.show_customer,
-        DEFAULT_TICKET_LAYOUT.showCustomer,
-      ),
-
-    showSku:
-      bool(
-        obj.showSku,
-        obj.show_sku,
-        DEFAULT_TICKET_LAYOUT.showSku,
-      ),
-
-    showDiscounts:
-      bool(
-        obj.showDiscounts,
-        obj.show_discounts,
-        DEFAULT_TICKET_LAYOUT.showDiscounts,
-      ),
-
-    showTaxes:
-      bool(
-        obj.showTaxes,
-        obj.show_tax ??
-          obj.show_taxes,
-        DEFAULT_TICKET_LAYOUT.showTaxes,
-      ),
-
-    showCashReceived:
-      bool(
-        obj.showCashReceived,
-        obj.show_cash_received,
-        DEFAULT_TICKET_LAYOUT.showCashReceived,
-      ),
-
-    showChange:
-      bool(
-        obj.showChange,
-        obj.show_change,
-        DEFAULT_TICKET_LAYOUT.showChange,
-      ),
-
-    paperWidth:
-      paper,
-
-    copies:
-      copies,
+    showBranch: bool(obj.showBranch, obj.show_branch, DEFAULT_TICKET_LAYOUT.showBranch),
+    showCashier: bool(obj.showCashier, obj.show_cashier, DEFAULT_TICKET_LAYOUT.showCashier),
+    showCustomer: bool(obj.showCustomer, obj.show_customer, DEFAULT_TICKET_LAYOUT.showCustomer),
+    showSku: bool(obj.showSku, obj.show_sku, DEFAULT_TICKET_LAYOUT.showSku),
+    showDiscounts: bool(obj.showDiscounts, obj.show_discounts, DEFAULT_TICKET_LAYOUT.showDiscounts),
+    showTaxes: bool(obj.showTaxes, obj.show_tax ?? obj.show_taxes, DEFAULT_TICKET_LAYOUT.showTaxes),
+    showCashReceived: bool(obj.showCashReceived, obj.show_cash_received, DEFAULT_TICKET_LAYOUT.showCashReceived),
+    showChange: bool(obj.showChange, obj.show_change, DEFAULT_TICKET_LAYOUT.showChange),
+    paperWidth: paper,
+    copies,
   };
 }
 
-export function cacheTicketLayout(
-  layout: TicketPrintLayout,
-) {
+export function cacheTicketLayout(layout: TicketPrintLayout) {
   try {
-    localStorage.setItem(
-      LAYOUT_CACHE_KEY,
-      JSON.stringify(
-        layout,
-      ),
-    );
+    localStorage.setItem(LAYOUT_CACHE_KEY, JSON.stringify(layout));
   } catch {
     // ignore
   }
@@ -467,356 +213,92 @@ export function cacheTicketLayout(
 
 export function getCachedTicketLayout(): TicketPrintLayout {
   try {
-    const raw =
-      localStorage.getItem(
-        LAYOUT_CACHE_KEY,
-      );
-
-    if (!raw) {
-      return {
-        ...DEFAULT_TICKET_LAYOUT,
-      };
-    }
-
-    return normalizeTicketLayout(
-      JSON.parse(raw),
-    );
+    const raw = localStorage.getItem(LAYOUT_CACHE_KEY);
+    if (!raw) return { ...DEFAULT_TICKET_LAYOUT };
+    return normalizeTicketLayout(JSON.parse(raw));
   } catch {
-    return {
-      ...DEFAULT_TICKET_LAYOUT,
-    };
+    return { ...DEFAULT_TICKET_LAYOUT };
   }
 }
 
-/**
- * Obtiene el logo guardado en
- * el dispositivo.
- */
-function getCachedTicketLogo():
-  string {
+function getCachedTicketLogo(): string {
   try {
-    return (
-      localStorage.getItem(
-        TICKET_LOGO_CACHE_KEY,
-      ) ?? ""
-    );
+    return localStorage.getItem(TICKET_LOGO_CACHE_KEY) ?? "";
   } catch {
     return "";
   }
 }
 
-/**
- * Carga una imagen desde data URL
- * y la convierte en bitmap monocromo
- * compatible con ESC/POS.
- *
- * Esto permite imprimir el logo
- * en impresoras térmicas.
- */
 async function imageToEscPos(
   dataUrl: string,
   paperWidth: 58 | 80,
 ): Promise<Uint8Array | null> {
-  if (!dataUrl) {
-    return null;
-  }
-
-  if (
-    typeof document ===
-    "undefined"
-  ) {
-    return null;
-  }
+  if (!dataUrl || typeof document === "undefined") return null;
 
   try {
-    const image =
-      new Image();
-
-    const loaded =
-      new Promise<void>(
-        (
-          resolve,
-          reject,
-        ) => {
-          image.onload =
-            () => resolve();
-
-          image.onerror =
-            () =>
-              reject(
-                new Error(
-                  "No se pudo cargar el logo para impresión.",
-                ),
-              );
-        },
-      );
-
-    image.src =
-      dataUrl;
-
+    const image = new Image();
+    const loaded = new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("No se pudo cargar el logo para impresión."));
+    });
+    image.src = dataUrl;
     await loaded;
 
-    /**
-     * Anchura máxima aproximada:
-     *
-     * 58 mm -> 384 dots
-     * 80 mm -> 576 dots
-     *
-     * Se deja margen para evitar
-     * que la imagen salga cortada.
-     */
-    const maxWidth =
-      paperWidth === 80
-        ? 560
-        : 384;
+    const maxWidth = paperWidth === 80 ? 560 : 384;
+    const scale = Math.min(1, maxWidth / Math.max(1, image.naturalWidth));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
 
-    const scale =
-      Math.min(
-        1,
-        maxWidth /
-          Math.max(
-            1,
-            image.naturalWidth,
-          ),
-      );
+    const maxHeight = paperWidth === 80 ? 180 : 140;
+    const finalScale = Math.min(1, maxHeight / Math.max(1, height));
+    const finalWidth = Math.max(1, Math.round(width * finalScale));
+    const finalHeight = Math.max(1, Math.round(height * finalScale));
 
-    const width =
-      Math.max(
-        1,
-        Math.round(
-          image.naturalWidth *
-            scale,
-        ),
-      );
+    const canvas = document.createElement("canvas");
+    canvas.width = finalWidth;
+    canvas.height = finalHeight;
 
-    const height =
-      Math.max(
-        1,
-        Math.round(
-          image.naturalHeight *
-            scale,
-        ),
-      );
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context) return null;
 
-    /**
-     * Limitar también la altura
-     * para evitar tickets enormes.
-     */
-    const maxHeight =
-      paperWidth === 80
-        ? 220
-        : 180;
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, finalWidth, finalHeight);
+    context.drawImage(image, 0, 0, finalWidth, finalHeight);
 
-    const finalScale =
-      Math.min(
-        1,
-        maxHeight /
-          Math.max(
-            1,
-            height,
-          ),
-      );
+    const pixels = context.getImageData(0, 0, finalWidth, finalHeight).data;
+    const widthBytes = Math.ceil(finalWidth / 8);
+    const raster = new Uint8Array(widthBytes * finalHeight);
 
-    const finalWidth =
-      Math.max(
-        1,
-        Math.round(
-          width *
-            finalScale,
-        ),
-      );
+    for (let y = 0; y < finalHeight; y += 1) {
+      for (let x = 0; x < finalWidth; x += 1) {
+        const pixelIndex = (y * finalWidth + x) * 4;
+        const red = pixels[pixelIndex];
+        const green = pixels[pixelIndex + 1];
+        const blue = pixels[pixelIndex + 2];
+        const alpha = pixels[pixelIndex + 3];
 
-    const finalHeight =
-      Math.max(
-        1,
-        Math.round(
-          height *
-            finalScale,
-        ),
-      );
+        if (alpha < 40) continue;
 
-    const canvas =
-      document.createElement(
-        "canvas",
-      );
-
-    canvas.width =
-      finalWidth;
-
-    canvas.height =
-      finalHeight;
-
-    const context =
-      canvas.getContext(
-        "2d",
-        {
-          willReadFrequently:
-            true,
-        },
-      );
-
-    if (!context) {
-      return null;
-    }
-
-    context.fillStyle =
-      "#ffffff";
-
-    context.fillRect(
-      0,
-      0,
-      finalWidth,
-      finalHeight,
-    );
-
-    context.drawImage(
-      image,
-      0,
-      0,
-      finalWidth,
-      finalHeight,
-    );
-
-    const pixels =
-      context.getImageData(
-        0,
-        0,
-        finalWidth,
-        finalHeight,
-      ).data;
-
-    /**
-     * ESC/POS GS v 0
-     *
-     * 1 = bit de pixel negro
-     * 0 = blanco
-     */
-    const widthBytes =
-      Math.ceil(
-        finalWidth / 8,
-      );
-
-    const raster =
-      new Uint8Array(
-        widthBytes *
-          finalHeight,
-      );
-
-    for (
-      let y = 0;
-      y < finalHeight;
-      y += 1
-    ) {
-      for (
-        let x = 0;
-        x < finalWidth;
-        x += 1
-      ) {
-        const pixelIndex =
-          (y *
-            finalWidth +
-            x) *
-          4;
-
-        const red =
-          pixels[
-            pixelIndex
-          ];
-
-        const green =
-          pixels[
-            pixelIndex + 1
-          ];
-
-        const blue =
-          pixels[
-            pixelIndex + 2
-          ];
-
-        const alpha =
-          pixels[
-            pixelIndex + 3
-          ];
-
-        /**
-         * Fondo transparente =
-         * blanco.
-         */
-        if (
-          alpha < 40
-        ) {
-          continue;
-        }
-
-        const gray =
-          0.299 * red +
-          0.587 * green +
-          0.114 * blue;
-
-        /**
-         * Umbral para impresión
-         * térmica.
-         *
-         * 185 produce un logo
-         * suficientemente limpio
-         * sin llenar demasiado
-         * de negro el papel.
-         */
-        if (
-          gray <
-          185
-        ) {
-          const byteIndex =
-            y *
-              widthBytes +
-            Math.floor(
-              x / 8,
-            );
-
-          const bit =
-            7 -
-            (x % 8);
-
-          raster[
-            byteIndex
-          ] |=
-            1 << bit;
+        const gray = 0.299 * red + 0.587 * green + 0.114 * blue;
+        if (gray < 185) {
+          const byteIndex = y * widthBytes + Math.floor(x / 8);
+          const bit = 7 - (x % 8);
+          raster[byteIndex] |= 1 << bit;
         }
       }
     }
 
-    const header =
-      command(
-        0x1d,
-        0x76,
-        0x30,
-        0x00,
-        widthBytes & 0xff,
-        (widthBytes >>
-          8) &
-          0xff,
-        finalHeight &
-          0xff,
-        (finalHeight >>
-          8) &
-          0xff,
-      );
-
-    return concatBytes(
-      center(),
-      header,
-      raster,
-      encode("\n"),
-      left(),
-    );
-  } catch (
-    error
-  ) {
-    console.error(
-      "No se pudo convertir el logo para ESC/POS:",
-      error,
+    const header = command(
+      0x1d, 0x76, 0x30, 0x00,
+      widthBytes & 0xff,
+      (widthBytes >> 8) & 0xff,
+      finalHeight & 0xff,
+      (finalHeight >> 8) & 0xff,
     );
 
+    return concatBytes(center(), header, raster, encode("\n"), left());
+  } catch (error) {
+    console.error("No se pudo convertir el logo para ESC/POS:", error);
     return null;
   }
 }
@@ -825,388 +307,143 @@ async function buildTicketText(
   ticket: TicketData,
   layout: TicketPrintLayout,
 ): Promise<Uint8Array> {
-  const width =
-    charsForPaper(
-      layout.paperWidth,
-    );
+  const width = charsForPaper(layout.paperWidth);
+  const chunks: Uint8Array[] = [];
 
-  const chunks: Uint8Array[] =
-    [];
+  // Reset
+  chunks.push(command(0x1b, 0x40));
 
-  chunks.push(
-    command(
-      0x1b,
-      0x40,
-    ),
-  );
-
-  /**
-   * Logo:
-   *
-   * Primero intenta usar el
-   * logo que venga en TicketData.
-   *
-   * Si no viene, utiliza el logo
-   * guardado localmente.
-   */
-  const logo =
-    ticket.logoDataUrl ||
-    getCachedTicketLogo();
-
+  // Logo
+  const logo = ticket.logoDataUrl || getCachedTicketLogo();
   if (logo) {
-    const logoBytes =
-      await imageToEscPos(
-        logo,
-        layout.paperWidth,
-      );
-
+    const logoBytes = await imageToEscPos(logo, layout.paperWidth);
     if (logoBytes) {
-      chunks.push(
-        logoBytes,
-      );
-
-      chunks.push(
-        encode("\n"),
-      );
+      chunks.push(logoBytes);
     }
   }
 
-  chunks.push(
-    center(),
-  );
+  // Nombre de la tienda (centrado + negrita)
+  chunks.push(center());
+  chunks.push(bold(true));
+  chunks.push(encode(`${ticket.companyName ?? "Lula Shop"}\n`));
+  chunks.push(bold(false));
 
-  chunks.push(
-    bold(true),
-  );
-
-  chunks.push(
-    doubleSize(true),
-  );
-
-  chunks.push(
-    encode(
-      `${ticket.companyName ?? "Lula Shop"}\n`,
-    ),
-  );
-
-  chunks.push(
-    doubleSize(false),
-  );
-
-  chunks.push(
-    bold(false),
-  );
-
-  if (
-    ticket.companyAddress
-  ) {
-    chunks.push(
-      encode(
-        `${ticket.companyAddress}\n`,
-      ),
-    );
+  // Dirección y teléfono (centrado, compacto)
+  if (ticket.companyAddress) {
+    // Dividir dirección larga en líneas de máximo width caracteres
+    const address = ticket.companyAddress.trim();
+    const words = address.split(/\s+/);
+    let currentLine = "";
+    for (const word of words) {
+      if ((currentLine + " " + word).trim().length <= width) {
+        currentLine = (currentLine + " " + word).trim();
+      } else {
+        if (currentLine) chunks.push(encode(`${currentLine}\n`));
+        currentLine = word;
+      }
+    }
+    if (currentLine) chunks.push(encode(`${currentLine}\n`));
   }
 
-  if (
-    ticket.companyPhone
-  ) {
-    chunks.push(
-      encode(
-        `Tel: ${ticket.companyPhone}\n`,
-      ),
-    );
+  if (ticket.companyPhone) {
+    chunks.push(encode(`Tel: ${ticket.companyPhone}\n`));
   }
 
-  if (
-    layout.showBranch &&
-    ticket.branchName
-  ) {
-    chunks.push(
-      encode(
-        `${ticket.branchName}\n`,
-      ),
-    );
+  // Sucursal (si aplica)
+  if (layout.showBranch && ticket.branchName) {
+    chunks.push(encode(`${ticket.branchName}\n`));
   }
 
-  chunks.push(
-    encode(
-      `${ticket.date}\n`,
-    ),
-  );
+  chunks.push(encode("\n"));
 
-  chunks.push(
-    encode(
-      `Folio: ${ticket.folio}\n`,
-    ),
-  );
+  // Fecha y folio
+  chunks.push(left());
+  chunks.push(encode(`${ticket.date}\n`));
+  chunks.push(encode(`Folio: ${ticket.folio}\n`));
 
-  chunks.push(
-    encode("\n"),
-  );
-
-  chunks.push(
-    left(),
-  );
-
-  if (
-    layout.showCashier &&
-    ticket.cashierName
-  ) {
-    chunks.push(
-      encode(
-        `Cajero: ${ticket.cashierName}\n`,
-      ),
-    );
+  // Cajero / Cliente / Pago (compacto)
+  if (layout.showCashier && ticket.cashierName) {
+    chunks.push(encode(`Cajero: ${ticket.cashierName}\n`));
   }
-
-  if (
-    layout.showCustomer &&
-    ticket.customerName
-  ) {
-    chunks.push(
-      encode(
-        `Cliente: ${ticket.customerName}\n`,
-      ),
-    );
+  if (layout.showCustomer && ticket.customerName) {
+    chunks.push(encode(`Cliente: ${ticket.customerName}\n`));
   }
+  chunks.push(encode(`Pago: ${ticket.paymentMethod}\n`));
 
-  chunks.push(
-    encode(
-      `Pago: ${ticket.paymentMethod}\n`,
-    ),
-  );
+  // Separador
+  chunks.push(encode(`${lineSeparator(width)}\n`));
 
-  chunks.push(
-    encode(
-      `${lineSeparator(
-        width,
-      )}\n`,
-    ),
-  );
+  // ===== PRODUCTOS (estilo compacto como Zobaze) =====
+  for (const line of ticket.lines) {
+    const name = layout.showSku && line.sku
+      ? `\( {line.name} ( \){line.sku})`
+      : line.name;
 
-  for (
-    const line of ticket.lines
-  ) {
-    const name =
-      layout.showSku &&
-      line.sku
-        ? `\( {line.name} ( \){line.sku})`
-        : line.name;
+    // Línea principal: "1 x Nombre del producto     $150.00"
+    const leftPart = `${line.quantity} x ${name}`;
+    chunks.push(encode(twoColumns(leftPart, moneyValue(line.total), width) + "\n"));
 
-    chunks.push(
-      encode(
-        `${line.quantity} x ${fit(
-          name,
-          width,
-        )}\n`,
-      ),
-    );
-
-    chunks.push(
-      encode(
-        twoColumns(
-          "Precio",
-          moneyValue(
-            line.total,
-          ),
-          width,
-        ) + "\n",
-      ),
-    );
-
-    if (
-      layout.showDiscounts &&
-      line.discount != null &&
-      line.discount > 0
-    ) {
-      chunks.push(
-        encode(
-          `Descuento: -${moneyValue(
-            line.discount,
-          )}\n`,
-        ),
-      );
+    // Descuento del producto (si existe y está activado)
+    if (layout.showDiscounts && line.discount != null && line.discount > 0) {
+      chunks.push(encode(twoColumns("  Descuento", `-${moneyValue(line.discount)}`, width) + "\n"));
     }
   }
 
-  chunks.push(
-    encode(
-      `${lineSeparator(
-        width,
-      )}\n`,
-    ),
-  );
+  // Separador
+  chunks.push(encode(`${lineSeparator(width)}\n`));
 
-  chunks.push(
-    encode(
-      twoColumns(
-        "Subtotal",
-        moneyValue(
-          ticket.subtotal,
-        ),
-        width,
-      ) + "\n",
-    ),
-  );
+  // Totales
+  chunks.push(encode(twoColumns("Subtotal", moneyValue(ticket.subtotal), width) + "\n"));
 
-  if (
-    layout.showTaxes
-  ) {
-    chunks.push(
-      encode(
-        twoColumns(
-          "Impuestos",
-          moneyValue(
-            ticket.tax,
-          ),
-          width,
-        ) + "\n",
-      ),
-    );
+  if (layout.showTaxes && ticket.tax > 0) {
+    chunks.push(encode(twoColumns("Impuestos", moneyValue(ticket.tax), width) + "\n"));
   }
 
-  if (
-    layout.showDiscounts &&
-    ticket.discount > 0
-  ) {
-    chunks.push(
-      encode(
-        twoColumns(
-          "Descuento",
-          `-${moneyValue(
-            ticket.discount,
-          )}`,
-          width,
-        ) + "\n",
-      ),
-    );
+  if (layout.showDiscounts && ticket.discount > 0) {
+    chunks.push(encode(twoColumns("Descuento", `-${moneyValue(ticket.discount)}`, width) + "\n"));
   }
 
-  chunks.push(
-    bold(true),
-  );
+  // TOTAL en negrita
+  chunks.push(bold(true));
+  chunks.push(encode(twoColumns("TOTAL", moneyValue(ticket.total), width) + "\n"));
+  chunks.push(bold(false));
 
-  chunks.push(
-    encode(
-      twoColumns(
-        "TOTAL",
-        moneyValue(
-          ticket.total,
-        ),
-        width,
-      ) + "\n",
-    ),
-  );
-
-  chunks.push(
-    bold(false),
-  );
-
-  if (
-    layout.showCashReceived &&
-    ticket.cashReceived != null
-  ) {
-    chunks.push(
-      encode(
-        twoColumns(
-          "Recibido",
-          moneyValue(
-            ticket.cashReceived,
-          ),
-          width,
-        ) + "\n",
-      ),
-    );
+  // Recibido y Cambio
+  if (layout.showCashReceived && ticket.cashReceived != null) {
+    chunks.push(encode(twoColumns("Recibido", moneyValue(ticket.cashReceived), width) + "\n"));
+  }
+  if (layout.showChange && ticket.cashReceived != null) {
+    chunks.push(encode(twoColumns("Cambio", moneyValue(ticket.changeGiven ?? 0), width) + "\n"));
   }
 
-  if (
-    layout.showChange &&
-    ticket.cashReceived != null
-  ) {
-    chunks.push(
-      encode(
-        twoColumns(
-          "Cambio",
-          moneyValue(
-            ticket.changeGiven ??
-              0,
-          ),
-          width,
-        ) + "\n",
-      ),
-    );
-  }
+  // Footer
+  chunks.push(encode("\n"));
+  chunks.push(center());
+  chunks.push(encode(`${ticket.footer ?? "¡Gracias por su compra!"}\n`));
+  chunks.push(left());
 
-  chunks.push(
-    encode("\n"),
-  );
+  // Espacio + corte
+  chunks.push(encode("\n\n"));
+  chunks.push(cutPaper());
 
-  if (
-    ticket.footer
-  ) {
-    chunks.push(
-      center(),
-    );
-
-    chunks.push(
-      encode(
-        `${ticket.footer}\n`,
-      ),
-    );
-
-    chunks.push(
-      left(),
-    );
-  }
-
-  chunks.push(
-    encode(
-      "\n\n\n",
-    ),
-  );
-
-  chunks.push(
-    cutPaper(),
-  );
-
-  return concatBytes(
-    ...chunks,
-  );
+  return concatBytes(...chunks);
 }
 
-async function findWritableCharacteristic(
-  device: BluetoothDevice,
-) {
+async function findWritableCharacteristic(device: BluetoothDevice) {
   if (!device.gatt) {
     throw new Error(
       "La impresora no expone una conexión GATT. Es posible que use Bluetooth clásico (SPP), incompatible con Web Bluetooth.",
     );
   }
 
-  const server =
-    device.gatt.connected
-      ? device.gatt
-      : await device.gatt.connect();
+  const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  const services = await server.getPrimaryServices();
 
-  const services =
-    await server.getPrimaryServices();
-
-  for (
-    const service of services
-  ) {
-    const characteristics =
-      await service.getCharacteristics();
-
-    for (
-      const characteristic of characteristics
-    ) {
-      const properties =
-        characteristic.properties;
-
-      if (
-        properties.writeWithoutResponse ||
-        properties.write
-      ) {
+  for (const service of services) {
+    const characteristics = await service.getCharacteristics();
+    for (const characteristic of characteristics) {
+      const properties = characteristic.properties;
+      if (properties.writeWithoutResponse || properties.write) {
         return characteristic;
       }
     }
@@ -1236,69 +473,32 @@ export async function connectBluetoothPrinter() {
 
   const characteristic = await findWritableCharacteristic(device);
 
-  activeConnection = {
-    device,
-    characteristic,
-  };
+  activeConnection = { device, characteristic };
 
-  localStorage.setItem(
-    DEVICE_NAME_KEY,
-    device.name ?? "Impresora Bluetooth",
-  );
+  localStorage.setItem(DEVICE_NAME_KEY, device.name ?? "Impresora Bluetooth");
 
-  return {
-    name: device.name ?? "Impresora Bluetooth",
-  };
+  return { name: device.name ?? "Impresora Bluetooth" };
 }
 
 export async function reconnectBluetoothPrinter() {
-  const bluetooth =
-    getBluetooth();
+  const bluetooth = getBluetooth();
 
-  if (
-    !bluetooth.getDevices
-  ) {
-    throw new Error(
-      "Este navegador no permite recuperar automáticamente impresoras Bluetooth.",
-    );
+  if (!bluetooth.getDevices) {
+    throw new Error("Este navegador no permite recuperar automáticamente impresoras Bluetooth.");
   }
 
-  const devices =
-    await bluetooth.getDevices();
-
-  const savedName =
-    localStorage.getItem(
-      DEVICE_NAME_KEY,
-    );
+  const devices = await bluetooth.getDevices();
+  const savedName = localStorage.getItem(DEVICE_NAME_KEY);
 
   const device =
-    devices.find(
-      (item) =>
-        savedName &&
-        item.name ===
-          savedName,
-    ) ??
-    devices[0];
+    devices.find((item) => savedName && item.name === savedName) ?? devices[0];
 
-  if (!device) {
-    return null;
-  }
+  if (!device) return null;
 
-  const characteristic =
-    await findWritableCharacteristic(
-      device,
-    );
+  const characteristic = await findWritableCharacteristic(device);
+  activeConnection = { device, characteristic };
 
-  activeConnection = {
-    device,
-    characteristic,
-  };
-
-  return {
-    name:
-      device.name ??
-      "Impresora Bluetooth",
-  };
+  return { name: device.name ?? "Impresora Bluetooth" };
 }
 
 export function disconnectBluetoothPrinter() {
@@ -1307,78 +507,33 @@ export function disconnectBluetoothPrinter() {
   } catch {
     // No bloquear la aplicación.
   }
-
-  activeConnection =
-    null;
+  activeConnection = null;
 }
 
 export function getBluetoothPrinterName() {
-  if (
-    activeConnection?.device
-  ) {
-    return (
-      activeConnection.device
-        .name ??
-      "Impresora Bluetooth"
-    );
+  if (activeConnection?.device) {
+    return activeConnection.device.name ?? "Impresora Bluetooth";
   }
-
-  return localStorage.getItem(
-    DEVICE_NAME_KEY,
-  );
+  return localStorage.getItem(DEVICE_NAME_KEY);
 }
 
 export function isBluetoothPrinterConnected() {
-  return Boolean(
-    activeConnection?.device
-      .gatt?.connected,
-  );
+  return Boolean(activeConnection?.device.gatt?.connected);
 }
 
-async function writeInChunks(
-  characteristic: BluetoothCharacteristic,
-  data: Uint8Array,
-) {
-  const chunkSize =
-    180;
+async function writeInChunks(characteristic: BluetoothCharacteristic, data: Uint8Array) {
+  const chunkSize = 180;
 
-  for (
-    let offset = 0;
-    offset < data.length;
-    offset +=
-      chunkSize
-  ) {
-    const chunk =
-      data.slice(
-        offset,
-        Math.min(
-          offset +
-            chunkSize,
-          data.length,
-        ),
-      );
+  for (let offset = 0; offset < data.length; offset += chunkSize) {
+    const chunk = data.slice(offset, Math.min(offset + chunkSize, data.length));
 
-    if (
-      characteristic
-        .properties
-        .writeWithoutResponse
-    ) {
-      await characteristic.writeValueWithoutResponse(
-        chunk,
-      );
+    if (characteristic.properties.writeWithoutResponse) {
+      await characteristic.writeValueWithoutResponse(chunk);
     } else {
-      await characteristic.writeValue(
-        chunk,
-      );
+      await characteristic.writeValue(chunk);
     }
 
-    await new Promise(
-      (resolve) =>
-        setTimeout(
-          resolve,
-          8,
-        ),
-    );
+    await new Promise((resolve) => setTimeout(resolve, 8));
   }
 }
 
@@ -1386,178 +541,70 @@ export async function printTicketBluetooth(
   ticket: TicketData,
   layoutOverride?: Partial<TicketPrintLayout>,
 ) {
-  if (
-    !activeConnection ||
-    !activeConnection.device.gatt
-      ?.connected
-  ) {
+  if (!activeConnection || !activeConnection.device.gatt?.connected) {
     await reconnectBluetoothPrinter();
   }
 
   if (!activeConnection) {
-    throw new Error(
-      "No hay una impresora Bluetooth configurada.",
-    );
+    throw new Error("No hay una impresora Bluetooth configurada.");
   }
 
-  const layout: TicketPrintLayout =
-    {
-      ...getCachedTicketLayout(),
-      ...layoutOverride,
-    };
+  const layout: TicketPrintLayout = {
+    ...getCachedTicketLayout(),
+    ...layoutOverride,
+  };
 
-  const data =
-    await buildTicketText(
-      ticket,
-      layout,
-    );
+  const data = await buildTicketText(ticket, layout);
+  const copies = Math.max(1, Math.min(5, layout.copies || 1));
 
-  const copies =
-    Math.max(
-      1,
-      Math.min(
-        5,
-        layout.copies ||
-          1,
-      ),
-    );
-
-  for (
-    let i = 0;
-    i < copies;
-    i += 1
-  ) {
-    await writeInChunks(
-      activeConnection.characteristic,
-      data,
-    );
-
-    if (
-      i <
-      copies - 1
-    ) {
-      await new Promise(
-        (resolve) =>
-          setTimeout(
-            resolve,
-            120,
-          ),
-      );
+  for (let i = 0; i < copies; i += 1) {
+    await writeInChunks(activeConnection.characteristic, data);
+    if (i < copies - 1) {
+      await new Promise((resolve) => setTimeout(resolve, 120));
     }
   }
 }
 
-export function setBluetoothAutoPrint(
-  enabled: boolean,
-) {
-  localStorage.setItem(
-    AUTO_PRINT_KEY,
-    enabled
-      ? "true"
-      : "false",
-  );
+export function setBluetoothAutoPrint(enabled: boolean) {
+  localStorage.setItem(AUTO_PRINT_KEY, enabled ? "true" : "false");
 }
 
 export function getBluetoothAutoPrint() {
-  return (
-    localStorage.getItem(
-      AUTO_PRINT_KEY,
-    ) === "true"
-  );
+  return localStorage.getItem(AUTO_PRINT_KEY) === "true";
 }
 
-export async function printTestTicket(
-  layoutOverride?: Partial<TicketPrintLayout>,
-) {
-  const layout: TicketPrintLayout =
-    {
-      ...getCachedTicketLayout(),
-      ...layoutOverride,
-    };
-
-  const ticket: TicketData = {
-    companyName:
-      "Lula Shop",
-
-    logoDataUrl:
-      getCachedTicketLogo() ||
-      undefined,
-
-    branchName:
-      layout.showBranch
-        ? "Prueba de impresión"
-        : undefined,
-
-    folio:
-      "TEST",
-
-    date:
-      new Date().toLocaleString(
-        "es-MX",
-      ),
-
-    cashierName:
-      layout.showCashier
-        ? "Sistema"
-        : undefined,
-
-    customerName:
-      layout.showCustomer
-        ? "Cliente de prueba"
-        : undefined,
-
-    paymentMethod:
-      "Efectivo",
-
-    lines: [
-      {
-        name:
-          "Ticket de prueba",
-
-        quantity:
-          1,
-
-        unit_price:
-          10,
-
-        discount:
-          layout.showDiscounts
-            ? 0
-            : 0,
-
-        total:
-          10,
-      },
-    ],
-
-    subtotal:
-      10,
-
-    tax:
-      0,
-
-    discount:
-      0,
-
-    total:
-      10,
-
-    cashReceived:
-      layout.showCashReceived
-        ? 20
-        : null,
-
-    changeGiven:
-      layout.showChange
-        ? 10
-        : null,
-
-    footer:
-      "Impresora configurada correctamente.",
+export async function printTestTicket(layoutOverride?: Partial<TicketPrintLayout>) {
+  const layout: TicketPrintLayout = {
+    ...getCachedTicketLayout(),
+    ...layoutOverride,
   };
 
-  await printTicketBluetooth(
-    ticket,
-    layout,
-  );
+  const ticket: TicketData = {
+    companyName: "Lula Shop",
+    logoDataUrl: getCachedTicketLogo() || undefined,
+    branchName: layout.showBranch ? "Prueba de impresión" : undefined,
+    folio: "TEST",
+    date: new Date().toLocaleString("es-MX"),
+    cashierName: layout.showCashier ? "Sistema" : undefined,
+    customerName: layout.showCustomer ? "Cliente de prueba" : undefined,
+    paymentMethod: "Efectivo",
+    lines: [
+      {
+        name: "Ticket de prueba",
+        quantity: 1,
+        unit_price: 10,
+        discount: 0,
+        total: 10,
+      },
+    ],
+    subtotal: 10,
+    tax: 0,
+    discount: 0,
+    total: 10,
+    cashReceived: layout.showCashReceived ? 20 : null,
+    changeGiven: layout.showChange ? 10 : null,
+    footer: "Impresora configurada correctamente.",
+  };
+
+  await printTicketBluetooth(ticket, layout);
 }
