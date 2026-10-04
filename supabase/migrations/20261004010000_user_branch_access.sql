@@ -105,16 +105,16 @@ ON public.user_branch_access;
 -- ============================================================
 -- 6. FUNCIÓN: COMPROBAR ACCESO A SUCURSAL
 --
--- Mantiene toda la lógica existente:
+-- Mantiene la lógica existente:
 --
 -- owner/admin:
 --   acceso global
 --
--- manager:
---   su branch_id + asignaciones adicionales
+-- cualquier usuario activo:
+--   su branch_id principal
 --
--- usuario normal:
---   su branch_id + asignaciones adicionales
+-- usuario con asignación adicional:
+--   acceso a la sucursal adicional
 --
 -- Esto permite que Ana tenga:
 --   profiles.branch_id = Sucursal 1
@@ -189,6 +189,9 @@ TO authenticated;
 -- IMPORTANTE:
 -- No modifica profiles.branch_id.
 -- Solo agrega una autorización adicional.
+--
+-- PERMISO REAL DEL SISTEMA:
+-- usuarios.manage
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.admin_add_user_branch_access(
@@ -208,8 +211,8 @@ BEGIN
     RAISE EXCEPTION 'not authenticated';
   END IF;
 
-  IF NOT public.has_permission('usuarios.edit') THEN
-    RAISE EXCEPTION 'not authorized: usuarios.edit';
+  IF NOT public.has_permission('usuarios.manage') THEN
+    RAISE EXCEPTION 'not authorized: usuarios.manage';
   END IF;
 
   IF _user_id IS NULL THEN
@@ -293,8 +296,8 @@ BEGIN
     RAISE EXCEPTION 'not authenticated';
   END IF;
 
-  IF NOT public.has_permission('usuarios.edit') THEN
-    RAISE EXCEPTION 'not authorized: usuarios.edit';
+  IF NOT public.has_permission('usuarios.manage') THEN
+    RAISE EXCEPTION 'not authorized: usuarios.manage';
   END IF;
 
   IF _user_id IS NULL THEN
@@ -345,6 +348,12 @@ TO authenticated;
 --     DE UN USUARIO
 --
 -- Sirve para la administración de colaboradores.
+--
+-- Devuelve:
+-- - sucursal principal
+-- - sucursales adicionales
+-- - nombre de sucursal
+-- - indicador de sucursal principal
 -- ============================================================
 
 CREATE OR REPLACE FUNCTION public.admin_get_user_branch_access(
@@ -369,7 +378,6 @@ AS $$
   FROM public.profiles p
   JOIN public.branches b
     ON b.id = p.branch_id
-
   WHERE p.id = _user_id
     AND public.has_permission('usuarios.view')
 
@@ -398,5 +406,9 @@ GRANT EXECUTE
 ON FUNCTION public.admin_get_user_branch_access(uuid)
 TO authenticated;
 
+
+-- ============================================================
+-- FIN
+-- ============================================================
 
 COMMIT;
