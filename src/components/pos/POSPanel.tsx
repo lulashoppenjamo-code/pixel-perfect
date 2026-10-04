@@ -2763,9 +2763,17 @@ export function POSPanel({
 
       <div
         className={cn(
-          "flex w-full min-w-0 flex-col border-t border-[#e0e0e0] bg-white md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
+          "flex min-w-0 flex-col border-t border-[#e0e0e0] bg-white",
+          // Escritorio: columna fija a la derecha
+          !sequential &&
+            "w-full md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
+          // Móvil/tablet sequential: ancho completo
+          sequential && "w-full",
           sequential && mobileStep === "shop" && "hidden",
-          sequential && mobileStep === "cart" && "fixed inset-0 z-50",
+          // Pantalla completa del carrito sin quedar a 300px en tablet
+          sequential &&
+            mobileStep === "cart" &&
+            "fixed inset-0 z-50 w-full max-w-none",
           sequential &&
             (mobileStep === "pay" ||
               mobileStep === "cash" ||
