@@ -110,6 +110,13 @@ const ROLES: AppRole[] = [
   "staff",
 ];
 
+const COLLABORATOR_ROLES: AppRole[] = [
+  "admin",
+  "manager",
+  "cashier",
+  "staff",
+];
+
 const ROLE_LABELS: Record<AppRole, string> = {
   owner: "Propietario",
   admin: "Administrador",
@@ -150,8 +157,7 @@ function AjustesPage() {
   const [inviteForm, setInviteForm] =
     useState({
       full_name: "",
-      email: "",
-      password: "",
+      pin: "",
       role: "staff" as AppRole,
       branch_id: "",
     });
@@ -382,74 +388,122 @@ function AjustesPage() {
             raw: string,
           ) => {
             const msg = raw.toLowerCase();
+
             if (
               msg.includes("not authorized") ||
               msg.includes("permission")
             ) {
               return "No tienes permiso de administrador para eliminar sucursales.";
             }
+
             if (
               msg.includes("last active") ||
               msg.includes("última")
             ) {
               return "No puedes eliminar la última sucursal activa.";
             }
+
             if (msg.includes("not found")) {
               return "La sucursal no existe o ya fue eliminada.";
             }
+
             if (msg.includes("not authenticated")) {
               return "Sesión expirada. Vuelve a iniciar sesión.";
             }
-            return raw || "No se pudo eliminar la sucursal.";
+
+            return (
+              raw ||
+              "No se pudo eliminar la sucursal."
+            );
           };
 
-          // 1) RPC oficial (desactiva + limpia profiles.branch_id)
-          const { error: rpcError } = await (
-            supabase as unknown as {
-              rpc: (
-                fn: string,
-                args: Record<string, unknown>,
-              ) => Promise<{ error: { message?: string; code?: string } | null }>;
-            }
-          ).rpc("admin_delete_branch", {
-            _branch_id: branchIdToDelete,
-          });
+          // 1) RPC oficial
+          const { error: rpcError } =
+            await (
+              supabase as unknown as {
+                rpc: (
+                  fn: string,
+                  args: Record<
+                    string,
+                    unknown
+                  >,
+                ) => Promise<{
+                  error: {
+                    message?: string;
+                    code?: string;
+                  } | null;
+                }>;
+              }
+            ).rpc(
+              "admin_delete_branch",
+              {
+                _branch_id:
+                  branchIdToDelete,
+              },
+            );
 
           if (!rpcError) {
             return;
           }
 
-          const rpcMsg = rpcError.message ?? "";
-          const rpcCode = rpcError.code ?? "";
+          const rpcMsg =
+            rpcError.message ?? "";
+
+          const rpcCode =
+            rpcError.code ?? "";
+
           const rpcMissing =
             rpcCode === "PGRST202" ||
-            rpcMsg.toLowerCase().includes("could not find the function") ||
-            rpcMsg.toLowerCase().includes("admin_delete_branch");
+            rpcMsg
+              .toLowerCase()
+              .includes(
+                "could not find the function",
+              ) ||
+            rpcMsg
+              .toLowerCase()
+              .includes(
+                "admin_delete_branch",
+              );
 
-          // 2) Fallback: soft-delete directo si el RPC no está desplegado
+          // 2) Fallback
           if (rpcMissing) {
-            const { error: updateError } = await supabase
+            const {
+              error: updateError,
+            } = await supabase
               .from("branches")
-              .update({ is_active: false })
-              .eq("id", branchIdToDelete);
+              .update({
+                is_active: false,
+              })
+              .eq(
+                "id",
+                branchIdToDelete,
+              );
 
             if (updateError) {
               throw new Error(
-                mapRpcError(updateError.message) ||
+                mapRpcError(
+                  updateError.message,
+                ) ||
                   "No se pudo desactivar la sucursal (permisos RLS).",
               );
             }
 
-            // Quitar la sucursal de perfiles (best-effort)
             await supabase
               .from("profiles")
-              .update({ branch_id: null })
-              .eq("branch_id", branchIdToDelete);
+              .update({
+                branch_id: null,
+              })
+              .eq(
+                "branch_id",
+                branchIdToDelete,
+              );
 
             return;
           }
 
-          throw new Error(mapRpcError(rpcMsg));
+          throw new Error(
+            mapRpcError(rpcMsg),
+          );
         },
 
       onSuccess: () => {
@@ -480,30 +534,28 @@ function AjustesPage() {
         const message =
           error instanceof Error
             ? error.message
-            : typeof error === "object" &&
+            : typeof error ===
+                  "object" &&
                 error !== null &&
                 "message" in error
               ? String(
-                  (error as { message?: unknown }).message ??
-                    "",
+                  (
+                    error as {
+                      message?: unknown;
+                    }
+                  ).message ?? "",
                 )
               : "";
 
         toast.error(
-          message || "No se pudo eliminar la sucursal.",
+          message ||
+            "No se pudo eliminar la sucursal.",
         );
       },
     });
 
   /*
    * Guarda los datos básicos de la sesión actual.
-   *
-   * El usuario puede modificar su propio nombre
-   * y sucursal mediante la política u_own_profile.
-   *
-   * El rol no se modifica aquí cuando la cuenta
-   * actual es owner, porque el propietario principal
-   * debe permanecer protegido.
    */
   const saveMyProfile =
     useMutation({
@@ -578,12 +630,6 @@ function AjustesPage() {
 
   /*
    * Administración segura de usuarios.
-   *
-   * IMPORTANTE:
-   * No hacemos UPDATE directo sobre profiles
-   * ni DELETE/INSERT directo sobre user_roles.
-   *
-   * Todo pasa por admin_set_user_access().
    */
   const setUserAccess =
     useMutation({
@@ -605,14 +651,6 @@ function AjustesPage() {
             );
           }
 
-          /*
-           * Se utiliza any únicamente para mantener
-           * compatibilidad si types.ts todavía no
-           * contiene la nueva función RPC.
-           *
-           * La seguridad real está en Supabase:
-           * admin_set_user_access().
-           */
           const {
             error,
           } = await (
@@ -656,15 +694,6 @@ function AjustesPage() {
         ),
     });
 
-  /*
-   * Guarda una configuración únicamente
-   * para la sucursal activa.
-   *
-   * No usamos upsert(..., { onConflict:
-   * "branch_id,key" }) porque la tabla utiliza
-   * un índice único basado en expresión para
-   * soportar correctamente branch_id NULL.
-   */
   const saveSetting =
     useMutation({
       mutationFn:
@@ -702,10 +731,6 @@ function AjustesPage() {
               setting.value;
           }
 
-          /*
-           * Primero buscamos si ya existe
-           * configuración para esta sucursal.
-           */
           const {
             data: existing,
             error:
@@ -865,21 +890,49 @@ function AjustesPage() {
     currentProfile?.branch_id,
   ]);
 
+  /*
+   * Crea colaborador usando:
+   * Nombre + PIN + Rol + Sucursal.
+   *
+   * El correo y contraseña ya NO se capturan
+   * en la interfaz.
+   *
+   * El Edge Function genera internamente
+   * las credenciales técnicas de Supabase.
+   */
   const submitInvite = async () => {
     if (!canManageUsers) {
       toast.error("No autorizado");
       return;
     }
 
-    const email =
-      inviteForm.email.trim();
+    const fullName =
+      inviteForm.full_name.trim();
 
-    const password =
-      inviteForm.password;
+    const pin =
+      inviteForm.pin.trim();
 
-    if (!email || password.length < 6) {
+    if (!fullName) {
       toast.error(
-        "Correo y contraseña (mín. 6) requeridos",
+        "El nombre es obligatorio.",
+      );
+      return;
+    }
+
+    if (!/^\d{4}$/.test(pin)) {
+      toast.error(
+        "El PIN debe tener exactamente 4 dígitos.",
+      );
+      return;
+    }
+
+    if (
+      !COLLABORATOR_ROLES.includes(
+        inviteForm.role,
+      )
+    ) {
+      toast.error(
+        "Selecciona un rol válido para el colaborador.",
       );
       return;
     }
@@ -889,10 +942,12 @@ function AjustesPage() {
     try {
       const {
         data: sessionData,
-      } = await supabase.auth.getSession();
+      } =
+        await supabase.auth.getSession();
 
       const token =
-        sessionData.session?.access_token;
+        sessionData.session
+          ?.access_token;
 
       if (!token) {
         throw new Error(
@@ -907,16 +962,16 @@ function AjustesPage() {
           headers: {
             "Content-Type":
               "application/json",
-            Authorization: `Bearer ${token}`,
+            Authorization:
+              `Bearer ${token}`,
             apikey:
               import.meta.env
                 .VITE_SUPABASE_ANON_KEY,
           },
           body: JSON.stringify({
-            email,
-            password,
             full_name:
-              inviteForm.full_name.trim(),
+              fullName,
+            pin,
             role:
               inviteForm.role,
             branch_id:
@@ -932,20 +987,19 @@ function AjustesPage() {
       if (!res.ok) {
         throw new Error(
           json.error ||
-            "No se pudo crear el usuario",
+            "No se pudo crear el colaborador.",
         );
       }
 
       toast.success(
-        "Colaborador creado",
+        "Colaborador creado correctamente.",
       );
 
       setInviteOpen(false);
 
       setInviteForm({
         full_name: "",
-        email: "",
-        password: "",
+        pin: "",
         role: "staff",
         branch_id: "",
       });
@@ -1600,7 +1654,7 @@ function AjustesPage() {
                           setInviteOpen(true)
                         }
                       >
-                        Invitar colaborador
+                        Crear colaborador
                       </Button>
                     )}
                   </div>
@@ -1757,15 +1811,6 @@ function AjustesPage() {
                                   profile,
                                 );
 
-                              /*
-                               * La cuenta actual ahora sí puede
-                               * modificar su sucursal desde
-                               * "Mi sesión".
-                               *
-                               * En esta tabla no se permite
-                               * cambiar el estado de la propia
-                               * sesión para evitar bloquearla.
-                               */
                               const canModify =
                                 !current;
 
@@ -2184,21 +2229,32 @@ function AjustesPage() {
       </Tabs>
 
       {/* ================================================== */}
-      {/* INVITAR COLABORADOR */}
+      {/* CREAR COLABORADOR */}
       {/* ================================================== */}
 
       <Dialog
         open={inviteOpen}
-        onOpenChange={setInviteOpen}
+        onOpenChange={(open) => {
+          setInviteOpen(open);
+
+          if (!open) {
+            setInviteForm({
+              full_name: "",
+              pin: "",
+              role: "staff",
+              branch_id: "",
+            });
+          }
+        }}
       >
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle>
-              Invitar colaborador
+              Crear colaborador
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label>
                 Nombre
@@ -2219,55 +2275,51 @@ function AjustesPage() {
                   )
                 }
                 placeholder="Nombre completo"
+                autoComplete="off"
               />
             </div>
 
             <div className="space-y-1.5">
               <Label>
-                Correo
+                PIN de 4 dígitos
               </Label>
 
               <Input
-                className="h-11"
-                type="email"
-                value={
-                  inviteForm.email
-                }
-                onChange={(e) =>
-                  setInviteForm(
-                    (f) => ({
-                      ...f,
-                      email:
-                        e.target.value,
-                    }),
-                  )
-                }
-                placeholder="correo@ejemplo.com"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <Label>
-                Contraseña temporal
-              </Label>
-
-              <Input
-                className="h-11"
+                className="h-11 text-center text-lg tracking-[0.35em]"
                 type="password"
+                inputMode="numeric"
+                maxLength={4}
+                pattern="[0-9]*"
                 value={
-                  inviteForm.password
+                  inviteForm.pin
                 }
-                onChange={(e) =>
+                onChange={(e) => {
+                  const value =
+                    e.target.value
+                      .replace(
+                        /\D/g,
+                        "",
+                      )
+                      .slice(
+                        0,
+                        4,
+                      );
+
                   setInviteForm(
                     (f) => ({
                       ...f,
-                      password:
-                        e.target.value,
+                      pin: value,
                     }),
-                  )
-                }
-                placeholder="Mínimo 6 caracteres"
+                  );
+                }}
+                placeholder="••••"
+                autoComplete="new-password"
               />
+
+              <p className="text-xs text-muted-foreground">
+                Este será el PIN que utilizará
+                el colaborador para entrar a vender.
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -2296,7 +2348,7 @@ function AjustesPage() {
                 </SelectTrigger>
 
                 <SelectContent>
-                  {ROLES.map(
+                  {COLLABORATOR_ROLES.map(
                     (role) => (
                       <SelectItem
                         key={role}
@@ -2363,9 +2415,13 @@ function AjustesPage() {
             </div>
 
             <Button
-              className="min-h-11 w-full rounded-xl bg-[#43a047] font-semibold"
+              className="min-h-11 w-full rounded-xl bg-[#43a047] font-semibold hover:bg-[#388e3c]"
               disabled={
-                invitePending
+                invitePending ||
+                !inviteForm.full_name.trim() ||
+                !/^\d{4}$/.test(
+                  inviteForm.pin,
+                )
               }
               onClick={() =>
                 void submitInvite()
