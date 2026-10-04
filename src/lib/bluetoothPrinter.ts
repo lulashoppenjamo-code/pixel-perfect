@@ -1,14 +1,10 @@
 /**
  * LULA OS — Impresora térmica Bluetooth
  *
- * Comunicación:
- * - Web Bluetooth
- * - Bluetooth Low Energy / GATT
- * - ESC/POS
- *
- * IMPORTANTE:
- * La venta NO depende de la impresora.
- * Si imprimir falla, la venta ya quedó registrada.
+ * - Web Bluetooth / BLE / GATT / ESC-POS
+ * - Una sola impresora emparejada para todo el sistema
+ * - Se mantiene conectada hasta que el usuario la desconecte
+ * - La venta NO depende de la impresora
  */
 
 import type { TicketData } from "@/components/pos/TicketModal";
@@ -18,7 +14,6 @@ const AUTO_PRINT_KEY = "lula-printer-auto-print";
 const LAYOUT_CACHE_KEY = "lula-ticket-layout-cache";
 const TICKET_LOGO_CACHE_KEY = "lula-ticket-logo";
 
-/** Opciones visuales del ticket */
 export type TicketPrintLayout = {
   showBranch: boolean;
   showCashier: boolean;
@@ -68,6 +63,10 @@ type BluetoothGATTServer = {
 type BluetoothDevice = {
   name?: string | null;
   gatt?: BluetoothGATTServer | null;
+  addEventListener?: (
+    type: string,
+    listener: () => void,
+  ) => void;
 };
 
 type BluetoothApi = {
@@ -83,7 +82,19 @@ type PrinterConnection = {
   characteristic: BluetoothCharacteristic;
 };
 
+/** Conexión activa en memoria (se mantiene hasta desconectar manualmente) */
 let activeConnection: PrinterConnection | null = null;
+
+const OPTIONAL_SERVICES = [
+  "0000ffe0-0000-1000-8000-00805f9b34fb",
+  "0000ff00-0000-1000-8000-00805f9b34fb",
+  "00001101-0000-1000-8000-00805f9b34fb",
+  "000018f0-0000-1000-8000-00805f9b34fb",
+  "000018f1-0000-1000-8000-00805f9b34fb",
+  "0000ae30-0000-1000-8000-00805f9b34fb",
+  "0000fff0-0000-1000-8000-00805f9b34fb",
+  "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+];
 
 function bluetoothSupported() {
   return typeof navigator !== "undefined" && "bluetooth" in navigator;
@@ -92,7 +103,7 @@ function bluetoothSupported() {
 function getBluetooth(): BluetoothApi {
   if (!bluetoothSupported()) {
     throw new Error(
-      "Este dispositivo o navegador no permite Bluetooth desde la aplicación. Web Bluetooth requiere Chrome/Edge y una impresora BLE/GATT compatible (no Bluetooth clásico/SPP).",
+      "Este dispositivo o navegador no permite Bluetooth. Usa Chrome/Edge y una impresora BLE compatible.",
     );
   }
   return (navigator as Navigator & { bluetooth: BluetoothApi }).bluetooth;
@@ -160,7 +171,6 @@ function twoColumns(leftText: string, rightText: string, width: number) {
   );
 }
 
-/** Caracteres por línea según ancho de papel térmico */
 function charsForPaper(paperWidth: 58 | 80): number {
   return paperWidth === 80 ? 48 : 32;
 }
@@ -181,7 +191,10 @@ export function normalizeTicketLayout(raw: unknown): TicketPrintLayout {
   }
 
   const paper = Number(obj.paperWidth ?? obj.paper_width_mm) === 80 ? 80 : 58;
-  const copies = Math.max(1, Math.min(5, Number(obj.copies) || DEFAULT_TICKET_LAYOUT.copies));
+  const copies = Math.max(
+    1,
+    Math.min(5, Number(obj.copies) || DEFAULT_TICKET_LAYOUT.copies),
+  );
 
   const bool = (a: unknown, b: unknown, fallback: boolean) => {
     if (typeof a === "boolean") return a;
@@ -196,7 +209,11 @@ export function normalizeTicketLayout(raw: unknown): TicketPrintLayout {
     showSku: bool(obj.showSku, obj.show_sku, DEFAULT_TICKET_LAYOUT.showSku),
     showDiscounts: bool(obj.showDiscounts, obj.show_discounts, DEFAULT_TICKET_LAYOUT.showDiscounts),
     showTaxes: bool(obj.showTaxes, obj.show_tax ?? obj.show_taxes, DEFAULT_TICKET_LAYOUT.showTaxes),
-    showCashReceived: bool(obj.showCashReceived, obj.show_cash_received, DEFAULT_TICKET_LAYOUT.showCashReceived),
+    showCashReceived: bool(
+      obj.showCashReceived,
+      obj.show_cash_received,
+      DEFAULT_TICKET_LAYOUT.showCashReceived,
+    ),
     showChange: bool(obj.showChange, obj.show_change, DEFAULT_TICKET_LAYOUT.showChange),
     paperWidth: paper,
     copies,
@@ -239,7 +256,8 @@ async function imageToEscPos(
     const image = new Image();
     const loaded = new Promise<void>((resolve, reject) => {
       image.onload = () => resolve();
-      image.onerror = () => reject(new Error("No se pudo cargar el logo para impresión."));
+      image.onerror = () =>
+        reject(new Error("No se pudo cargar el logo para impresión."));
     });
     image.src = dataUrl;
     await loaded;
@@ -276,7 +294,6 @@ async function imageToEscPos(
         const green = pixels[pixelIndex + 1];
         const blue = pixels[pixelIndex + 2];
         const alpha = pixels[pixelIndex + 3];
-
         if (alpha < 40) continue;
 
         const gray = 0.299 * red + 0.587 * green + 0.114 * blue;
@@ -289,7 +306,10 @@ async function imageToEscPos(
     }
 
     const header = command(
-      0x1d, 0x76, 0x30, 0x00,
+      0x1d,
+      0x76,
+      0x30,
+      0x00,
       widthBytes & 0xff,
       (widthBytes >> 8) & 0xff,
       finalHeight & 0xff,
@@ -310,29 +330,21 @@ async function buildTicketText(
   const width = charsForPaper(layout.paperWidth);
   const chunks: Uint8Array[] = [];
 
-  // Reset
   chunks.push(command(0x1b, 0x40));
 
-  // Logo
   const logo = ticket.logoDataUrl || getCachedTicketLogo();
   if (logo) {
     const logoBytes = await imageToEscPos(logo, layout.paperWidth);
-    if (logoBytes) {
-      chunks.push(logoBytes);
-    }
+    if (logoBytes) chunks.push(logoBytes);
   }
 
-  // Nombre de la tienda (centrado + negrita)
   chunks.push(center());
   chunks.push(bold(true));
   chunks.push(encode(`${ticket.companyName ?? "Lula Shop"}\n`));
   chunks.push(bold(false));
 
-  // Dirección y teléfono (centrado, compacto)
   if (ticket.companyAddress) {
-    // Dividir dirección larga en líneas de máximo width caracteres
-    const address = ticket.companyAddress.trim();
-    const words = address.split(/\s+/);
+    const words = ticket.companyAddress.trim().split(/\s+/);
     let currentLine = "";
     for (const word of words) {
       if ((currentLine + " " + word).trim().length <= width) {
@@ -349,19 +361,15 @@ async function buildTicketText(
     chunks.push(encode(`Tel: ${ticket.companyPhone}\n`));
   }
 
-  // Sucursal (si aplica)
   if (layout.showBranch && ticket.branchName) {
     chunks.push(encode(`${ticket.branchName}\n`));
   }
 
   chunks.push(encode("\n"));
-
-  // Fecha y folio
   chunks.push(left());
   chunks.push(encode(`${ticket.date}\n`));
   chunks.push(encode(`Folio: ${ticket.folio}\n`));
 
-  // Cajero / Cliente / Pago (compacto)
   if (layout.showCashier && ticket.cashierName) {
     chunks.push(encode(`Cajero: ${ticket.cashierName}\n`));
   }
@@ -369,60 +377,52 @@ async function buildTicketText(
     chunks.push(encode(`Cliente: ${ticket.customerName}\n`));
   }
   chunks.push(encode(`Pago: ${ticket.paymentMethod}\n`));
-
-  // Separador
   chunks.push(encode(`${lineSeparator(width)}\n`));
 
-  // ===== PRODUCTOS (estilo compacto como Zobaze) =====
   for (const line of ticket.lines) {
-    const name = layout.showSku && line.sku
-      ? `\( {line.name} ( \){line.sku})`
-      : line.name;
-
-    // Línea principal: "1 x Nombre del producto     $150.00"
-    const leftPart = `${line.quantity} x ${name}`;
-    chunks.push(encode(twoColumns(leftPart, moneyValue(line.total), width) + "\n"));
-
-    // Descuento del producto (si existe y está activado)
+    const name =
+      layout.showSku && line.sku ? `\( {line.name} ( \){line.sku})` : line.name;
+    chunks.push(
+      encode(twoColumns(`${line.quantity} x ${name}`, moneyValue(line.total), width) + "\n"),
+    );
     if (layout.showDiscounts && line.discount != null && line.discount > 0) {
-      chunks.push(encode(twoColumns("  Descuento", `-${moneyValue(line.discount)}`, width) + "\n"));
+      chunks.push(
+        encode(twoColumns("  Descuento", `-${moneyValue(line.discount)}`, width) + "\n"),
+      );
     }
   }
 
-  // Separador
   chunks.push(encode(`${lineSeparator(width)}\n`));
-
-  // Totales
   chunks.push(encode(twoColumns("Subtotal", moneyValue(ticket.subtotal), width) + "\n"));
 
   if (layout.showTaxes && ticket.tax > 0) {
     chunks.push(encode(twoColumns("Impuestos", moneyValue(ticket.tax), width) + "\n"));
   }
-
   if (layout.showDiscounts && ticket.discount > 0) {
-    chunks.push(encode(twoColumns("Descuento", `-${moneyValue(ticket.discount)}`, width) + "\n"));
+    chunks.push(
+      encode(twoColumns("Descuento", `-${moneyValue(ticket.discount)}`, width) + "\n"),
+    );
   }
 
-  // TOTAL en negrita
   chunks.push(bold(true));
   chunks.push(encode(twoColumns("TOTAL", moneyValue(ticket.total), width) + "\n"));
   chunks.push(bold(false));
 
-  // Recibido y Cambio
   if (layout.showCashReceived && ticket.cashReceived != null) {
-    chunks.push(encode(twoColumns("Recibido", moneyValue(ticket.cashReceived), width) + "\n"));
+    chunks.push(
+      encode(twoColumns("Recibido", moneyValue(ticket.cashReceived), width) + "\n"),
+    );
   }
   if (layout.showChange && ticket.cashReceived != null) {
-    chunks.push(encode(twoColumns("Cambio", moneyValue(ticket.changeGiven ?? 0), width) + "\n"));
+    chunks.push(
+      encode(twoColumns("Cambio", moneyValue(ticket.changeGiven ?? 0), width) + "\n"),
+    );
   }
 
-  // Footer
   chunks.push(encode("\n"));
   chunks.push(center());
   chunks.push(encode(`${ticket.footer ?? "¡Gracias por su compra!"}\n`));
   chunks.push(left());
-
-  // Espacio + corte
   chunks.push(encode("\n\n"));
   chunks.push(cutPaper());
 
@@ -432,80 +432,129 @@ async function buildTicketText(
 async function findWritableCharacteristic(device: BluetoothDevice) {
   if (!device.gatt) {
     throw new Error(
-      "La impresora no expone una conexión GATT. Es posible que use Bluetooth clásico (SPP), incompatible con Web Bluetooth.",
+      "La impresora no expone GATT. Puede ser Bluetooth clásico (SPP), incompatible con Web Bluetooth.",
     );
   }
 
-  const server = device.gatt.connected ? device.gatt : await device.gatt.connect();
+  const server = device.gatt.connected
+    ? device.gatt
+    : await device.gatt.connect();
+
   const services = await server.getPrimaryServices();
 
   for (const service of services) {
     const characteristics = await service.getCharacteristics();
     for (const characteristic of characteristics) {
-      const properties = characteristic.properties;
-      if (properties.writeWithoutResponse || properties.write) {
+      if (
+        characteristic.properties.writeWithoutResponse ||
+        characteristic.properties.write
+      ) {
         return characteristic;
       }
     }
   }
 
   throw new Error(
-    "No encontré un canal Bluetooth de escritura en la impresora. Verifica que sea BLE/GATT compatible.",
+    "No encontré un canal de escritura en la impresora. Verifica que sea BLE/GATT.",
   );
 }
 
+function bindDisconnectListener(device: BluetoothDevice) {
+  try {
+    device.addEventListener?.("gattserverdisconnected", () => {
+      // No borramos activeConnection: al imprimir intentamos reconectar el mismo device
+      console.warn("Impresora Bluetooth desconectada temporalmente. Se intentará reconectar al imprimir.");
+    });
+  } catch {
+    // ignore
+  }
+}
+
+/** Emparejar impresora (solo cuando el usuario lo pide) */
 export async function connectBluetoothPrinter() {
   const bluetooth = getBluetooth();
 
   const device = await bluetooth.requestDevice({
     acceptAllDevices: true,
-    optionalServices: [
-      "0000ffe0-0000-1000-8000-00805f9b34fb",
-      "0000ff00-0000-1000-8000-00805f9b34fb",
-      "00001101-0000-1000-8000-00805f9b34fb",
-      "000018f0-0000-1000-8000-00805f9b34fb",
-      "000018f1-0000-1000-8000-00805f9b34fb",
-      "0000ae30-0000-1000-8000-00805f9b34fb",
-      "0000fff0-0000-1000-8000-00805f9b34fb",
-      "49535343-fe7d-4ae5-8fa9-9fafd205e455",
-    ],
+    optionalServices: OPTIONAL_SERVICES,
   });
 
   const characteristic = await findWritableCharacteristic(device);
-
   activeConnection = { device, characteristic };
+  bindDisconnectListener(device);
 
   localStorage.setItem(DEVICE_NAME_KEY, device.name ?? "Impresora Bluetooth");
 
   return { name: device.name ?? "Impresora Bluetooth" };
 }
 
+/**
+ * Reconecta sin mostrar selector si es posible.
+ * NO lanza error si el navegador no tiene getDevices.
+ */
 export async function reconnectBluetoothPrinter() {
-  const bluetooth = getBluetooth();
-
-  if (!bluetooth.getDevices) {
-    throw new Error("Este navegador no permite recuperar automáticamente impresoras Bluetooth.");
+  // 1) Ya conectada
+  if (activeConnection?.device.gatt?.connected) {
+    return {
+      name: activeConnection.device.name ?? "Impresora Bluetooth",
+    };
   }
 
-  const devices = await bluetooth.getDevices();
-  const savedName = localStorage.getItem(DEVICE_NAME_KEY);
+  // 2) Mismo device de esta sesión: reabrir GATT
+  if (activeConnection?.device?.gatt) {
+    try {
+      await activeConnection.device.gatt.connect();
+      const characteristic = await findWritableCharacteristic(
+        activeConnection.device,
+      );
+      activeConnection = {
+        device: activeConnection.device,
+        characteristic,
+      };
+      return {
+        name: activeConnection.device.name ?? "Impresora Bluetooth",
+      };
+    } catch (e) {
+      console.warn("No se pudo reconectar el device en memoria:", e);
+    }
+  }
 
-  const device =
-    devices.find((item) => savedName && item.name === savedName) ?? devices[0];
+  // 3) getDevices (si el navegador lo soporta)
+  const bluetooth = getBluetooth();
+  if (typeof bluetooth.getDevices === "function") {
+    try {
+      const devices = await bluetooth.getDevices();
+      const savedName = localStorage.getItem(DEVICE_NAME_KEY);
 
-  if (!device) return null;
+      let device =
+        devices.find((d) => savedName && d.name === savedName) ??
+        devices[0];
 
-  const characteristic = await findWritableCharacteristic(device);
-  activeConnection = { device, characteristic };
+      if (device) {
+        const characteristic = await findWritableCharacteristic(device);
+        activeConnection = { device, characteristic };
+        bindDisconnectListener(device);
+        localStorage.setItem(
+          DEVICE_NAME_KEY,
+          device.name ?? "Impresora Bluetooth",
+        );
+        return { name: device.name ?? "Impresora Bluetooth" };
+      }
+    } catch (e) {
+      console.warn("getDevices falló:", e);
+    }
+  }
 
-  return { name: device.name ?? "Impresora Bluetooth" };
+  // 4) No hay forma automática → null (NO error rojo)
+  return null;
 }
 
+/** Solo el usuario desconecta */
 export function disconnectBluetoothPrinter() {
   try {
     activeConnection?.device.gatt?.disconnect();
   } catch {
-    // No bloquear la aplicación.
+    // ignore
   }
   activeConnection = null;
 }
@@ -521,33 +570,67 @@ export function isBluetoothPrinterConnected() {
   return Boolean(activeConnection?.device.gatt?.connected);
 }
 
-async function writeInChunks(characteristic: BluetoothCharacteristic, data: Uint8Array) {
+async function writeInChunks(
+  characteristic: BluetoothCharacteristic,
+  data: Uint8Array,
+) {
   const chunkSize = 180;
-
   for (let offset = 0; offset < data.length; offset += chunkSize) {
     const chunk = data.slice(offset, Math.min(offset + chunkSize, data.length));
-
     if (characteristic.properties.writeWithoutResponse) {
       await characteristic.writeValueWithoutResponse(chunk);
     } else {
       await characteristic.writeValue(chunk);
     }
-
-    await new Promise((resolve) => setTimeout(resolve, 8));
+    await new Promise((r) => setTimeout(r, 8));
   }
+}
+
+/** Garantiza conexión; si no hay ninguna, pide emparejar */
+async function ensurePrinterConnected() {
+  if (activeConnection?.device.gatt?.connected) {
+    return activeConnection;
+  }
+
+  const reconnected = await reconnectBluetoothPrinter();
+  if (reconnected && activeConnection?.device.gatt?.connected) {
+    return activeConnection;
+  }
+
+  // Último recurso: pedir al usuario emparejar (solo si no hay conexión)
+  const paired = await connectBluetoothPrinter();
+  if (!paired || !activeConnection) {
+    throw new Error(
+      "No se pudo conectar la impresora Bluetooth. Emparéjala desde Ajustes.",
+    );
+  }
+  return activeConnection;
+}
+
+/** Imprime bytes ESC/POS (tickets, cortes, reportes) */
+export async function printRawBluetooth(data: Uint8Array) {
+  const connection = await ensurePrinterConnected();
+  await writeInChunks(connection.characteristic, data);
+}
+
+/** Imprime texto plano (ideal para corte de caja) */
+export async function printTextBluetooth(text: string) {
+  const connection = await ensurePrinterConnected();
+  const data = concatBytes(
+    command(0x1b, 0x40),
+    left(),
+    encode(text.endsWith("\n") ? text : `${text}\n`),
+    encode("\n\n"),
+    cutPaper(),
+  );
+  await writeInChunks(connection.characteristic, data);
 }
 
 export async function printTicketBluetooth(
   ticket: TicketData,
   layoutOverride?: Partial<TicketPrintLayout>,
 ) {
-  if (!activeConnection || !activeConnection.device.gatt?.connected) {
-    await reconnectBluetoothPrinter();
-  }
-
-  if (!activeConnection) {
-    throw new Error("No hay una impresora Bluetooth configurada.");
-  }
+  const connection = await ensurePrinterConnected();
 
   const layout: TicketPrintLayout = {
     ...getCachedTicketLayout(),
@@ -558,9 +641,9 @@ export async function printTicketBluetooth(
   const copies = Math.max(1, Math.min(5, layout.copies || 1));
 
   for (let i = 0; i < copies; i += 1) {
-    await writeInChunks(activeConnection.characteristic, data);
+    await writeInChunks(connection.characteristic, data);
     if (i < copies - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 120));
+      await new Promise((r) => setTimeout(r, 120));
     }
   }
 }
@@ -573,7 +656,9 @@ export function getBluetoothAutoPrint() {
   return localStorage.getItem(AUTO_PRINT_KEY) === "true";
 }
 
-export async function printTestTicket(layoutOverride?: Partial<TicketPrintLayout>) {
+export async function printTestTicket(
+  layoutOverride?: Partial<TicketPrintLayout>,
+) {
   const layout: TicketPrintLayout = {
     ...getCachedTicketLayout(),
     ...layoutOverride,
