@@ -1,9 +1,15 @@
 /**
  * LULA OS — Impresora térmica Bluetooth
  *
- * - Web Bluetooth / BLE / GATT / ESC-POS
+ * Comunicación:
+ * - Web Bluetooth
+ * - Bluetooth Low Energy / GATT
+ * - ESC/POS
+ *
+ * Comportamiento:
  * - Una sola impresora emparejada para todo el sistema
  * - Se mantiene conectada hasta que el usuario la desconecte
+ * - Auto-conexión silenciosa al abrir la app (si ya fue emparejada)
  * - La venta NO depende de la impresora
  */
 
@@ -63,10 +69,7 @@ type BluetoothGATTServer = {
 type BluetoothDevice = {
   name?: string | null;
   gatt?: BluetoothGATTServer | null;
-  addEventListener?: (
-    type: string,
-    listener: () => void,
-  ) => void;
+  addEventListener?: (type: string, listener: () => void) => void;
 };
 
 type BluetoothApi = {
@@ -381,13 +384,19 @@ async function buildTicketText(
 
   for (const line of ticket.lines) {
     const name =
-      layout.showSku && line.sku ? `\( {line.name} ( \){line.sku})` : line.name;
+      layout.showSku && line.sku ? `${line.name} (${line.sku})` : line.name;
     chunks.push(
-      encode(twoColumns(`${line.quantity} x ${name}`, moneyValue(line.total), width) + "\n"),
+      encode(
+        twoColumns(`${line.quantity} x ${name}`, moneyValue(line.total), width) +
+          "\n",
+      ),
     );
     if (layout.showDiscounts && line.discount != null && line.discount > 0) {
       chunks.push(
-        encode(twoColumns("  Descuento", `-${moneyValue(line.discount)}`, width) + "\n"),
+        encode(
+          twoColumns("  Descuento", `-${moneyValue(line.discount)}`, width) +
+            "\n",
+        ),
       );
     }
   }
@@ -463,7 +472,9 @@ function bindDisconnectListener(device: BluetoothDevice) {
   try {
     device.addEventListener?.("gattserverdisconnected", () => {
       // No borramos activeConnection: al imprimir intentamos reconectar el mismo device
-      console.warn("Impresora Bluetooth desconectada temporalmente. Se intentará reconectar al imprimir.");
+      console.warn(
+        "Impresora Bluetooth desconectada temporalmente. Se intentará reconectar al imprimir.",
+      );
     });
   } catch {
     // ignore
@@ -526,9 +537,8 @@ export async function reconnectBluetoothPrinter() {
       const devices = await bluetooth.getDevices();
       const savedName = localStorage.getItem(DEVICE_NAME_KEY);
 
-      let device =
-        devices.find((d) => savedName && d.name === savedName) ??
-        devices[0];
+      const device =
+        devices.find((d) => savedName && d.name === savedName) ?? devices[0];
 
       if (device) {
         const characteristic = await findWritableCharacteristic(device);
@@ -547,6 +557,29 @@ export async function reconnectBluetoothPrinter() {
 
   // 4) No hay forma automática → null (NO error rojo)
   return null;
+}
+
+/**
+ * Conexión silenciosa en segundo plano.
+ * No muestra errores ni selector.
+ * Solo funciona si la impresora ya fue emparejada antes.
+ */
+export async function autoConnectBluetoothPrinter(): Promise<boolean> {
+  try {
+    if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
+      return false;
+    }
+
+    if (activeConnection?.device.gatt?.connected) {
+      return true;
+    }
+
+    const result = await reconnectBluetoothPrinter();
+    return Boolean(result && activeConnection?.device.gatt?.connected);
+  } catch (e) {
+    console.warn("Auto-conexión Bluetooth:", e);
+    return false;
+  }
 }
 
 /** Solo el usuario desconecta */
@@ -597,7 +630,7 @@ async function ensurePrinterConnected() {
     return activeConnection;
   }
 
-  // Último recurso: pedir al usuario emparejar (solo si no hay conexión)
+  // Último recurso: pedir al usuario emparejar
   const paired = await connectBluetoothPrinter();
   if (!paired || !activeConnection) {
     throw new Error(
