@@ -317,8 +317,22 @@ Deno.serve(async (req) => {
     const internalEmail =
       `collaborator_${internalId}@auth.lulashop.local`;
 
+    /*
+     * IMPORTANTE:
+     *
+     * Supabase Auth tiene un límite de 72 caracteres para
+     * contraseñas en este flujo.
+     *
+     * Generamos una contraseña interna de exactamente
+     * 48 caracteres.
+     *
+     * Esta contraseña NO es el PIN del colaborador.
+     * El colaborador nunca la conoce ni la utiliza.
+     */
     const internalPassword =
-      crypto.randomUUID();
+      crypto.randomUUID()
+        .replaceAll("-", "")
+        .slice(0, 48);
 
     const {
       data: created,
@@ -520,6 +534,7 @@ Deno.serve(async (req) => {
       /*
        * Rollback completo.
        */
+
       await admin
         .from("collaborator_pin_credentials")
         .delete()
@@ -607,6 +622,7 @@ Deno.serve(async (req) => {
      * Si ocurrió una excepción después de crear Auth,
      * intentamos limpiar el usuario.
      */
+
     if (createdUserId) {
       try {
         const supabaseUrl =
