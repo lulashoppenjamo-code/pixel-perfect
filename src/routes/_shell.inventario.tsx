@@ -74,6 +74,11 @@ import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
 import { RestockList } from "@/components/inventory/RestockList";
 import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgress";
 
+/**
+ * BLOQUE 4 — Visual Inventario (tabs, filtros, tarjetas de existencia).
+ * Solo presentación. NO toca inventario compartido, RPCs ni arquitectura.
+ */
+
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
     meta: [
@@ -768,31 +773,31 @@ function InventarioPage() {
 
       <Tabs defaultValue="existencias">
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl p-1">
+          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
             <TabsTrigger
               value="existencias"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Existencias
             </TabsTrigger>
 
             <TabsTrigger
               value="ajuste"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Ajuste
             </TabsTrigger>
 
             <TabsTrigger
               value="limites"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Límites
             </TabsTrigger>
 
             <TabsTrigger
               value="conteo"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <ClipboardList className="mr-1 h-3.5 w-3.5" />
               Inventario físico
@@ -800,7 +805,7 @@ function InventarioPage() {
 
             <TabsTrigger
               value="historial"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <History className="mr-1 h-3.5 w-3.5" />
               Historial físico
@@ -808,14 +813,14 @@ function InventarioPage() {
 
             <TabsTrigger
               value="movimientos"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Movimientos
             </TabsTrigger>
 
             <TabsTrigger
               value="reposicion"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <ClipboardList className="mr-1 h-3.5 w-3.5" />
               Reposición
@@ -823,7 +828,7 @@ function InventarioPage() {
 
             <TabsTrigger
               value="importar"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
               Importar / Exportar
@@ -838,18 +843,18 @@ function InventarioPage() {
           value="existencias"
           className="mt-3 sm:mt-4"
         >
-          <Card className="overflow-hidden">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">
+          <Card className="overflow-hidden border-[#e0e0e0] shadow-sm">
+            <CardHeader className="border-b border-[#f0f0f0] pb-3">
+              <CardTitle className="text-base font-bold text-[#212121]">
                 Existencias compartidas
               </CardTitle>
 
-              <p className="text-xs leading-5 text-muted-foreground">
+              <p className="text-xs leading-5 text-[#757575]">
                 Una sola existencia para ambas sucursales.
               </p>
             </CardHeader>
 
-            <CardContent className="px-3 sm:px-6">
+            <CardContent className="px-3 pt-3 sm:px-6">
               <div className="mb-3 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
                 {(
                   [
@@ -864,7 +869,7 @@ function InventarioPage() {
                     onClick={() => setStockStatusFilter(key)}
                     className={
                       stockStatusFilter === key
-                        ? "shrink-0 rounded-full bg-[#7e57c2] px-3.5 py-1.5 text-[12px] font-semibold text-white"
+                        ? "shrink-0 rounded-full bg-[#7c4dff] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
                         : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
                     }
                   >
@@ -874,26 +879,36 @@ function InventarioPage() {
               </div>
 
               {/* CELULAR / TABLET */}
-              <div className="grid gap-2.5 lg:hidden">
+              <div className="grid gap-2 lg:hidden">
                 {inventoryLoading && (
-                  <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                    Cargando inventario...
+                  <div className="rounded-2xl border border-[#e0e0e0] bg-white p-10 text-center shadow-sm">
+                    <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
+                    <p className="text-sm font-medium text-[#757575]">
+                      Cargando inventario…
+                    </p>
                   </div>
                 )}
 
                 {!inventoryLoading &&
                   inventory.length === 0 && (
-                    <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                      <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                      Sin existencias registradas.
+                    <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm">
+                      <Package className="mx-auto mb-3 h-10 w-10 text-[#c5cad3]" />
+                      <p className="text-sm font-bold text-[#212121]">
+                        Sin existencias registradas
+                      </p>
+                      <p className="mt-1 text-xs text-[#9aa3b8]">
+                        Los productos aparecerán aquí al registrar stock
+                      </p>
                     </div>
                   )}
 
                 {!inventoryLoading &&
                   filteredInventory.length === 0 &&
                   inventory.length > 0 && (
-                    <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                      Ningún ítem en este filtro.
+                    <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-10 text-center shadow-sm">
+                      <p className="text-sm font-medium text-[#757575]">
+                        Ningún ítem en este filtro
+                      </p>
                     </div>
                   )}
 
@@ -920,21 +935,42 @@ function InventarioPage() {
                         <div
                           key={`${row.product_id}-${row.variant_id ?? "base"}`}
                           className={cn(
-                            "rounded-xl border p-3.5",
+                            "rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm",
+                            isOut && "border-[#f8bbd0]",
                             isLow &&
-                              "border-destructive/30 bg-destructive/5",
+                              !isOut &&
+                              "border-[#ffe0b2] bg-[#fffaf5]",
                           )}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="break-words text-sm font-bold leading-5 text-foreground">
-                                {row.emoji ?? "📦"}{" "}
-                                {row.product_name}
-                              </p>
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#f5f5f5] text-xl">
+                              {row.emoji ?? "📦"}
+                            </div>
 
-                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="break-words text-sm font-bold leading-5 text-[#212121]">
+                                  {row.product_name}
+                                </p>
+
+                                {isOut ? (
+                                  <span className="shrink-0 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b]">
+                                    Agotado
+                                  </span>
+                                ) : isLow ? (
+                                  <span className="shrink-0 rounded-full bg-[#fff3e0] px-2 py-0.5 text-[10px] font-bold text-[#e65100]">
+                                    Bajo
+                                  </span>
+                                ) : (
+                                  <span className="shrink-0 rounded-full bg-[#e8f5e9] px-2 py-0.5 text-[10px] font-bold text-[#2e7d32]">
+                                    OK
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                 {row.sku && (
-                                  <span className="font-mono text-[11px] text-muted-foreground">
+                                  <span className="text-[11px] font-medium text-[#9e9e9e]">
                                     {row.sku}
                                   </span>
                                 )}
@@ -942,39 +978,23 @@ function InventarioPage() {
                                 {row.variant_id && (
                                   <Badge
                                     variant="outline"
-                                    className="rounded-full text-[10px]"
+                                    className="rounded-full border-[#e0e0e0] text-[10px]"
                                   >
                                     Variante
                                   </Badge>
                                 )}
                               </div>
-                            </div>
 
-                            {isOut ? (
-                              <Badge
-                                variant="destructive"
-                                className="shrink-0 rounded-full"
-                              >
-                                Agotado
-                              </Badge>
-                            ) : isLow ? (
-                              <Badge
-                                variant="destructive"
-                                className="shrink-0 rounded-full"
-                              >
-                                Bajo
-                              </Badge>
-                            ) : (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 rounded-full"
-                              >
-                                OK
-                              </Badge>
-                            )}
+                              <p className="mt-1 text-xs text-[#757575]">
+                                {available} en existencia
+                                {minimum > 0
+                                  ? ` · mín. ${minimum}`
+                                  : ""}
+                              </p>
+                            </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-3 gap-2 border-t pt-3">
+                          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#f0f0f0] pt-3">
                             <InventoryMetric
                               label="Stock"
                               value={String(
@@ -1001,16 +1021,6 @@ function InventarioPage() {
                               emphasis
                               danger={isLow}
                             />
-                          </div>
-
-                          <div className="mt-2 flex items-center justify-between rounded-lg bg-muted/40 px-2.5 py-2">
-                            <span className="text-[11px] text-muted-foreground">
-                              Mínimo
-                            </span>
-
-                            <span className="text-xs font-semibold">
-                              {minimum}
-                            </span>
                           </div>
                         </div>
                       );
