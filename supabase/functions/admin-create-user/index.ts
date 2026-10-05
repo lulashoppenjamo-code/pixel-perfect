@@ -35,7 +35,7 @@
  * - cashier_id
  */
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -206,10 +206,6 @@ Deno.serve(async (req) => {
     /*
      * Para ejecutar RPCs que dependen de auth.uid()
      * necesitamos conservar el JWT del administrador.
-     *
-     * Si SUPABASE_ANON_KEY no está disponible, usamos
-     * el publishable key enviado por el cliente cuando
-     * exista.
      */
 
     const callerKey =
@@ -513,10 +509,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    /*
-     * El owner no utiliza este flujo.
-     */
-
     if (
       role ===
       "owner"
@@ -534,8 +526,6 @@ Deno.serve(async (req) => {
      * ========================================================
      * CLIENTE SERVICE ROLE
      * ========================================================
-     *
-     * Este cliente nunca sale de la Edge Function.
      */
 
     const admin =
@@ -740,9 +730,6 @@ Deno.serve(async (req) => {
      * ========================================================
      * ASIGNAR ROL + SUCURSAL
      * ========================================================
-     *
-     * Se utiliza el RPC existente.
-     * No se hace INSERT manual en user_roles.
      */
 
     const {
@@ -832,14 +819,6 @@ Deno.serve(async (req) => {
      * ========================================================
      * CONFIGURAR PIN
      * ========================================================
-     *
-     * El RPC existente:
-     * - valida que sean 4 dígitos
-     * - genera bcrypt
-     * - guarda únicamente el hash
-     * - reinicia intentos fallidos
-     *
-     * El PIN nunca se guarda en texto plano.
      */
 
     const {
@@ -865,10 +844,6 @@ Deno.serve(async (req) => {
         pinError.message,
       );
 
-      /*
-       * Limpiar credencial PIN si llegó a crearse.
-       */
-
       await admin
         .from(
           "collaborator_pin_credentials",
@@ -878,10 +853,6 @@ Deno.serve(async (req) => {
           "user_id",
           createdUserId,
         );
-
-      /*
-       * Limpiar rol.
-       */
 
       await admin
         .from(
@@ -893,10 +864,6 @@ Deno.serve(async (req) => {
           createdUserId,
         );
 
-      /*
-       * Limpiar profile.
-       */
-
       await admin
         .from(
           "profiles",
@@ -906,10 +873,6 @@ Deno.serve(async (req) => {
           "id",
           createdUserId,
         );
-
-      /*
-       * Eliminar usuario Auth.
-       */
 
       const {
         error:
@@ -1043,10 +1006,6 @@ Deno.serve(async (req) => {
               },
             );
 
-          /*
-           * Limpiar credencial PIN.
-           */
-
           await rollbackAdmin
             .from(
               "collaborator_pin_credentials",
@@ -1056,10 +1015,6 @@ Deno.serve(async (req) => {
               "user_id",
               createdUserId,
             );
-
-          /*
-           * Limpiar roles.
-           */
 
           await rollbackAdmin
             .from(
@@ -1071,10 +1026,6 @@ Deno.serve(async (req) => {
               createdUserId,
             );
 
-          /*
-           * Limpiar profile.
-           */
-
           await rollbackAdmin
             .from(
               "profiles",
@@ -1084,10 +1035,6 @@ Deno.serve(async (req) => {
               "id",
               createdUserId,
             );
-
-          /*
-           * Eliminar Auth.
-           */
 
           await rollbackAdmin.auth.admin.deleteUser(
             createdUserId,
