@@ -35,7 +35,7 @@
  * - cashier_id
  */
 
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,12 +69,10 @@ function json(
   );
 }
 
-function errorMessage(
+function getErrorMessage(
   error: unknown,
-) {
-  if (
-    error instanceof Error
-  ) {
+): string {
+  if (error instanceof Error) {
     return error.message;
   }
 
@@ -92,14 +90,16 @@ function errorMessage(
     );
   }
 
-  return String(error ?? "");
+  return String(
+    error ?? "",
+  );
 }
 
 Deno.serve(async (req) => {
   /*
-   * ----------------------------------------------------------
+   * ==========================================================
    * CORS
-   * ----------------------------------------------------------
+   * ==========================================================
    */
 
   if (
@@ -116,9 +116,9 @@ Deno.serve(async (req) => {
   }
 
   /*
-   * ----------------------------------------------------------
+   * ==========================================================
    * MÉTODO
-   * ----------------------------------------------------------
+   * ==========================================================
    */
 
   if (
@@ -140,9 +140,9 @@ Deno.serve(async (req) => {
 
   try {
     /*
-     * --------------------------------------------------------
-     * VARIABLES DEL SERVIDOR
-     * --------------------------------------------------------
+     * ========================================================
+     * VARIABLES SUPABASE
+     * ========================================================
      */
 
     const supabaseUrl =
@@ -162,11 +162,10 @@ Deno.serve(async (req) => {
 
     if (
       !supabaseUrl ||
-      !serviceRoleKey ||
-      !anonKey
+      !serviceRoleKey
     ) {
       console.error(
-        "admin-create-user: missing Supabase environment variables",
+        "admin-create-user: missing required Supabase environment variables",
       );
 
       return json(
@@ -179,9 +178,9 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * AUTENTICACIÓN DEL ADMINISTRADOR
-     * --------------------------------------------------------
+     * ========================================================
      */
 
     const authHeader =
@@ -205,16 +204,38 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * Cliente que conserva el JWT real del administrador.
+     * Para ejecutar RPCs que dependen de auth.uid()
+     * necesitamos conservar el JWT del administrador.
      *
-     * Este cliente se utiliza para ejecutar RPCs que dependen
-     * de auth.uid().
+     * Si SUPABASE_ANON_KEY no está disponible, usamos
+     * el publishable key enviado por el cliente cuando
+     * exista.
      */
+
+    const callerKey =
+      anonKey ||
+      req.headers.get(
+        "apikey",
+      );
+
+    if (!callerKey) {
+      console.error(
+        "admin-create-user: missing caller key",
+      );
+
+      return json(
+        {
+          error:
+            "server misconfigured",
+        },
+        500,
+      );
+    }
 
     const userClient =
       createClient(
         supabaseUrl,
-        anonKey,
+        callerKey,
         {
           auth: {
             autoRefreshToken:
@@ -233,7 +254,9 @@ Deno.serve(async (req) => {
       );
 
     /*
-     * Verificar identidad.
+     * ========================================================
+     * VERIFICAR USUARIO
+     * ========================================================
      */
 
     const {
@@ -252,7 +275,7 @@ Deno.serve(async (req) => {
       !caller
     ) {
       console.error(
-        "getUser:",
+        "admin-create-user getUser:",
         userError?.message,
       );
 
@@ -266,10 +289,13 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * AUTORIZACIÓN
-     * --------------------------------------------------------
+     * ========================================================
      */
+
+    let callerCanManage =
+      false;
 
     const {
       data:
@@ -285,14 +311,17 @@ Deno.serve(async (req) => {
       adminCheckError
     ) {
       console.error(
-        "is_admin:",
+        "admin-create-user is_admin:",
         adminCheckError.message,
       );
     }
 
-    let callerCanManage =
-      callerIsAdmin ===
-      true;
+    if (
+      callerIsAdmin === true
+    ) {
+      callerCanManage =
+        true;
+    }
 
     if (
       !callerCanManage
@@ -315,13 +344,17 @@ Deno.serve(async (req) => {
         permissionError
       ) {
         console.error(
-          "has_permission:",
+          "admin-create-user has_permission:",
           permissionError.message,
         );
       }
 
-      callerCanManage =
-        hasManage === true;
+      if (
+        hasManage === true
+      ) {
+        callerCanManage =
+          true;
+      }
     }
 
     if (
@@ -337,9 +370,9 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
-     * BODY
-     * --------------------------------------------------------
+     * ========================================================
+     * LEER BODY
+     * ========================================================
      */
 
     let body:
@@ -355,7 +388,7 @@ Deno.serve(async (req) => {
 
       if (
         typeof parsed !==
-        "object" ||
+          "object" ||
         parsed === null ||
         Array.isArray(
           parsed,
@@ -386,9 +419,9 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
-     * DATOS DEL COLABORADOR
-     * --------------------------------------------------------
+     * ========================================================
+     * DATOS
+     * ========================================================
      */
 
     const fullName =
@@ -399,7 +432,8 @@ Deno.serve(async (req) => {
 
     const pin =
       String(
-        body.pin ?? "",
+        body.pin ??
+          "",
       ).trim();
 
     const role =
@@ -412,22 +446,20 @@ Deno.serve(async (req) => {
       body.branch_id;
 
     const branchId =
-      rawBranchId !==
-        null &&
-      rawBranchId !==
-        undefined &&
+      rawBranchId !== null &&
+      rawBranchId !== undefined &&
       String(
         rawBranchId,
-      ).trim()
+      ).trim() !== ""
         ? String(
             rawBranchId,
           ).trim()
         : null;
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * VALIDACIONES
-     * --------------------------------------------------------
+     * ========================================================
      */
 
     if (!fullName) {
@@ -482,10 +514,7 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * El owner utiliza su cuenta maestra.
-     *
-     * Los colaboradores creados mediante este flujo
-     * nunca reciben el rol owner.
+     * El owner no utiliza este flujo.
      */
 
     if (
@@ -502,12 +531,11 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * CLIENTE SERVICE ROLE
-     * --------------------------------------------------------
+     * ========================================================
      *
-     * Este cliente solamente existe dentro de la Edge
-     * Function. Nunca se envía al navegador.
+     * Este cliente nunca sale de la Edge Function.
      */
 
     const admin =
@@ -525,27 +553,16 @@ Deno.serve(async (req) => {
       );
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * CREAR USUARIO AUTH
-     * --------------------------------------------------------
+     * ========================================================
      *
      * IMPORTANTE:
      *
-     * Esta contraseña NO es el PIN.
+     * Esta contraseña técnica NO es el PIN.
      *
-     * Se utiliza únicamente para que Supabase Auth tenga
-     * una identidad real para el colaborador.
-     *
-     * Se usa una contraseña deliberadamente corta y
-     * conocida únicamente por este proceso.
-     *
-     * Esto elimina completamente el problema de:
-     *
-     * "Password cannot be longer than 72 characters"
-     *
-     * El PIN real se administra mediante:
-     *
-     * admin_set_collaborator_pin()
+     * Tiene 32 caracteres y está muy por debajo del límite
+     * de bcrypt/Supabase Auth de 72 caracteres.
      */
 
     const internalId =
@@ -554,15 +571,6 @@ Deno.serve(async (req) => {
     const internalEmail =
       `collaborator_${internalId}@auth.lulashop.local`;
 
-    /*
-     * 32 caracteres.
-     *
-     * Muy por debajo del límite de 72 caracteres de
-     * Supabase Auth/bcrypt.
-     *
-     * NO es el PIN del colaborador.
-     */
-
     const internalPassword =
       crypto
         .randomUUID()
@@ -570,6 +578,17 @@ Deno.serve(async (req) => {
           "-",
           "",
         );
+
+    console.log(
+      "admin-create-user: creating auth user",
+      {
+        internalEmail,
+        passwordLength:
+          internalPassword.length,
+        role,
+        branchId,
+      },
+    );
 
     const {
       data:
@@ -603,11 +622,11 @@ Deno.serve(async (req) => {
       !createdData?.user
     ) {
       const message =
-        createError?.message ??
+        createError?.message ||
         "create failed";
 
       console.error(
-        "auth.createUser:",
+        "admin-create-user auth.createUser:",
         message,
       );
 
@@ -623,10 +642,18 @@ Deno.serve(async (req) => {
     createdUserId =
       createdData.user.id;
 
+    console.log(
+      "admin-create-user: auth user created",
+      {
+        userId:
+          createdUserId,
+      },
+    );
+
     /*
-     * --------------------------------------------------------
-     * PROFILE
-     * --------------------------------------------------------
+     * ========================================================
+     * CREAR / ACTUALIZAR PROFILE
+     * ========================================================
      */
 
     const {
@@ -661,7 +688,7 @@ Deno.serve(async (req) => {
       profileError
     ) {
       console.error(
-        "profiles.upsert:",
+        "admin-create-user profiles.upsert:",
         profileError.message,
       );
 
@@ -710,15 +737,12 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
-     * ROL + SUCURSAL
-     * --------------------------------------------------------
+     * ========================================================
+     * ASIGNAR ROL + SUCURSAL
+     * ========================================================
      *
-     * IMPORTANTE:
-     *
-     * No hacemos INSERT directo a user_roles.
-     *
-     * Utilizamos el RPC existente.
+     * Se utiliza el RPC existente.
+     * No se hace INSERT manual en user_roles.
      */
 
     const {
@@ -746,13 +770,9 @@ Deno.serve(async (req) => {
       accessError
     ) {
       console.error(
-        "admin_set_user_access:",
+        "admin-create-user admin_set_user_access:",
         accessError.message,
       );
-
-      /*
-       * Rollback de profile.
-       */
 
       await admin
         .from(
@@ -763,10 +783,6 @@ Deno.serve(async (req) => {
           "id",
           createdUserId,
         );
-
-      /*
-       * Rollback de Auth.
-       */
 
       const {
         error:
@@ -813,11 +829,17 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
-     * PIN DEL COLABORADOR
-     * --------------------------------------------------------
+     * ========================================================
+     * CONFIGURAR PIN
+     * ========================================================
      *
-     * El RPC existente se encarga del hash y validaciones.
+     * El RPC existente:
+     * - valida que sean 4 dígitos
+     * - genera bcrypt
+     * - guarda únicamente el hash
+     * - reinicia intentos fallidos
+     *
+     * El PIN nunca se guarda en texto plano.
      */
 
     const {
@@ -839,12 +861,12 @@ Deno.serve(async (req) => {
       pinError
     ) {
       console.error(
-        "admin_set_collaborator_pin:",
+        "admin-create-user admin_set_collaborator_pin:",
         pinError.message,
       );
 
       /*
-       * Rollback de credencial PIN.
+       * Limpiar credencial PIN si llegó a crearse.
        */
 
       await admin
@@ -858,7 +880,7 @@ Deno.serve(async (req) => {
         );
 
       /*
-       * Rollback de rol.
+       * Limpiar rol.
        */
 
       await admin
@@ -872,7 +894,7 @@ Deno.serve(async (req) => {
         );
 
       /*
-       * Rollback de profile.
+       * Limpiar profile.
        */
 
       await admin
@@ -886,7 +908,7 @@ Deno.serve(async (req) => {
         );
 
       /*
-       * Rollback de Auth.
+       * Eliminar usuario Auth.
        */
 
       const {
@@ -934,10 +956,20 @@ Deno.serve(async (req) => {
     }
 
     /*
-     * --------------------------------------------------------
+     * ========================================================
      * ÉXITO
-     * --------------------------------------------------------
+     * ========================================================
      */
+
+    console.log(
+      "admin-create-user: collaborator created successfully",
+      {
+        userId:
+          createdUserId,
+        role,
+        branchId,
+      },
+    );
 
     return json(
       {
@@ -959,22 +991,24 @@ Deno.serve(async (req) => {
       },
       200,
     );
-  } catch (error) {
+  } catch (
+    error
+  ) {
     const message =
-      errorMessage(
+      getErrorMessage(
         error,
       );
 
     console.error(
-      "admin-create-user:",
+      "admin-create-user runtime error:",
       message,
       error,
     );
 
     /*
-     * --------------------------------------------------------
-     * ROLLBACK DE EXCEPCIÓN
-     * --------------------------------------------------------
+     * ========================================================
+     * ROLLBACK GENERAL
+     * ========================================================
      */
 
     if (
@@ -995,7 +1029,7 @@ Deno.serve(async (req) => {
           supabaseUrl &&
           serviceRoleKey
         ) {
-          const admin =
+          const rollbackAdmin =
             createClient(
               supabaseUrl,
               serviceRoleKey,
@@ -1009,7 +1043,53 @@ Deno.serve(async (req) => {
               },
             );
 
-          await admin.auth.admin.deleteUser(
+          /*
+           * Limpiar credencial PIN.
+           */
+
+          await rollbackAdmin
+            .from(
+              "collaborator_pin_credentials",
+            )
+            .delete()
+            .eq(
+              "user_id",
+              createdUserId,
+            );
+
+          /*
+           * Limpiar roles.
+           */
+
+          await rollbackAdmin
+            .from(
+              "user_roles",
+            )
+            .delete()
+            .eq(
+              "user_id",
+              createdUserId,
+            );
+
+          /*
+           * Limpiar profile.
+           */
+
+          await rollbackAdmin
+            .from(
+              "profiles",
+            )
+            .delete()
+            .eq(
+              "id",
+              createdUserId,
+            );
+
+          /*
+           * Eliminar Auth.
+           */
+
+          await rollbackAdmin.auth.admin.deleteUser(
             createdUserId,
           );
         }
@@ -1017,8 +1097,8 @@ Deno.serve(async (req) => {
         rollbackError
       ) {
         console.error(
-          "exception rollback:",
-          errorMessage(
+          "admin-create-user rollback error:",
+          getErrorMessage(
             rollbackError,
           ),
         );
