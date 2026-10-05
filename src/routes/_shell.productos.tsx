@@ -14,6 +14,9 @@
  * - shared_inventory puede tener varias filas con el mismo product_id.
  * - cada variante conserva su propio variant_id.
  * - la tarjeta del producto muestra la suma de available_stock.
+ *
+ * BLOQUE 3 — Visual Artículos (grilla, tarjetas, filtros, Agotado).
+ * Solo presentación. Sin tocar shared_inventory ni mutaciones.
  */
 
 import { useMemo, useState } from "react";
@@ -564,7 +567,7 @@ function ProductosPage() {
           RESUMEN
           ======================================================== */}
 
-      <div className="mb-4 grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4">
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
         <Card className="border-[#e0e0e0] shadow-sm">
           <CardContent className="p-3 sm:p-4">
             <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
@@ -649,8 +652,8 @@ function ProductosPage() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
 
               <Input
-                className="h-11 rounded-xl bg-muted/30 pl-9 shadow-none"
-                placeholder="Buscar nombre, SKU o barcode…"
+                className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
+                placeholder="Buscar artículo, SKU o código…"
                 value={search}
                 onChange={(e) =>
                   setSearch(e.target.value)
@@ -686,7 +689,7 @@ function ProductosPage() {
                 onClick={() => setStockFilter(key)}
                 className={
                   stockFilter === key
-                    ? "shrink-0 rounded-full bg-[#7e57c2] px-3.5 py-1.5 text-[12px] font-semibold text-white"
+                    ? "shrink-0 rounded-full bg-[#7c4dff] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
                     : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
                 }
               >
@@ -720,7 +723,7 @@ function ProductosPage() {
           )}
 
           {!loading && filtered.length > 0 && (
-            <div className="grid grid-cols-2 gap-2 xs:grid-cols-3 sm:grid-cols-3 sm:gap-2.5 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
 
@@ -749,7 +752,7 @@ function ProductosPage() {
                   <Card
                     key={p.id}
                     className={cn(
-                      "relative min-h-[188px] cursor-pointer touch-manipulation overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm transition active:scale-[0.99] hover:border-[#1a73e8] hover:shadow-md sm:min-h-[205px]",
+                      "relative min-h-[200px] cursor-pointer touch-manipulation overflow-hidden rounded-xl border border-[#eeeeee] bg-white shadow-sm transition active:scale-[0.98] hover:border-[#1a73e8] hover:shadow-md sm:min-h-[220px]",
                       !p.is_active &&
                         "opacity-50",
                     )}
@@ -761,7 +764,7 @@ function ProductosPage() {
                     {/* ESTADO */}
 
                     {agotado && (
-                      <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#fce4ec] px-2.5 py-1 text-[10px] font-semibold text-[#c2185b] sm:text-[11px]">
+                      <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
                         Agotado
                       </div>
                     )}
@@ -775,7 +778,7 @@ function ProductosPage() {
                           row.stock_status ===
                             "low_stock",
                       ) && (
-                        <div className="absolute left-1/2 top-2.5 z-10 -translate-x-1/2 whitespace-nowrap rounded-full bg-[#fff3e0] px-2.5 py-1 text-[10px] font-semibold text-[#e65100] sm:text-[11px]">
+                        <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fff3e0] px-2 py-0.5 text-[10px] font-bold text-[#e65100] shadow-sm">
                           Stock bajo
                         </div>
                       )}
@@ -800,87 +803,87 @@ function ProductosPage() {
                         </button>
                       )}
 
-                    <CardContent className="flex h-full min-h-[188px] flex-col items-center gap-1.5 p-2.5 pt-7 text-center sm:min-h-[205px] sm:p-3 sm:pt-7">
-                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-muted text-2xl sm:h-16 sm:w-16 sm:text-3xl">
-                        {p.emoji ?? "📦"}
-                      </div>
-
-                      <p className="line-clamp-2 min-h-[2.25rem] text-xs font-semibold leading-tight sm:text-sm">
-                        {p.name}
-                      </p>
-
-                      {p.sku && (
-                        <p className="max-w-full truncate font-mono text-[10px] text-muted-foreground sm:text-xs">
-                          {p.sku}
-                        </p>
-                      )}
-
-                      <p className="text-base font-bold text-[#1a73e8] sm:text-lg">
-                        {money(
-                          Number(p.price),
-                        )}
-                        {Number(p.cost) > 0 &&
-                        Number(p.price) > 0 ? (
-                          <span className="ml-1 text-[11px] font-semibold text-[#34a853]">
-                            (
-                            {(
-                              ((Number(p.price) -
-                                Number(p.cost)) /
-                                Number(p.price)) *
-                              100
-                            ).toFixed(1)}
-                            %)
+                    <CardContent className="flex h-full min-h-[200px] flex-col p-0 text-center sm:min-h-[220px]">
+                      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt=""
+                            className="h-full w-full object-cover"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-2xl sm:h-[4.5rem] sm:w-[4.5rem] sm:text-3xl">
+                            {p.emoji ?? "📦"}
                           </span>
-                        ) : null}
-                      </p>
-
-                      {/* STOCK CENTRAL */}
-
-                      <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
-                        <Badge
-                          variant={
-                            agotado
-                              ? "destructive"
-                              : "secondary"
-                          }
-                          className="rounded-full px-2 text-[10px] sm:text-xs"
-                        >
-                          {available} disponibles
-                        </Badge>
-
-                        {reserved > 0 && (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full px-2 text-[10px] sm:text-xs"
-                          >
-                            {reserved} reservados
-                          </Badge>
-                        )}
-
-                        {hasVariants && (
-                          <Badge
-                            variant="outline"
-                            className="rounded-full px-2 text-[10px] sm:text-xs"
-                          >
-                            {stock?.variants ?? 0}{" "}
-                            variantes
-                          </Badge>
                         )}
                       </div>
 
-                      {totalStock !==
-                        available && (
-                        <p className="text-[10px] text-muted-foreground sm:text-[11px]">
-                          Existencia:{" "}
-                          {totalStock}
+                      <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
+                        <p className="line-clamp-2 min-h-[2.25rem] text-[12px] font-bold leading-snug text-[#212121] sm:text-[13px]">
+                          {p.name}
                         </p>
-                      )}
 
-                      {p.categories?.name && (
-                        <p className="max-w-full truncate text-[10px] text-muted-foreground sm:text-[11px]">
-                          {p.categories.name}
+                        {p.sku && (
+                          <p className="mt-0.5 max-w-full truncate text-[10px] font-medium text-[#9e9e9e]">
+                            {p.sku}
+                          </p>
+                        )}
+
+                        <p className="mt-auto pt-1 text-[15px] font-bold leading-none text-[#1a73e8]">
+                          {money(Number(p.price))}
+                          {Number(p.cost) > 0 &&
+                          Number(p.price) > 0 ? (
+                            <span className="ml-1 text-[11px] font-semibold text-[#34a853]">
+                              (
+                              {(
+                                ((Number(p.price) -
+                                  Number(p.cost)) /
+                                  Number(p.price)) *
+                                100
+                              ).toFixed(1)}
+                              %)
+                            </span>
+                          ) : null}
                         </p>
-                      )}
+
+                        <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
+                          <Badge
+                            variant={
+                              agotado
+                                ? "destructive"
+                                : "secondary"
+                            }
+                            className="rounded-full px-2 text-[10px] sm:text-xs"
+                          >
+                            {available} disp.
+                          </Badge>
+
+                          {reserved > 0 && (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full px-2 text-[10px] sm:text-xs"
+                            >
+                              {reserved} res.
+                            </Badge>
+                          )}
+
+                          {hasVariants && (
+                            <Badge
+                              variant="outline"
+                              className="rounded-full px-2 text-[10px] sm:text-xs"
+                            >
+                              {stock?.variants ?? 0} var.
+                            </Badge>
+                          )}
+                        </div>
+
+                        {p.categories?.name && (
+                          <p className="mt-0.5 max-w-full truncate text-[10px] text-[#9e9e9e]">
+                            {p.categories.name}
+                          </p>
+                        )}
+                      </div>
                     </CardContent>
                   </Card>
                 );
