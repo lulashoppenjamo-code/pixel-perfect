@@ -992,29 +992,130 @@ function AjustesPage() {
           },
         );
 
+      /*
+       * DIAGNÓSTICO TEMPORAL
+       *
+       * No modifica la petición ni los datos.
+       * Muestra exactamente qué devuelve
+       * supabase.functions.invoke().
+       *
+       * Se eliminará después de identificar
+       * el origen del error.
+       */
+      console.error(
+        "[admin-create-user] invoke result",
+        {
+          data: json,
+          error: functionError,
+        },
+      );
+
       if (functionError) {
         let message =
           functionError.message ||
           "No se pudo crear el colaborador.";
+
+        let debugContext = "";
 
         try {
           const context =
             (functionError as any)
               .context;
 
-          if (context?.json) {
-            const body =
-              await context.json();
+          if (context) {
+            /*
+             * Response.body solo puede leerse una vez.
+             * Usamos clone() para no consumir la respuesta
+             * que posteriormente utiliza el manejo normal.
+             */
+            if (
+              typeof context.clone ===
+              "function"
+            ) {
+              const clonedResponse =
+                context.clone();
 
-            message =
-              body?.error ||
-              body?.detail ||
-              message;
+              try {
+                const responseText =
+                  await clonedResponse.text();
+
+                if (responseText) {
+                  debugContext =
+                    responseText;
+
+                  try {
+                    const body =
+                      JSON.parse(
+                        responseText,
+                      );
+
+                    message =
+                      body?.error ||
+                      body?.detail ||
+                      message;
+                  } catch {
+                    // La respuesta no era JSON.
+                  }
+                }
+              } catch {
+                // Mantener el mensaje original.
+              }
+            } else if (
+              typeof context.json ===
+              "function"
+            ) {
+              try {
+                const body =
+                  await context.json();
+
+                debugContext =
+                  JSON.stringify(
+                    body,
+                    null,
+                    2,
+                  );
+
+                message =
+                  body?.error ||
+                  body?.detail ||
+                  message;
+              } catch {
+                // Mantener el mensaje original.
+              }
+            }
           }
         } catch {
-          // Mantener el mensaje original
-          // si la respuesta no es JSON.
+          // Mantener el mensaje original.
         }
+
+        /*
+         * Muestra el diagnóstico directamente
+         * en Android sin depender de DevTools.
+         */
+        const debugInfo = {
+          message,
+          name:
+            functionError.name ??
+            null,
+          status:
+            (functionError as any)
+              ?.status ??
+            null,
+          response:
+            debugContext ||
+            null,
+          data:
+            json ?? null,
+        };
+
+        window.alert(
+          "DEBUG admin-create-user\n\n" +
+            JSON.stringify(
+              debugInfo,
+              null,
+              2,
+            ),
+        );
 
         throw new Error(
           message,
@@ -1022,10 +1123,26 @@ function AjustesPage() {
       }
 
       if (!json?.ok) {
-        throw new Error(
+        const message =
           json?.error ||
-            json?.detail ||
-            "No se pudo crear el colaborador.",
+          json?.detail ||
+          "No se pudo crear el colaborador.";
+
+        window.alert(
+          "DEBUG admin-create-user\n\n" +
+            JSON.stringify(
+              {
+                message,
+                data:
+                  json ?? null,
+              },
+              null,
+              2,
+            ),
+        );
+
+        throw new Error(
+          message,
         );
       }
 
