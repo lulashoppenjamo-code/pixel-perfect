@@ -1,19 +1,38 @@
-import { useEffect, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { toast } from "sonner";
 import {
+  useEffect,
+  useState,
+} from "react";
+
+import {
+  createFileRoute,
+  useNavigate,
+} from "@tanstack/react-router";
+
+import {
+  ArrowLeft,
   LogOut,
+  MonitorCheck,
   ShieldCheck,
   UserCheck,
   UserX,
 } from "lucide-react";
 
+import { toast } from "sonner";
+
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+
+import {
+  getDeviceSecret,
+  isDeviceMarkedAuthorized,
+} from "@/lib/posDevice";
+
+import { CollaboratorPinLogin } from "@/components/auth/CollaboratorPinLogin";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+
 import {
   Card,
   CardContent,
@@ -25,7 +44,9 @@ import {
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Acceso — Lula Shop OS" },
+      {
+        title: "Acceso — Lula Shop OS",
+      },
       {
         name: "description",
         content:
@@ -46,6 +67,12 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+type Collaborator = {
+  user_id: string;
+  full_name: string | null;
+  branch_id: string | null;
+};
+
 function AuthPage() {
   const navigate = useNavigate();
 
@@ -57,15 +84,54 @@ function AuthPage() {
     signOut,
   } = useAuth();
 
-  const [mode, setMode] = useState<"login" | "signup">(
-    "login",
-  );
+  const [mode, setMode] = useState<
+    "login" | "signup" | "collaborator"
+  >("login");
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [signingOut, setSigningOut] = useState(false);
+  const [email, setEmail] =
+    useState("");
+
+  const [password, setPassword] =
+    useState("");
+
+  const [fullName, setFullName] =
+    useState("");
+
+  const [busy, setBusy] =
+    useState(false);
+
+  const [signingOut, setSigningOut] =
+    useState(false);
+
+  const [deviceSecret, setDeviceSecret] =
+    useState<string | null>(null);
+
+  const [
+    deviceAuthorized,
+    setDeviceAuthorized,
+  ] = useState(false);
+
+  const [
+    collaborators,
+    setCollaborators,
+  ] = useState<Collaborator[]>([]);
+
+  const [
+    collaboratorsLoading,
+    setCollaboratorsLoading,
+  ] = useState(false);
+
+  const [
+    collaboratorsError,
+    setCollaboratorsError,
+  ] = useState<string | null>(null);
+
+  const [
+    selectedCollaborator,
+    setSelectedCollaborator,
+  ] = useState<Collaborator | null>(
+    null,
+  );
 
   const hasActiveAccess =
     !!user &&
@@ -77,6 +143,28 @@ function AuthPage() {
     !!user &&
     !!profile &&
     profile.is_active === false;
+
+  /*
+   * ------------------------------------------------------------
+   * Estado local del dispositivo
+   * ------------------------------------------------------------
+   */
+
+  useEffect(() => {
+    const secret = getDeviceSecret();
+
+    setDeviceSecret(secret);
+    setDeviceAuthorized(
+      isDeviceMarkedAuthorized(),
+    );
+  }, []);
+
+  /*
+   * ------------------------------------------------------------
+   * Si ya existe una sesión válida, conservar el comportamiento
+   * actual: entrar directamente a Ventas.
+   * ------------------------------------------------------------
+   */
 
   useEffect(() => {
     if (loading) {
@@ -95,6 +183,113 @@ function AuthPage() {
     navigate,
   ]);
 
+  /*
+   * ------------------------------------------------------------
+   * Cargar colaboradores cuando se entra al modo PIN.
+   * ------------------------------------------------------------
+   */
+
+  useEffect(() => {
+    if (mode !== "collaborator") {
+      return;
+    }
+
+    if (!deviceAuthorized) {
+      setCollaborators([]);
+      setCollaboratorsError(
+        "Esta tablet todavía no está autorizada.",
+      );
+      return;
+    }
+
+    if (!deviceSecret) {
+      setCollaborators([]);
+      setCollaboratorsError(
+        "No se encontró la identificación de esta tablet.",
+      );
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCollaborators =
+      async () => {
+        setCollaboratorsLoading(
+          true,
+        );
+
+        setCollaboratorsError(null);
+
+        try {
+          /*
+           * La función SQL valida nuevamente que el dispositivo
+           * esté autorizado.
+           *
+           * No confiamos únicamente en localStorage.
+           */
+          const {
+            data,
+            error,
+          } = await (
+            supabase as any
+          ).rpc(
+            "get_collaborators_for_pin_login",
+            {
+              _device_secret:
+                deviceSecret,
+            },
+          );
+
+          if (error) {
+            throw error;
+          }
+
+          if (cancelled) {
+            return;
+          }
+
+          setCollaborators(
+            (data ??
+              []) as Collaborator[],
+          );
+        } catch (error) {
+          if (cancelled) {
+            return;
+          }
+
+          setCollaborators([]);
+
+          setCollaboratorsError(
+            error instanceof Error
+              ? error.message
+              : "No se pudieron cargar los colaboradores.",
+          );
+        } finally {
+          if (!cancelled) {
+            setCollaboratorsLoading(
+              false,
+            );
+          }
+        }
+      };
+
+    void loadCollaborators();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    mode,
+    deviceAuthorized,
+    deviceSecret,
+  ]);
+
+  /*
+   * ------------------------------------------------------------
+   * Login normal
+   * ------------------------------------------------------------
+   */
+
   const submit = async (
     event: React.FormEvent,
   ) => {
@@ -104,7 +299,8 @@ function AuthPage() {
 
     try {
       if (mode === "signup") {
-        const cleanName = fullName.trim();
+        const cleanName =
+          fullName.trim();
 
         if (!cleanName) {
           throw new Error(
@@ -112,17 +308,23 @@ function AuthPage() {
           );
         }
 
-        const { error } =
-          await supabase.auth.signUp({
-            email: email.trim(),
-            password,
-            options: {
-              emailRedirectTo: `${window.location.origin}/auth`,
-              data: {
-                full_name: cleanName,
+        const {
+          error,
+        } =
+          await supabase.auth.signUp(
+            {
+              email: email.trim(),
+              password,
+              options: {
+                emailRedirectTo:
+                  `${window.location.origin}/auth`,
+                data: {
+                  full_name:
+                    cleanName,
+                },
               },
             },
-          });
+          );
 
         if (error) {
           throw error;
@@ -138,11 +340,15 @@ function AuthPage() {
         return;
       }
 
-      const { error } =
-        await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
+      const {
+        error,
+      } =
+        await supabase.auth.signInWithPassword(
+          {
+            email: email.trim(),
+            password,
+          },
+        );
 
       if (error) {
         throw error;
@@ -150,8 +356,7 @@ function AuthPage() {
 
       /*
        * AuthProvider actualizará profile/roles.
-       * No forzamos aquí la navegación inmediatamente:
-       * esperamos a saber si la cuenta está activa.
+       * No forzamos aquí la navegación inmediatamente.
        */
     } catch (error) {
       toast.error(
@@ -164,34 +369,67 @@ function AuthPage() {
     }
   };
 
-  const handleSignOut = async () => {
-    if (signingOut) {
-      return;
-    }
+  /*
+   * ------------------------------------------------------------
+   * Cerrar sesión
+   * ------------------------------------------------------------
+   */
 
-    setSigningOut(true);
+  const handleSignOut =
+    async () => {
+      if (signingOut) {
+        return;
+      }
 
-    try {
-      await signOut();
+      setSigningOut(true);
 
-      setEmail("");
-      setPassword("");
-      setFullName("");
+      try {
+        await signOut();
+
+        setEmail("");
+        setPassword("");
+        setFullName("");
+
+        setMode("login");
+
+        setSelectedCollaborator(
+          null,
+        );
+
+        toast.success(
+          "Sesión cerrada.",
+        );
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "No se pudo cerrar la sesión.",
+        );
+      } finally {
+        setSigningOut(false);
+      }
+    };
+
+  /*
+   * ------------------------------------------------------------
+   * Volver al login principal
+   * ------------------------------------------------------------
+   */
+
+  const backToLogin =
+    () => {
       setMode("login");
+      setSelectedCollaborator(
+        null,
+      );
+      setCollaboratorsError(null);
+    };
 
-      toast.success(
-        "Sesión cerrada.",
-      );
-    } catch (error) {
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No se pudo cerrar la sesión.",
-      );
-    } finally {
-      setSigningOut(false);
-    }
-  };
+  /*
+   * ------------------------------------------------------------
+   * Loading inicial
+   * ------------------------------------------------------------
+   */
 
   if (loading) {
     return (
@@ -212,12 +450,11 @@ function AuthPage() {
   }
 
   /*
-   * Usuario autenticado pero pendiente de autorización.
-   *
-   * Importante:
-   * no lo mandamos a /ventas porque todavía no tiene rol
-   * operativo.
+   * ------------------------------------------------------------
+   * Usuario autenticado pero pendiente de autorización
+   * ------------------------------------------------------------
    */
+
   if (isPendingApproval) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
@@ -273,7 +510,9 @@ function AuthPage() {
               variant="outline"
               className="w-full"
               disabled={signingOut}
-              onClick={handleSignOut}
+              onClick={
+                handleSignOut
+              }
             >
               <LogOut className="mr-2 h-4 w-4" />
 
@@ -288,10 +527,11 @@ function AuthPage() {
   }
 
   /*
-   * Si existe sesión pero todavía no llegó el profile,
-   * mostramos espera en vez de mandar al usuario a una
-   * pantalla protegida.
+   * ------------------------------------------------------------
+   * Sesión existente pero todavía no llegó profile
+   * ------------------------------------------------------------
    */
+
   if (user && !profile) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
@@ -316,7 +556,9 @@ function AuthPage() {
               variant="outline"
               className="w-full"
               disabled={signingOut}
-              onClick={handleSignOut}
+              onClick={
+                handleSignOut
+              }
             >
               <LogOut className="mr-2 h-4 w-4" />
               Cerrar sesión
@@ -326,6 +568,265 @@ function AuthPage() {
       </div>
     );
   }
+
+  /*
+   * ------------------------------------------------------------
+   * LOGIN POR PIN
+   * ------------------------------------------------------------
+   */
+
+  if (
+    mode === "collaborator"
+  ) {
+    /*
+     * Si ya se seleccionó colaborador,
+     * mostramos exclusivamente su PIN.
+     */
+    if (selectedCollaborator) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
+          <Card className="w-full max-w-sm">
+            <CardHeader>
+              <Button
+                type="button"
+                variant="ghost"
+                className="mb-2 w-fit px-0"
+                onClick={() =>
+                  setSelectedCollaborator(
+                    null,
+                  )
+                }
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Cambiar colaborador
+              </Button>
+
+              <CardTitle className="text-2xl">
+                Entrar como colaborador
+              </CardTitle>
+
+              <CardDescription>
+                Ingresa el PIN de 4 dígitos de{" "}
+                <span className="font-medium text-foreground">
+                  {selectedCollaborator.full_name ||
+                    "colaborador"}
+                </span>
+                .
+              </CardDescription>
+            </CardHeader>
+
+            <CardContent>
+              {deviceSecret ? (
+                <CollaboratorPinLogin
+                  userId={
+                    selectedCollaborator.user_id
+                  }
+                  fullName={
+                    selectedCollaborator.full_name ||
+                    "Colaborador"
+                  }
+                  deviceSecret={
+                    deviceSecret
+                  }
+                  onSuccess={() => {
+                    /*
+                     * La sesión Supabase ya quedó creada
+                     * por CollaboratorPinLogin.
+                     *
+                     * No modificamos auth.uid().
+                     * No modificamos cashier_id.
+                     */
+                  }}
+                />
+              ) : (
+                <div className="space-y-4">
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm">
+                    No se encontró la identificación
+                    de esta tablet.
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={
+                      backToLogin
+                    }
+                  >
+                    Volver
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    /*
+     * ----------------------------------------------------------
+     * Lista de colaboradores
+     * ----------------------------------------------------------
+     */
+
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <Button
+              type="button"
+              variant="ghost"
+              className="mb-2 w-fit px-0"
+              onClick={
+                backToLogin
+              }
+            >
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Volver
+            </Button>
+
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+              <MonitorCheck className="h-7 w-7 text-primary" />
+            </div>
+
+            <CardTitle className="text-center text-2xl">
+              Entrar como colaborador
+            </CardTitle>
+
+            <CardDescription className="text-center">
+              Selecciona tu nombre para continuar.
+            </CardDescription>
+          </CardHeader>
+
+          <CardContent className="space-y-4">
+            {!deviceAuthorized && (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                <div className="flex gap-3">
+                  <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+
+                  <div>
+                    <p className="text-sm font-medium">
+                      Tablet no autorizada
+                    </p>
+
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      El dueño debe iniciar sesión y
+                      autorizar esta tablet desde Ajustes
+                      → Tablets y dispositivos POS.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {deviceAuthorized &&
+              collaboratorsLoading && (
+                <div className="flex min-h-32 items-center justify-center">
+                  <div className="text-center">
+                    <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+
+                    <p className="text-sm text-muted-foreground">
+                      Cargando colaboradores…
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            {deviceAuthorized &&
+              !collaboratorsLoading &&
+              collaboratorsError && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+                  <p className="text-sm font-medium">
+                    No se pudo verificar esta tablet
+                  </p>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {collaboratorsError}
+                  </p>
+                </div>
+              )}
+
+            {deviceAuthorized &&
+              !collaboratorsLoading &&
+              !collaboratorsError &&
+              collaborators.length ===
+                0 && (
+                <div className="rounded-xl border bg-muted/30 p-4 text-center">
+                  <p className="text-sm font-medium">
+                    No hay colaboradores disponibles
+                  </p>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Un administrador debe crear colaboradores
+                    y asignarles un PIN de 4 dígitos.
+                  </p>
+                </div>
+              )}
+
+            {deviceAuthorized &&
+              !collaboratorsLoading &&
+              !collaboratorsError &&
+              collaborators.length >
+                0 && (
+                <div className="space-y-2">
+                  {collaborators.map(
+                    (
+                      collaborator,
+                    ) => (
+                      <Button
+                        key={
+                          collaborator.user_id
+                        }
+                        type="button"
+                        variant="outline"
+                        className="h-auto w-full justify-start p-4 text-left"
+                        onClick={() =>
+                          setSelectedCollaborator(
+                            collaborator,
+                          )
+                        }
+                      >
+                        <div className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                          <UserCheck className="h-5 w-5 text-primary" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {collaborator.full_name ||
+                              "Colaborador"}
+                          </p>
+
+                          <p className="text-xs text-muted-foreground">
+                            Acceso con PIN de 4 dígitos
+                          </p>
+                        </div>
+                      </Button>
+                    ),
+                  )}
+                </div>
+              )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full"
+              onClick={
+                backToLogin
+              }
+            >
+              Volver al acceso de administrador
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  /*
+   * ------------------------------------------------------------
+   * LOGIN NORMAL / REGISTRO
+   * ------------------------------------------------------------
+   */
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
@@ -422,6 +923,22 @@ function AuthPage() {
                   : "Crear cuenta"}
             </Button>
           </form>
+
+          {mode === "login" && (
+            <Button
+              type="button"
+              variant="outline"
+              className="mt-3 w-full"
+              onClick={() =>
+                setMode(
+                  "collaborator",
+                )
+              }
+            >
+              <UserCheck className="mr-2 h-4 w-4" />
+              Entrar como colaborador
+            </Button>
+          )}
 
           <button
             type="button"
