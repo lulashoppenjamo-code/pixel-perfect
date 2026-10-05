@@ -11,6 +11,9 @@
  * 3. Valor predeterminado.
  *
  * El punto de venta está en Caja (/caja).
+ *
+ * BLOQUE 5 — Visual Hoy / Historial de ventas.
+ * Solo presentación. Sin tocar cancel_sale, reprint ni consultas.
  */
 
 import { useMemo, useState } from "react";
@@ -116,7 +119,7 @@ const dayInput = (d: Date) =>
 function paymentLabel(method: string) {
   switch (method) {
     case "cash":
-      return "Cash";
+      return "Efectivo";
     case "transfer":
       return "Transferencia";
     case "card":
@@ -927,35 +930,36 @@ function VentasPage() {
       {/* Resumen del periodo (conservado) */}
       <div className="grid grid-cols-3 gap-2">
         <Card label="Tickets" value={String(totals.tickets)} />
-        <Card label="Ventas" value={money(totals.sum)} />
+        <Card label="Ventas" value={money(totals.sum)} highlight />
         <Card label="Promedio" value={money(totals.avg)} />
       </div>
 
       {/* Lista estilo Zobaze */}
       {listTab === "online" ? (
-        <div className="rounded-xl border border-[#e0e0e0] bg-white px-4 py-12 text-center">
+        <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-4 py-14 text-center shadow-sm">
           <p className="text-base font-bold text-[#212121]">
             Pedidos en línea
           </p>
           <p className="mt-1 text-sm text-[#757575]">
-            No hay pedidos en línea por ahora.
+            No hay pedidos en línea por ahora
           </p>
         </div>
       ) : isLoading ? (
-        <p className="py-10 text-center text-sm text-[#9aa3b8]">
-          Cargando…
-        </p>
+        <div className="rounded-2xl border border-[#e0e0e0] bg-white py-12 text-center shadow-sm">
+          <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
+          <p className="text-sm font-medium text-[#757575]">Cargando tickets…</p>
+        </div>
       ) : visible.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 rounded-xl border border-[#e0e0e0] bg-white px-6 py-14 text-center">
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-6 py-14 text-center shadow-sm">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-3xl">
             📭
           </div>
           <div>
             <p className="text-base font-bold text-[#212121]">
-              No hay transacciones hoy
+              No hay transacciones
             </p>
             <p className="mt-1 text-sm text-[#757575]">
-              Ajusta el filtro de fechas o realiza una venta en Caja
+              Ajusta las fechas o realiza una venta en Caja
             </p>
           </div>
         </div>
@@ -979,7 +983,7 @@ function VentasPage() {
                     setExpandedId(open ? null : row.id)
                   }
                 >
-                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#e8f5e9] text-[#2e7d32]">
+                  <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e8f5e9] text-[#2e7d32]">
                     <Banknote className="h-5 w-5" />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1043,8 +1047,7 @@ function VentasPage() {
                     <div className="flex gap-2 border-t border-[#eeeeee] p-2.5">
                       <Button
                         size="sm"
-                        variant="outline"
-                        className="h-9 flex-1 rounded-lg border-[#e0e0e0] text-xs"
+                        className="h-9 flex-1 rounded-lg bg-[#1a73e8] text-xs text-white hover:bg-[#1557b0]"
                         disabled={reprint.isPending}
                         onClick={() => {
                           setActiveSaleId(row.id);
@@ -1111,17 +1114,25 @@ function VentasPage() {
 function Card({
   label,
   value,
+  highlight = false,
 }: {
   label: string;
   value: string;
+  highlight?: boolean;
 }) {
   return (
-    <div className="rounded-2xl border border-[#e0e0e0] bg-white p-4">
-      <p className="text-[11px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+    <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm sm:p-4">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8] sm:text-[11px]">
         {label}
       </p>
 
-      <p className="mt-1 text-lg font-bold text-[#212121]">
+      <p
+        className={
+          highlight
+            ? "mt-1 text-base font-bold text-[#1a73e8] sm:text-lg"
+            : "mt-1 text-base font-bold text-[#212121] sm:text-lg"
+        }
+      >
         {value}
       </p>
     </div>
