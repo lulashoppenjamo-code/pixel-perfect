@@ -318,7 +318,7 @@ Deno.serve(async (req) => {
       `collaborator_${internalId}@auth.lulashop.local`;
 
     const internalPassword =
-      `${crypto.randomUUID()}-${crypto.randomUUID()}`;
+      crypto.randomUUID();
 
     const {
       data: created,
