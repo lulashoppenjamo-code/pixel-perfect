@@ -1230,6 +1230,19 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_customer_balance: { Args: { _customer_id: string }; Returns: number }
+      get_customer_credit_history: {
+        Args: { _customer_id: string }
+        Returns: {
+          amount: number
+          movement_date: string
+          movement_id: string
+          movement_type: string
+          notes: string
+          payment_method: string
+          sale_folio: string
+        }[]
+      }
       get_shared_inventory: {
         Args: never
         Returns: {
@@ -1300,6 +1313,33 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "sales"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      register_credit_payment: {
+        Args: {
+          _amount: number
+          _branch_id?: string
+          _cash_session_id?: string
+          _customer_id: string
+          _notes?: string
+          _payment_method?: string
+        }
+        Returns: {
+          amount: number
+          branch_id: string | null
+          created_at: string
+          created_by: string | null
+          customer_id: string
+          id: string
+          notes: string | null
+          payment_method: string
+          sale_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "credit_payments"
           isOneToOne: true
           isSetofReturn: false
         }
