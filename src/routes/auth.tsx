@@ -27,6 +27,11 @@ import {
   isDeviceMarkedAuthorized,
 } from "@/lib/posDevice";
 
+/**
+ * BLOQUE 15 — Visual Auth / Login.
+ * Solo presentación. Sin tocar signIn, PIN, device auth ni roles.
+ */
+
 import { CollaboratorPinLogin } from "@/components/auth/CollaboratorPinLogin";
 
 import { Button } from "@/components/ui/button";
@@ -433,11 +438,11 @@ function AuthPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4">
+        <Card className="w-full max-w-sm rounded-2xl border border-[#e0e0e0] bg-white shadow-md">
           <CardContent className="flex min-h-40 items-center justify-center">
             <div className="text-center">
-              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
 
               <p className="text-sm text-muted-foreground">
                 Verificando acceso…
@@ -457,8 +462,8 @@ function AuthPage() {
 
   if (isPendingApproval) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-        <Card className="w-full max-w-md">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4">
+        <Card className="w-full max-w-md rounded-2xl border border-[#e0e0e0] bg-white shadow-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10">
               <UserX className="h-7 w-7 text-amber-600" />
@@ -534,8 +539,8 @@ function AuthPage() {
 
   if (user && !profile) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-        <Card className="w-full max-w-sm">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4">
+        <Card className="w-full max-w-sm rounded-2xl border border-[#e0e0e0] bg-white shadow-md">
           <CardContent className="space-y-4 p-6 text-center">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
               <UserCheck className="h-7 w-7 text-primary" />
@@ -584,8 +589,8 @@ function AuthPage() {
      */
     if (selectedCollaborator) {
       return (
-        <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-          <Card className="w-full max-w-sm">
+        <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4">
+          <Card className="w-full max-w-sm rounded-2xl border border-[#e0e0e0] bg-white shadow-md">
             <CardHeader>
               <Button
                 type="button"
@@ -670,8 +675,8 @@ function AuthPage() {
      */
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4 py-6">
-        <Card className="w-full max-w-md">
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4 py-6">
+        <Card className="w-full max-w-md rounded-2xl border border-[#e0e0e0] bg-white shadow-md">
           <CardHeader>
             <Button
               type="button"
@@ -723,7 +728,7 @@ function AuthPage() {
               collaboratorsLoading && (
                 <div className="flex min-h-32 items-center justify-center">
                   <div className="text-center">
-                    <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <div className="mx-auto mb-3 h-7 w-7 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
 
                     <p className="text-sm text-muted-foreground">
                       Cargando colaboradores…
@@ -829,14 +834,17 @@ function AuthPage() {
    */
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted/40 px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle className="text-2xl">
+    <div className="flex min-h-screen items-center justify-center bg-[#f5f5f5] px-4">
+      <Card className="w-full max-w-sm rounded-2xl border border-[#e0e0e0] bg-white shadow-md">
+        <CardHeader className="space-y-1 pb-2">
+          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f0fe]">
+            <ShieldCheck className="h-7 w-7 text-[#1a73e8]" />
+          </div>
+          <CardTitle className="text-center text-2xl font-bold text-[#212121]">
             Lula Shop OS
           </CardTitle>
 
-          <CardDescription>
+          <CardDescription className="text-center text-[#757575]">
             {mode === "login"
               ? "Entra con tu correo y contraseña"
               : "Crea tu cuenta de trabajo"}
@@ -864,6 +872,7 @@ function AuthPage() {
                   }
                   autoComplete="name"
                   required
+                  className="h-11 rounded-xl border-[#e0e0e0]"
                 />
               </div>
             )}
@@ -884,6 +893,7 @@ function AuthPage() {
                 }
                 autoComplete="email"
                 required
+                className="h-11 rounded-xl border-[#e0e0e0]"
               />
             </div>
 
@@ -908,12 +918,13 @@ function AuthPage() {
                     : "new-password"
                 }
                 required
+                className="h-11 rounded-xl border-[#e0e0e0]"
               />
             </div>
 
             <Button
               type="submit"
-              className="w-full"
+              className="h-12 w-full rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-sm hover:bg-[#2d8f47]"
               disabled={busy}
             >
               {busy
