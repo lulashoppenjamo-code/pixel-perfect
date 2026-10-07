@@ -24,6 +24,7 @@ import {
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useBranch } from "@/lib/branch";
 
 import { Button } from "@/components/ui/button";
 
@@ -163,8 +164,14 @@ async function bulkWriteProducts(
 export function ImportExportPanel() {
   const {
     isManager,
+    isAdmin,
     profile,
   } = useAuth();
+
+  const {
+    branchId: activeBranchId,
+    branches,
+  } = useBranch();
 
   const qc = useQueryClient();
 
@@ -203,15 +210,24 @@ export function ImportExportPanel() {
 
   /*
    * ============================================================
-   * SUCURSAL DEL USUARIO
+   * SUCURSAL PARA EL MOVIMIENTO
    *
-   * Se usa únicamente como contexto del movimiento.
-   * El stock continúa siendo central.
+   * Prioridad:
+   * 1. Sucursal activa del selector (owner/admin/manager)
+   * 2. Sucursal principal del perfil
+   * 3. Primera sucursal activa (solo owner/admin)
+   *
+   * El stock sigue siendo central (shared_inventory).
+   * branch_id solo contextualiza el movimiento.
    * ============================================================
    */
 
   const branchId =
-    profile?.branch_id ?? null;
+    activeBranchId ??
+    profile?.branch_id ??
+    (isAdmin || isManager
+      ? branches[0]?.id ?? null
+      : null);
 
   /*
    * ============================================================
@@ -360,7 +376,7 @@ export function ImportExportPanel() {
 
       if (!branchId) {
         throw new Error(
-          "Tu usuario no tiene una sucursal asignada. No se puede registrar el movimiento de inventario.",
+          "No hay sucursal activa. Como administrador: ve a Ajustes → Sucursales, crea o activa una, y selecciónala arriba en el menú. Luego vuelve a importar.",
         );
       }
 
