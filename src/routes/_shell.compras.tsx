@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+
+/**
+ * BLOQUE 9 — Visual Compras / Proveedores.
+ * Solo presentación. Sin tocar receive_purchase, inventario ni mutaciones.
+ */
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -667,14 +672,14 @@ function ComprasPage() {
           <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm sm:w-full">
             <TabsTrigger
               value="ordenes"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Órdenes
             </TabsTrigger>
 
             <TabsTrigger
               value="proveedores"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs sm:text-sm"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Proveedores
             </TabsTrigger>
@@ -692,9 +697,9 @@ function ComprasPage() {
           <div className="min-w-0 space-y-3 sm:space-y-4">
             {/* LISTADO */}
 
-            <Card className="overflow-hidden">
-              <CardHeader className="p-4 sm:p-5">
-                <CardTitle className="text-base sm:text-lg">
+            <Card className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+              <CardHeader className="border-b border-[#f0f0f0] p-4 sm:p-5">
+                <CardTitle className="text-base font-bold text-[#212121] sm:text-lg">
                   Órdenes de compra
                 </CardTitle>
               </CardHeader>
@@ -711,15 +716,15 @@ function ComprasPage() {
                     return (
                       <div
                         key={purchase.id}
-                        className={`rounded-xl border p-3 transition ${
+                        className={`rounded-xl border p-3 shadow-sm transition ${
                           selected
-                            ? "border-primary bg-primary/5"
-                            : "bg-background"
+                            ? "border-[#1a73e8] bg-[#e8f0fe]"
+                            : "border-[#e0e0e0] bg-white"
                         }`}
                       >
                         <button
                           type="button"
-                          className="w-full text-left"
+                          className="w-full text-left active:opacity-90"
                           onClick={() =>
                             setSelectedPurchaseId(
                               selected
@@ -728,48 +733,56 @@ function ComprasPage() {
                             )
                           }
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs text-muted-foreground">
-                                {shortDate(
-                                  purchase.created_at,
-                                )}
-                              </p>
-
-                              <p className="mt-1 truncate text-sm font-semibold">
-                                {purchase
-                                  .suppliers
-                                  ?.name ??
-                                  "Sin proveedor"}
-                              </p>
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8]">
+                              <Truck className="h-5 w-5" strokeWidth={1.75} />
                             </div>
-
-                            <div className="shrink-0 text-right">
-                              <p className="text-sm font-bold">
-                                {money(
-                                  purchase.total,
-                                )}
-                              </p>
-
-                              <p
-                                className={`mt-1 text-xs font-medium ${statusClass(
-                                  purchase.status,
-                                )}`}
-                              >
-                                {statusLabel(
-                                  purchase.status,
-                                )}
-                              </p>
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0">
+                                  <p className="truncate text-sm font-bold text-[#212121]">
+                                    {purchase
+                                      .suppliers
+                                      ?.name ??
+                                      "Sin proveedor"}
+                                  </p>
+                                  <p className="mt-0.5 text-xs text-[#9e9e9e]">
+                                    {shortDate(
+                                      purchase.created_at,
+                                    )}
+                                  </p>
+                                </div>
+                                <div className="shrink-0 text-right">
+                                  <p className="text-sm font-bold text-[#1a73e8]">
+                                    {money(
+                                      purchase.total,
+                                    )}
+                                  </p>
+                                  <span
+                                    className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                      purchase.status === "received"
+                                        ? "bg-[#e8f5e9] text-[#2e7d32]"
+                                        : purchase.status === "cancelled"
+                                          ? "bg-[#fce4ec] text-[#c2185b]"
+                                          : "bg-[#fff3e0] text-[#e65100]"
+                                    }`}
+                                  >
+                                    {statusLabel(
+                                      purchase.status,
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         </button>
 
-                        <div className="mt-3 border-t pt-2">
+                        <div className="mt-3 border-t border-[#f0f0f0] pt-2">
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
-                            className="min-h-10 w-full touch-manipulation rounded-lg"
+                            className="min-h-10 w-full touch-manipulation rounded-lg border-[#e0e0e0]"
                             onClick={() =>
                               setSelectedPurchaseId(
                                 selected
@@ -796,8 +809,14 @@ function ComprasPage() {
                   })}
 
                   {!purchases.length && (
-                    <div className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">
-                      Sin órdenes de compra.
+                    <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm">
+                      <PackageCheck className="mx-auto mb-3 h-10 w-10 text-[#c5cad3]" />
+                      <p className="text-sm font-bold text-[#212121]">
+                        Sin órdenes de compra
+                      </p>
+                      <p className="mt-1 text-xs text-[#9e9e9e]">
+                        Crea una orden en el panel derecho
+                      </p>
                     </div>
                   )}
                 </div>
@@ -946,7 +965,7 @@ function ComprasPage() {
                       selectedPurchase?.status !==
                         "cancelled" && (
                         <Button
-                          className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto sm:self-end"
+                          className="min-h-11 w-full touch-manipulation rounded-xl bg-[#34a853] text-white hover:bg-[#2d8f47] sm:w-auto sm:self-end"
                           onClick={() =>
                             receiveAll.mutate(
                               selectedPurchaseId,
@@ -1313,7 +1332,7 @@ function ComprasPage() {
                             </p>
 
                             <Button
-                              className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
+                              className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-white hover:bg-[#1557b0] sm:w-auto"
                               onClick={() =>
                                 receivePartial.mutate()
                               }
@@ -1616,7 +1635,7 @@ function ComprasPage() {
               </div>
 
               <Button
-                className="min-h-11 w-full touch-manipulation rounded-xl"
+                className="min-h-12 w-full touch-manipulation rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-sm hover:bg-[#2d8f47]"
                 disabled={
                   !isManager ||
                   !lines.length ||
@@ -1802,7 +1821,7 @@ function ComprasPage() {
               </div>
 
               <Button
-                className="min-h-11 w-full touch-manipulation rounded-xl"
+                className="min-h-12 w-full touch-manipulation rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-sm hover:bg-[#2d8f47]"
                 disabled={
                   !isManager ||
                   !sup.name.trim() ||
