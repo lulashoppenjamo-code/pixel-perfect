@@ -58,7 +58,9 @@ import {
   type ImportAction,
 } from "@/lib/excel";
 
-const CHUNK_SIZE = 200;
+const CHUNK_SIZE = 250;
+
+const STOCK_CONCURRENCY = 50;
 
 function chunkArray<T>(
   array: T[],
@@ -77,6 +79,30 @@ function chunkArray<T>(
   }
 
   return result;
+}
+
+
+async function runPool<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  if (!items.length) return;
+
+  let index = 0;
+
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (index < items.length) {
+        const current = index;
+        index += 1;
+        await worker(items[current]!);
+      }
+    },
+  );
+
+  await Promise.all(runners);
 }
 
 function wantsProductPatch(
@@ -847,272 +873,113 @@ export function ImportExportPanel() {
 
       /*
        * ========================================================
-       * STOCK NUEVO
+       * STOCK (RÁPIDO)
        *
-       * IMPORTANTE:
-       * adjust_stock() escribe en shared_inventory.
-       *
-       * branch_id solamente queda como contexto histórico
-       * del movimiento.
+       * - Una sola lectura de inventario compartido
+       * - Ajustes en paralelo (STOCK_CONCURRENCY)
+       * - Sin set_shared_inventory_limits por fila en el bulk
+       *   (ralentiza mucho; los límites se pueden fijar después)
        * ========================================================
        */
 
-      if (
-        newRows.length
-      ) {
-        setPhase(
-          "Cargando stock compartido...",
-        );
+      const needsStock =
+        newRows.length > 0 ||
+        (existingRows.length > 0 &&
+          (action === "update_all" ||
+            action === "update_stock"));
 
-        for (
-          const row of newRows
+      if (needsStock) {
+        setPhase("Leyendo inventario actual...");
+
+        const { data: stockSnapshot, error: stockSnapError } =
+          await (supabase as any).rpc("get_shared_inventory");
+
+        if (stockSnapError) {
+          throw stockSnapError;
+        }
+
+        const currentStockByProduct = new Map<string, number>();
+
+        for (const item of (stockSnapshot ?? []) as {
+          product_id: string;
+          variant_id: string | null;
+          stock: number;
+        }[]) {
+          if (item.variant_id) continue;
+          currentStockByProduct.set(
+            item.product_id,
+            Number(item.stock ?? 0),
+          );
+        }
+
+        type StockJob = {
+          row: number;
+          productId: string;
+          delta: number;
+          note: string;
+        };
+
+        const jobs: StockJob[] = [];
+
+        for (const row of newRows) {
+          if (failedRows.has(row.row)) continue;
+          const productId = newIdByRow.get(row.row);
+          if (!productId) continue;
+          const qty = Number(row.stock) || 0;
+          if (qty === 0) continue;
+          jobs.push({
+            row: row.row,
+            productId,
+            delta: qty,
+            note: "Stock inicial por importación",
+          });
+        }
+
+        if (
+          existingRows.length &&
+          (action === "update_all" || action === "update_stock")
         ) {
-          if (
-            failedRows.has(
-              row.row,
-            )
-          ) {
-            continue;
-          }
-
-          const productId =
-            newIdByRow.get(
-              row.row,
-            );
-
-          if (!productId) {
-            continue;
-          }
-
-          if (
-            Number(
-              row.stock,
-            ) !== 0
-          ) {
-            const {
-              error,
-            } =
-              await supabase.rpc(
-                "adjust_stock",
-                {
-                  _branch_id:
-                    branchId,
-
-                  _product_id:
-                    productId,
-
-                  _quantity:
-                    Number(
-                      row.stock,
-                    ),
-
-                  _notes:
-                    "Stock inicial por importación",
-                },
-              );
-
-            if (error) {
-              failedRows.set(
-                row.row,
-                error.message,
-              );
-            }
-          }
-
-          /*
-           * Límites centrales.
-           */
-
-          const {
-            error:
-              limitError,
-          } =
-            await supabase.rpc(
-              "set_shared_inventory_limits",
-              {
-                _product_id:
-                  productId,
-
-                _min_stock:
-                  Number(
-                    row.minimo,
-                  ) || 0,
-
-                ...(row.maximo === null || row.maximo === undefined ? {} : { _max_stock: Number(row.maximo) }),
-              },
-            );
-
-          if (
-            limitError &&
-            !failedRows.has(
-              row.row,
-            )
-          ) {
-            failedRows.set(
-              row.row,
-              limitError.message,
-            );
+          for (const row of existingRows) {
+            if (failedRows.has(row.row) || !row.existingId) continue;
+            const currentStock =
+              currentStockByProduct.get(row.existingId) ?? 0;
+            const targetStock = Number(row.stock) || 0;
+            const delta = targetStock - currentStock;
+            if (delta === 0) continue;
+            jobs.push({
+              row: row.row,
+              productId: row.existingId,
+              delta,
+              note: "Actualización de stock por importación",
+            });
           }
         }
 
-        bump();
-      }
-
-      /*
-       * ========================================================
-       * STOCK EXISTENTE
-       * ========================================================
-       *
-       * El Excel contiene existencia final.
-       *
-       * Por eso:
-       *
-       * stock objetivo - stock actual = ajuste
-       *
-       * Nunca sobrescribimos directamente shared_inventory.
-       * ========================================================
-       */
-
-      if (
-        existingRows.length &&
-        (
-          action ===
-            "update_all" ||
-          action ===
-            "update_stock"
-        )
-      ) {
         setPhase(
-          "Actualizando stock compartido...",
+          `Aplicando stock (${jobs.length} movimientos, paralelo)...`,
         );
 
-        for (
-          const row of
-            existingRows
-        ) {
-          if (
-            failedRows.has(
-              row.row,
-            ) ||
-            !row.existingId
-          ) {
-            continue;
+        let doneJobs = 0;
+
+        await runPool(jobs, STOCK_CONCURRENCY, async (job) => {
+          const { error } = await supabase.rpc("adjust_stock", {
+            _branch_id: branchId,
+            _product_id: job.productId,
+            _quantity: job.delta,
+            _notes: job.note,
+          });
+
+          if (error && !failedRows.has(job.row)) {
+            failedRows.set(job.row, error.message);
           }
 
-          const {
-            data: current,
-            error:
-              currentError,
-          } =
-            await supabase.rpc(
-              "get_shared_product_stock",
-              {
-                _product_id:
-                  row.existingId,
-              },
-            );
-
-          if (
-            currentError
-          ) {
-            failedRows.set(
-              row.row,
-              currentError.message,
-            );
-
-            continue;
-          }
-
-          const currentRow =
-            Array.isArray(
-              current,
-            )
-              ? current[0]
-              : current;
-
-          const currentStock =
-            Number(
-              currentRow?.stock ??
-                0,
-            );
-
-          const targetStock =
-            Number(
-              row.stock,
-            );
-
-          const delta =
-            targetStock -
-            currentStock;
-
-          if (
-            delta !== 0
-          ) {
-            const {
-              error,
-            } =
-              await supabase.rpc(
-                "adjust_stock",
-                {
-                  _branch_id:
-                    branchId,
-
-                  _product_id:
-                    row.existingId,
-
-                  _quantity:
-                    delta,
-
-                  _notes:
-                    "Actualización de stock por importación",
-                },
-              );
-
-            if (error) {
-              failedRows.set(
-                row.row,
-                error.message,
-              );
-
-              continue;
-            }
-          }
-
-          /*
-           * Actualizar límites centrales.
-           */
-
-          const {
-            error:
-              limitError,
-          } =
-            await supabase.rpc(
-              "set_shared_inventory_limits",
-              {
-                _product_id:
-                  row.existingId,
-
-                _min_stock:
-                  Number(
-                    row.minimo,
-                  ) || 0,
-
-                ...(row.maximo === null || row.maximo === undefined ? {} : { _max_stock: Number(row.maximo) }),
-              },
-            );
-
-          if (
-            limitError &&
-            !failedRows.has(
-              row.row,
-            )
-          ) {
-            failedRows.set(
-              row.row,
-              limitError.message,
+          doneJobs += 1;
+          if (doneJobs % 25 === 0 || doneJobs === jobs.length) {
+            setPhase(
+              `Aplicando stock… ${doneJobs}/${jobs.length}`,
             );
           }
-        }
+        });
 
         bump();
       }
