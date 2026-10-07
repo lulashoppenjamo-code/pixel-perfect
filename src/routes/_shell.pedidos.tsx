@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+
+/**
+ * BLOQUE 12 — Visual Pedidos online.
+ * Solo presentación (+ acciones en móvil que ya existían en desktop).
+ * Sin tocar create/fulfill/cancel RPC ni inventario.
+ */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -686,7 +692,7 @@ function PedidosPage() {
             </Button>
 
             <Button
-              className="min-h-11 touch-manipulation"
+              className="min-h-11 touch-manipulation rounded-xl bg-[#34a853] font-bold text-white shadow-sm hover:bg-[#2d8f47]"
               disabled={
                 !isManager ||
                 loadingInventory ||
@@ -701,44 +707,44 @@ function PedidosPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-4">
-        <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal sm:text-muted-foreground">
-              Pedidos activos
+      <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
+              Activos
             </p>
-            <p className="mt-1 text-xl font-bold text-[#1a73e8] sm:text-2xl">
+            <p className="mt-1 text-lg font-bold text-[#1a73e8] sm:text-xl">
               {pendingOrders}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal sm:text-muted-foreground">
-              Valor reservado
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
+              Reservado
             </p>
-            <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
+            <p className="mt-1 text-lg font-bold text-[#212121] sm:text-xl">
               {money(reservedValue)}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              Productos disponibles
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
+              Disponibles
             </p>
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-lg font-bold text-[#212121] sm:text-xl">
               {selectableProducts.length}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">
+      <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <CardHeader className="border-b border-[#f0f0f0] pb-3">
+          <CardTitle className="text-base font-bold text-[#212121]">
             Órdenes recientes
           </CardTitle>
         </CardHeader>
@@ -748,45 +754,89 @@ function PedidosPage() {
           {/* Móvil */}
           <div className="grid gap-2.5 lg:hidden">
             {loadingOrders ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Cargando pedidos...
-              </p>
+              <div className="rounded-2xl border border-[#e0e0e0] bg-white py-12 text-center shadow-sm">
+                <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
+                <p className="text-sm font-medium text-[#757575]">Cargando pedidos…</p>
+              </div>
             ) : orders.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Aún no hay pedidos online.
-              </p>
+              <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm">
+                <Store className="mx-auto mb-3 h-10 w-10 text-[#c5cad3]" />
+                <p className="text-sm font-bold text-[#212121]">
+                  Aún no hay pedidos online
+                </p>
+                <p className="mt-1 text-xs text-[#9e9e9e]">
+                  Crea uno con el botón Nuevo pedido
+                </p>
+              </div>
             ) : (
-              orders.map((order) => (
+              orders.map((order) => {
+                const canAct =
+                  order.status !== "delivered" &&
+                  order.status !== "cancelled";
+                return (
                 <div
                   key={order.id}
-                  className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                  className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm active:bg-[#fafafa]"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[15px] font-bold text-[#212121]">
-                        {order.customer_name ?? "Cliente online"}
-                      </p>
-                      <p className="mt-0.5 text-xs text-[#757575]">
-                        {shortDate(order.created_at)}
-                        {order.customer_phone
-                          ? ` · ${order.customer_phone}`
-                          : ""}
-                      </p>
-                      {order.delivery_address ? (
-                        <p className="mt-0.5 truncate text-[11px] text-[#9e9e9e]">
-                          {order.delivery_address}
-                        </p>
-                      ) : null}
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8]">
+                      <Store className="h-5 w-5" strokeWidth={1.75} />
                     </div>
-                    {statusBadge(order.status)}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-[15px] font-bold text-[#212121]">
+                            {order.customer_name ?? "Cliente online"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-[#9e9e9e]">
+                            {shortDate(order.created_at)}
+                            {order.customer_phone
+                              ? ` · ${order.customer_phone}`
+                              : ""}
+                          </p>
+                          {order.delivery_address ? (
+                            <p className="mt-0.5 truncate text-[11px] text-[#9e9e9e]">
+                              {order.delivery_address}
+                            </p>
+                          ) : null}
+                        </div>
+                        {statusBadge(order.status)}
+                      </div>
+                      <p className="mt-2 text-base font-bold text-[#1a73e8]">
+                        {money(Number(order.total))}
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-2 flex items-center justify-between border-t border-[#eeeeee] pt-2">
-                    <span className="text-base font-bold text-[#1a73e8]">
-                      {money(Number(order.total))}
-                    </span>
-                  </div>
+                  {canAct && isManager && (
+                    <div className="mt-3 flex gap-2 border-t border-[#f0f0f0] pt-2.5">
+                      <Button
+                        size="sm"
+                        className="h-10 flex-1 rounded-lg bg-[#34a853] text-xs font-bold text-white hover:bg-[#2d8f47]"
+                        disabled={
+                          fulfill.isPending || cancel.isPending
+                        }
+                        onClick={() => fulfill.mutate(order.id)}
+                      >
+                        <Check className="mr-1 h-3.5 w-3.5" />
+                        Entregar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-10 flex-1 rounded-lg border-[#e0e0e0] text-xs"
+                        disabled={
+                          fulfill.isPending || cancel.isPending
+                        }
+                        onClick={() => cancel.mutate(order.id)}
+                      >
+                        <X className="mr-1 h-3.5 w-3.5" />
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
                 </div>
-              ))
+                );
+              })
             )}
           </div>
 
