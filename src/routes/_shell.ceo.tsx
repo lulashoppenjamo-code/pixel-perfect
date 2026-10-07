@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+
+/**
+ * BLOQUE 14 — Visual CEO IA.
+ * Solo presentación. Sin tocar análisis, cost_total ni shared inventory.
+ */
 import { useQuery } from "@tanstack/react-query";
 import {
   Bot,
@@ -1471,7 +1476,7 @@ function CeoPage() {
                   suggestion,
                 )
               }
-              className="rounded-full border border-[#e0e0e0] bg-white px-3 py-1.5 text-[11px] font-medium text-[#616161] shadow-sm transition-colors hover:border-[#1a73e8] hover:text-[#1a73e8]"
+              className="rounded-full border border-[#e0e0e0] bg-white px-3 py-1.5 text-[11px] font-medium text-[#616161] shadow-sm transition-colors active:scale-[0.98] hover:border-[#1a73e8] hover:bg-[#e8f0fe] hover:text-[#1a73e8]"
             >
               <Sparkles className="mr-1 inline h-3 w-3" />
               {
@@ -1486,10 +1491,10 @@ function CeoPage() {
           CHAT
       ======================================================= */}
 
-      <Card className="flex min-h-0 flex-1 flex-col">
-        <CardHeader className="shrink-0 border-b py-3">
-          <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
-            <Bot className="h-4 w-4" />
+      <Card className="flex min-h-0 flex-1 flex-col rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <CardHeader className="shrink-0 border-b border-[#f0f0f0] py-3">
+          <CardTitle className="flex items-center gap-2 text-sm font-bold text-[#212121]">
+            <Bot className="h-4 w-4 text-[#1a73e8]" />
             Inteligencia de negocio
             <Badge
               variant="secondary"
@@ -1588,18 +1593,18 @@ function MiniKpi({
   value: string;
 }) {
   return (
-    <Card className="border-[#e0e0e0] shadow-sm">
+    <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
       <CardContent className="flex items-center gap-3 p-3 sm:p-4">
-        <div className="rounded-xl bg-[#e8f0fe] p-2">
-          <Icon className="h-5 w-5 text-[#1a73e8]" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe]">
+          <Icon className="h-5 w-5 text-[#1a73e8]" strokeWidth={1.75} />
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-xs sm:normal-case sm:tracking-normal sm:text-muted-foreground">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
             {label}
           </p>
 
-          <p className="truncate text-base font-bold text-[#212121] sm:text-lg">
+          <p className="truncate text-base font-bold text-[#1a73e8] sm:text-lg">
             {value}
           </p>
         </div>
