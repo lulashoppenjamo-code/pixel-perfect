@@ -11,6 +11,11 @@ import {
 } from "lucide-react";
 
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+
+/**
+ * BLOQUE 7 — Visual Gastos.
+ * Solo presentación. Sin tocar mutaciones, caja abierta ni permisos.
+ */
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -604,51 +609,49 @@ function GastosPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3 sm:gap-4">
-        <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
               Total filtrado
             </p>
-            <p className="mt-1 text-xl font-bold text-[#c62828] sm:text-2xl">
+            <p className="mt-1 text-base font-bold text-[#c62828] sm:text-xl">
               {money(totalFiltered)}
             </p>
-            <p className="mt-0.5 text-[11px] text-[#9e9e9e]">
+            <p className="mt-0.5 text-[10px] text-[#9e9e9e]">
               {filteredExpenses.length} gasto
               {filteredExpenses.length === 1 ? "" : "s"}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
               Efectivo
             </p>
-            <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
+            <p className="mt-1 text-base font-bold text-[#212121] sm:text-xl">
               {money(totalCash)}
             </p>
           </CardContent>
         </Card>
 
-        <Card className="border-[#e0e0e0] shadow-sm">
-          <CardContent className="p-3.5 sm:pt-6 sm:p-6">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-[#757575] sm:text-sm sm:normal-case sm:tracking-normal">
-              Tarjeta + transfer.
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
+              Otros
             </p>
-            <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
-              {money(
-                totalCard + totalTransfer,
-              )}
+            <p className="mt-1 text-base font-bold text-[#212121] sm:text-xl">
+              {money(totalCard + totalTransfer)}
             </p>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid max-w-full gap-6 overflow-x-hidden lg:grid-cols-[360px_1fr]">
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle className="text-base">
+        <Card className="h-fit rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardHeader className="border-b border-[#f0f0f0] pb-3">
+            <CardTitle className="text-base font-bold text-[#212121]">
               {editingId
                 ? "Editar gasto"
                 : "Nuevo gasto"}
@@ -669,7 +672,7 @@ function GastosPage() {
                   }))
                 }
                 placeholder="Ej. Luz del local"
-                className="h-11"
+                className="h-11 rounded-xl border-[#e0e0e0]"
                 disabled={
                   save.isPending ||
                   tableMissing
@@ -863,7 +866,7 @@ function GastosPage() {
               )}
 
               <Button
-                className="h-11 flex-1 gap-2 rounded-xl bg-[#43a047] text-[15px] font-semibold text-white hover:bg-[#388e3c]"
+                className="h-12 flex-1 gap-2 rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-sm hover:bg-[#2d8f47] active:scale-[0.98]"
                 disabled={
                   save.isPending ||
                   tableMissing ||
@@ -894,14 +897,14 @@ function GastosPage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="space-y-4">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardHeader className="space-y-4 border-b border-[#f0f0f0] pb-3">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle className="text-base">
+              <CardTitle className="text-base font-bold text-[#212121]">
                 Historial de gastos
               </CardTitle>
 
-              <span className="text-sm font-semibold text-destructive">
+              <span className="text-sm font-bold text-[#c62828]">
                 {money(totalFiltered)}
               </span>
             </div>
@@ -1041,13 +1044,21 @@ function GastosPage() {
                   filteredExpenses.map((expense) => (
                     <div
                       key={expense.id}
-                      className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                      className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm active:bg-[#fafafa]"
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#fce4ec] text-[#c62828]">
+                          <Receipt className="h-5 w-5" strokeWidth={1.75} />
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <p className="break-words text-[15px] font-bold text-[#212121]">
-                            {expense.concept}
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="break-words text-[15px] font-bold leading-snug text-[#212121]">
+                              {expense.concept}
+                            </p>
+                            <p className="shrink-0 text-base font-bold text-[#c62828]">
+                              {money(Number(expense.amount))}
+                            </p>
+                          </div>
                           <p className="mt-0.5 text-xs text-[#757575]">
                             {shortDate(expense.expense_date)}
                             {" · "}
@@ -1064,9 +1075,6 @@ function GastosPage() {
                               : ""}
                           </p>
                         </div>
-                        <p className="shrink-0 text-base font-bold text-[#c62828]">
-                          {money(Number(expense.amount))}
-                        </p>
                       </div>
                       <div className="mt-3 flex gap-1.5 border-t border-[#eeeeee] pt-2.5">
                         <Button
