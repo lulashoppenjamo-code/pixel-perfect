@@ -1,11 +1,11 @@
 /**
- * Import / Export Excel — Inventario compartido LULA OS
+ * Import / Export Excel — Inventario compartido LULA OS (RÁPIDO)
  *
- * IMPORTANTE:
- * - shared_inventory es la existencia real.
- * - branch_id solamente identifica quién/desde qué sucursal
- *   realizó el movimiento.
- * - Nunca se escribe directamente en la tabla legacy inventory.
+ * Usa RPC bulk_import_products por lotes de 500:
+ * categorías, productos, precios, costos, códigos y stock central.
+ *
+ * Requiere migración:
+ * supabase/migrations/20261007220000_bulk_import_products.sql
  */
 
 import { useRef, useState } from "react";
@@ -27,16 +27,13 @@ import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
 
 import { Button } from "@/components/ui/button";
-
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
 import { Label } from "@/components/ui/label";
-
 import {
   Select,
   SelectContent,
@@ -44,7 +41,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import { Badge } from "@/components/ui/badge";
 
 import {
@@ -58,234 +54,43 @@ import {
   type ImportAction,
 } from "@/lib/excel";
 
-const CHUNK_SIZE = 500;
+const BATCH_SIZE = 500;
 
-/** Movimientos de stock en paralelo por oleada */
-const STOCK_CONCURRENCY = 100;
-
-/** Tamaño de oleada visible en progreso */
-const STOCK_BATCH = 500;
-
-function chunkArray<T>(
-  array: T[],
-  size: number,
-): T[][] {
+function chunkArray<T>(array: T[], size: number): T[][] {
   const result: T[][] = [];
-
-  for (
-    let index = 0;
-    index < array.length;
-    index += size
-  ) {
-    result.push(
-      array.slice(index, index + size),
-    );
+  for (let i = 0; i < array.length; i += size) {
+    result.push(array.slice(i, i + size));
   }
-
   return result;
 }
 
-
-async function runPool<T>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T) => Promise<void>,
-): Promise<void> {
-  if (!items.length) return;
-
-  let index = 0;
-
-  const runners = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    async () => {
-      while (index < items.length) {
-        const current = index;
-        index += 1;
-        await worker(items[current]!);
-      }
-    },
-  );
-
-  await Promise.all(runners);
-}
-
-function wantsProductPatch(
-  action: ImportAction,
-) {
-  return (
-    action === "update_all" ||
-    action === "update_data" ||
-    action === "update_price_cost"
-  );
-}
-
-async function bulkWriteProducts(
-  items: {
-    payload: Record<string, unknown>;
-    ref: ProductImportRow;
-  }[],
-  mode: "insert" | "upsert",
-  failedRows: Map<number, string>,
-  onChunkDone: () => void,
-) {
-  for (
-    const group of chunkArray(
-      items,
-      CHUNK_SIZE,
-    )
-  ) {
-    const payload = group.map(
-      (item) => item.payload,
-    );
-
-    const result =
-      mode === "upsert"
-        ? await supabase
-            .from("products")
-            .upsert(
-              payload as never,
-              {
-                onConflict: "id",
-              },
-            )
-        : await supabase
-            .from("products")
-            .insert(
-              payload as never,
-            );
-
-    if (!result.error) {
-      onChunkDone();
-      continue;
-    }
-
-    for (const item of group) {
-      const single =
-        mode === "upsert"
-          ? await supabase
-              .from("products")
-              .upsert(
-                item.payload as never,
-                {
-                  onConflict: "id",
-                },
-              )
-          : await supabase
-              .from("products")
-              .insert(
-                item.payload as never,
-              );
-
-      if (
-        single.error &&
-        !failedRows.has(item.ref.row)
-      ) {
-        failedRows.set(
-          item.ref.row,
-          single.error.message,
-        );
-      }
-    }
-
-    onChunkDone();
-  }
-}
-
 export function ImportExportPanel() {
-  const {
-    isManager,
-    isAdmin,
-    profile,
-  } = useAuth();
-
-  const {
-    branchId: activeBranchId,
-    branches,
-  } = useBranch();
-
+  const { isManager, isAdmin, profile } = useAuth();
+  const { branchId: activeBranchId, branches } = useBranch();
   const qc = useQueryClient();
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const fileRef =
-    useRef<HTMLInputElement>(null);
-
-  const [rows, setRows] = useState<
-    ProductImportRow[]
+  const [rows, setRows] = useState<ProductImportRow[]>([]);
+  const [action, setAction] = useState<ImportAction>("update_all");
+  const [parsing, setParsing] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [phase, setPhase] = useState("");
+  const [lastFailures, setLastFailures] = useState<
+    { row: number; nombre: string; message: string }[]
   >([]);
-
-  const [action, setAction] =
-    useState<ImportAction>(
-      "update_all",
-    );
-
-  const [parsing, setParsing] =
-    useState(false);
-
-  const [progress, setProgress] =
-    useState({
-      current: 0,
-      total: 0,
-    });
-
-  const [phase, setPhase] =
-    useState("");
-
-  const [lastFailures, setLastFailures] =
-    useState<
-      {
-        row: number;
-        nombre: string;
-        message: string;
-      }[]
-    >([]);
-
-  /*
-   * ============================================================
-   * SUCURSAL PARA EL MOVIMIENTO
-   *
-   * Prioridad:
-   * 1. Sucursal activa del selector (owner/admin/manager)
-   * 2. Sucursal principal del perfil
-   * 3. Primera sucursal activa (solo owner/admin)
-   *
-   * El stock sigue siendo central (shared_inventory).
-   * branch_id solo contextualiza el movimiento.
-   * ============================================================
-   */
 
   const branchId =
     activeBranchId ??
     profile?.branch_id ??
-    (isAdmin || isManager
-      ? branches[0]?.id ?? null
-      : null);
+    (isAdmin || isManager ? branches[0]?.id ?? null : null);
 
-  /*
-   * ============================================================
-   * PRODUCTOS
-   * ============================================================
-   */
-
-  const {
-    data: existingProducts = [],
-  } = useQuery({
-    queryKey: [
-      "import-existing-products-shared",
-    ],
-
+  const { data: existingProducts = [] } = useQuery({
+    queryKey: ["import-existing-products-shared"],
     queryFn: async () => {
-      const {
-        data,
-        error,
-      } = await supabase
+      const { data, error } = await supabase
         .from("products")
-        .select(
-          "id, name, sku, barcode",
-        );
-
-      if (error) {
-        throw error;
-      }
-
+        .select("id, name, sku, barcode");
+      if (error) throw error;
       return (data ?? []) as {
         id: string;
         name: string;
@@ -295,1292 +100,314 @@ export function ImportExportPanel() {
     },
   });
 
-  /*
-   * ============================================================
-   * CATEGORÍAS
-   * ============================================================
-   */
-
-  const {
-    data: categories = [],
-  } = useQuery({
-    queryKey: [
-      "import-categories",
-    ],
-
-    queryFn: async () => {
-      const {
-        data,
-        error,
-      } = await supabase
-        .from("categories")
-        .select(
-          "id, name",
-        );
-
-      if (error) {
-        throw error;
-      }
-
-      return data ?? [];
-    },
-  });
-
-  /*
-   * ============================================================
-   * ARCHIVO
-   * ============================================================
-   */
-
-  const onFile = async (
-    file: File,
-  ) => {
+  const onFile = async (file: File) => {
     setParsing(true);
-
     try {
-      const parsed =
-        await parseProductFile(
-          file,
-          existingProducts,
-        );
-
+      const parsed = await parseProductFile(file, existingProducts);
       setRows(parsed);
-
-      toast.success(
-        `${parsed.length} filas analizadas`,
-      );
+      toast.success(`${parsed.length} filas analizadas`);
     } catch (error) {
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Error al leer archivo",
+        error instanceof Error ? error.message : "Error al leer archivo",
       );
     } finally {
       setParsing(false);
     }
   };
 
-  /*
-   * ============================================================
-   * ESTADÍSTICAS
-   * ============================================================
-   */
-
   const stats = {
     total: rows.length,
-
-    valid: rows.filter(
-      (row) =>
-        row.status === "valid",
-    ).length,
-
-    existing: rows.filter(
-      (row) =>
-        row.status === "existing",
-    ).length,
-
-    error: rows.filter(
-      (row) =>
-        row.status === "error",
-    ).length,
+    valid: rows.filter((r) => r.status === "valid").length,
+    existing: rows.filter((r) => r.status === "existing").length,
+    error: rows.filter((r) => r.status === "error").length,
   };
-
-  /*
-   * ============================================================
-   * IMPORTACIÓN
-   * ============================================================
-   */
 
   const doImport = useMutation({
     mutationFn: async () => {
       if (!isManager) {
-        throw new Error(
-          "Sin permiso para importar",
-        );
+        throw new Error("Sin permiso para importar");
       }
-
-      /*
-       * Para registrar movimientos correctamente,
-       * necesitamos conocer la sucursal del usuario.
-       */
 
       if (!branchId) {
         throw new Error(
-          "No hay sucursal activa. Como administrador: ve a Ajustes → Sucursales, crea o activa una, y selecciónala arriba en el menú. Luego vuelve a importar.",
+          "No hay sucursal activa. Crea o selecciona una sucursal arriba y vuelve a intentar.",
         );
       }
 
-      const rejected =
-        rows.filter(
-          (row) =>
-            row.status ===
-            "error",
-        ).length;
-
-      const skippedRows =
-        rows.filter(
-          (row) =>
-            row.status ===
-              "existing" &&
-            action ===
-              "skip_existing",
-        );
-
-      const workable =
-        rows.filter(
-          (row) =>
-            row.status !==
-              "error" &&
-            !(
-              row.status ===
-                "existing" &&
-              action ===
-                "skip_existing"
-            ),
-        );
-
-      const failedRows =
-        new Map<
-          number,
-          string
-        >();
-
-      const existingRows =
-        workable.filter(
-          (row) =>
-            row.status ===
-              "existing" &&
-            row.existingId,
-        );
-
-      const newRows =
-        workable.filter(
-          (row) =>
-            !(
-              row.status ===
-                "existing" &&
-              row.existingId
-            ),
-        );
-
-      const existingChunks =
-        chunkArray(
-          existingRows,
-          CHUNK_SIZE,
-        ).length;
-
-      const newChunks =
-        chunkArray(
-          newRows,
-          CHUNK_SIZE,
-        ).length;
-
-      let totalOperations =
-        0;
-
-      if (
-        existingRows.length &&
-        wantsProductPatch(
-          action,
-        )
-      ) {
-        totalOperations +=
-          existingChunks;
-      }
-
-      if (newRows.length) {
-        totalOperations +=
-          newChunks;
-
-        totalOperations +=
-          newChunks;
-      }
-
-      if (
-        existingRows.length &&
-        (
-          action ===
-            "update_all" ||
-          action ===
-            "update_stock"
-        )
-      ) {
-        totalOperations +=
-          existingChunks;
-      }
-
-      setProgress({
-        current: 0,
-        total: Math.max(
-          totalOperations,
-          1,
-        ),
+      const workable = rows.filter((row) => {
+        if (row.status === "error") return false;
+        if (row.status === "existing" && action === "skip_existing") {
+          return false;
+        }
+        return true;
       });
 
-      const bump = () => {
-        setProgress(
-          (previous) => ({
-            ...previous,
-
-            current:
-              previous.current +
-              1,
-          }),
-        );
-      };
-
-      /*
-       * ========================================================
-       * CATEGORÍAS
-       * ========================================================
-       */
-
-      setPhase(
-        "Preparando categorías...",
-      );
-
-      const categoryByName =
-        new Map(
-          categories.map(
-            (category) => [
-              category.name.toLowerCase(),
-              category.id,
-            ],
-          ),
-        );
-
-      const missingCategories =
-        new Map<
-          string,
-          string
-        >();
-
-      for (
-        const row of workable
-      ) {
-        if (
-          row.categoria &&
-          !categoryByName.has(
-            row.categoria.toLowerCase(),
-          )
-        ) {
-          missingCategories.set(
-            row.categoria.toLowerCase(),
-            row.categoria,
-          );
-        }
+      if (!workable.length) {
+        throw new Error("No hay filas válidas para importar");
       }
 
-      if (
-        missingCategories.size
-      ) {
-        const categoryRows =
-          Array.from(
-            missingCategories.values(),
-          ).map(
-            (name) => ({
-              name,
-            }),
-          );
+      const batches = chunkArray(workable, BATCH_SIZE);
+      setProgress({ current: 0, total: batches.length });
 
-        for (
-          const group of
-            chunkArray(
-              categoryRows,
-              CHUNK_SIZE,
-            )
-        ) {
-          const {
-            data,
-            error,
-          } = await supabase
-            .from("categories")
-            .insert(group)
-            .select(
-              "id, name",
-            );
+      let created = 0;
+      let updated = 0;
+      let stockSet = 0;
+      const failures: { row: number; nombre: string; message: string }[] =
+        [];
 
-          if (
-            !error &&
-            data
-          ) {
-            for (
-              const category of
-                data
-            ) {
-              categoryByName.set(
-                category.name.toLowerCase(),
-                category.id,
-              );
-            }
-          } else {
-            for (
-              const category of
-                group
-            ) {
-              const {
-                data: created,
-              } =
-                await supabase
-                  .from(
-                    "categories",
-                  )
-                  .insert(
-                    category,
-                  )
-                  .select(
-                    "id, name",
-                  )
-                  .single();
-
-              if (
-                created
-              ) {
-                categoryByName.set(
-                  created.name.toLowerCase(),
-                  created.id,
-                );
-              }
-            }
-          }
-        }
-      }
-
-      const categoryIdFor = (
-        row: ProductImportRow,
-      ) =>
-        row.categoria
-          ? categoryByName.get(
-              row.categoria.toLowerCase(),
-            ) ?? null
-          : null;
-
-      /*
-       * ========================================================
-       * PRODUCTOS EXISTENTES
-       * ========================================================
-       */
-
-      const existingIds =
-        existingRows.map(
-          (row) =>
-            row.existingId!,
-        );
-
-      const currentById =
-        new Map<
-          string,
-          string
-        >();
-
-      if (
-        existingIds.length
-      ) {
-        const {
-          data:
-            currentProducts,
-        } =
-          await supabase
-            .from(
-              "products",
-            )
-            .select(
-              "id, name",
-            )
-            .in(
-              "id",
-              existingIds,
-            );
-
-        for (
-          const product of
-            currentProducts ??
-            []
-        ) {
-          currentById.set(
-            product.id,
-            product.name,
-          );
-        }
-      }
-
-      /*
-       * ========================================================
-       * ACTUALIZAR PRODUCTOS
-       * ========================================================
-       */
-
-      if (
-        existingRows.length &&
-        wantsProductPatch(
-          action,
-        )
-      ) {
+      for (let i = 0; i < batches.length; i++) {
+        const batch = batches[i]!;
         setPhase(
-          "Actualizando productos (lotes de 500)...",
+          `Importando lote ${i + 1}/${batches.length} (${batch.length} productos)...`,
         );
 
-        const items =
-          existingRows.map(
-            (row) => {
-              const patch: Record<
-                string,
-                unknown
-              > = {
-                id:
-                  row.existingId,
+        const payload = batch.map((row) => {
+          // Si skip price/stock según action
+          const includePrice =
+            action === "update_all" ||
+            action === "update_price_cost" ||
+            row.status === "valid";
+          const includeStock =
+            action === "update_all" ||
+            action === "update_stock" ||
+            row.status === "valid";
+          const includeData =
+            action === "update_all" ||
+            action === "update_data" ||
+            row.status === "valid";
 
-                name:
-                  currentById.get(
-                    row.existingId!,
-                  ) ??
-                  row.nombre,
-              };
+          return {
+            nombre: includeData ? row.nombre : row.nombre,
+            sku: includeData ? row.sku : row.sku,
+            codigo_barras: includeData ? row.codigo_barras : row.codigo_barras,
+            categoria: includeData ? row.categoria : row.categoria,
+            precio_venta: includePrice ? row.precio_venta : row.precio_venta,
+            costo: includePrice ? row.costo : row.costo,
+            stock: includeStock ? row.stock : row.stock,
+            minimo: row.minimo,
+            maximo: row.maximo,
+            descripcion: row.descripcion,
+          };
+        });
 
-              if (
-                action ===
-                  "update_all" ||
-                action ===
-                  "update_data"
-              ) {
-                patch["name"] =
-                  row.nombre;
-
-                patch["sku"] =
-                  row.sku ||
-                  null;
-
-                patch["barcode"] =
-                  row.codigo_barras ||
-                  null;
-
-                patch["description"] =
-                  row.descripcion ||
-                  null;
-
-                patch["category_id"] =
-                  categoryIdFor(
-                    row,
-                  );
-              }
-
-              if (
-                action ===
-                  "update_all" ||
-                action ===
-                  "update_price_cost"
-              ) {
-                patch["price"] =
-                  row.precio_venta;
-
-                patch["cost"] =
-                  row.costo;
-              }
-
-              return {
-                payload: patch,
-                ref: row,
-              };
-            },
-          );
-
-        await bulkWriteProducts(
-          items,
-          "upsert",
-          failedRows,
-          bump,
-        );
-      }
-
-      /*
-       * ========================================================
-       * CREAR PRODUCTOS
-       * ========================================================
-       */
-
-      const newIdByRow =
-        new Map<
-          number,
-          string
-        >();
-
-      if (
-        newRows.length
-      ) {
-        setPhase(
-          "Creando productos (lotes de 500)...",
-        );
-
-        const items =
-          newRows.map(
-            (row) => {
-              const id =
-                crypto.randomUUID();
-
-              newIdByRow.set(
-                row.row,
-                id,
-              );
-
-              return {
-                payload: {
-                  id,
-
-                  name:
-                    row.nombre,
-
-                  sku:
-                    row.sku ||
-                    null,
-
-                  barcode:
-                    row.codigo_barras ||
-                    null,
-
-                  price:
-                    row.precio_venta,
-
-                  cost:
-                    row.costo,
-
-                  description:
-                    row.descripcion ||
-                    null,
-
-                  category_id:
-                    categoryIdFor(
-                      row,
-                    ),
-
-                  is_active:
-                    true,
-
-                  has_variants:
-                    false,
-
-                  tax_rate:
-                    0,
-                },
-
-                ref: row,
-              };
-            },
-          );
-
-        await bulkWriteProducts(
-          items,
-          "insert",
-          failedRows,
-          bump,
-        );
-      }
-
-      /*
-       * ========================================================
-       * STOCK (RÁPIDO)
-       *
-       * - Una sola lectura de inventario compartido
-       * - Ajustes en paralelo (STOCK_CONCURRENCY)
-       * - Sin set_shared_inventory_limits por fila en el bulk
-       *   (ralentiza mucho; los límites se pueden fijar después)
-       * ========================================================
-       */
-
-      const needsStock =
-        newRows.length > 0 ||
-        (existingRows.length > 0 &&
-          (action === "update_all" ||
-            action === "update_stock"));
-
-      if (needsStock) {
-        setPhase("Leyendo inventario actual (1 consulta)...");
-
-        const { data: stockSnapshot, error: stockSnapError } =
-          await (supabase as any).rpc("get_shared_inventory");
-
-        if (stockSnapError) {
-          throw stockSnapError;
-        }
-
-        const currentStockByProduct = new Map<string, number>();
-
-        for (const item of (stockSnapshot ?? []) as {
-          product_id: string;
-          variant_id: string | null;
-          stock: number;
-        }[]) {
-          if (item.variant_id) continue;
-          currentStockByProduct.set(
-            item.product_id,
-            Number(item.stock ?? 0),
-          );
-        }
-
-        type StockJob = {
-          row: number;
-          productId: string;
-          delta: number;
-          note: string;
-        };
-
-        const jobs: StockJob[] = [];
-
-        for (const row of newRows) {
-          if (failedRows.has(row.row)) continue;
-          const productId = newIdByRow.get(row.row);
-          if (!productId) continue;
-          const qty = Number(row.stock) || 0;
-          if (qty === 0) continue;
-          jobs.push({
-            row: row.row,
-            productId,
-            delta: qty,
-            note: "Stock inicial por importación",
-          });
-        }
-
-        if (
-          existingRows.length &&
-          (action === "update_all" || action === "update_stock")
-        ) {
-          for (const row of existingRows) {
-            if (failedRows.has(row.row) || !row.existingId) continue;
-            const currentStock =
-              currentStockByProduct.get(row.existingId) ?? 0;
-            const targetStock = Number(row.stock) || 0;
-            const delta = targetStock - currentStock;
-            if (delta === 0) continue;
-            jobs.push({
-              row: row.row,
-              productId: row.existingId,
-              delta,
-              note: "Actualización de stock por importación",
-            });
-          }
-        }
-
-        /*
-         * Oleadas de STOCK_BATCH (500) con STOCK_CONCURRENCY
-         * llamadas en paralelo dentro de cada oleada.
-         */
-        const totalBatches = Math.max(
-          1,
-          Math.ceil(jobs.length / STOCK_BATCH),
-        );
-
-        for (let b = 0; b < jobs.length; b += STOCK_BATCH) {
-          const batch = jobs.slice(b, b + STOCK_BATCH);
-          const batchNo = Math.floor(b / STOCK_BATCH) + 1;
-
-          setPhase(
-            `Stock lote ${batchNo}/${totalBatches} (${batch.length} productos, paralelo)...`,
-          );
-
-          await runPool(batch, STOCK_CONCURRENCY, async (job) => {
-            const { error } = await supabase.rpc("adjust_stock", {
-              _branch_id: branchId,
-              _product_id: job.productId,
-              _quantity: job.delta,
-              _notes: job.note,
-            });
-
-            if (error && !failedRows.has(job.row)) {
-              failedRows.set(job.row, error.message);
-            }
-          });
-        }
-
-        bump();
-      }
-
-      setPhase("");
-
-      setProgress(
-        (previous) => ({
-          ...previous,
-          current:
-            previous.total,
-        }),
-      );
-
-      const created =
-        newRows.filter(
-          (row) =>
-            !failedRows.has(
-              row.row,
-            ),
-        ).length;
-
-      const updated =
-        existingRows.filter(
-          (row) =>
-            !failedRows.has(
-              row.row,
-            ),
-        ).length;
-
-      const failures =
-        Array.from(
-          failedRows.entries(),
-        ).map(
-          ([
-            row,
-            message,
-          ]) => {
-            const reference =
-              workable.find(
-                (item) =>
-                  item.row ===
-                  row,
-              );
-
-            return {
-              row,
-
-              nombre:
-                reference?.nombre ??
-                "(sin nombre)",
-
-              message,
-            };
+        const { data, error } = await (supabase as any).rpc(
+          "bulk_import_products",
+          {
+            _items: payload,
+            _branch_id: branchId,
           },
         );
 
-      return {
-        created,
+        if (error) {
+          // Si la RPC no existe aún, error claro
+          if (
+            error.message?.includes("could not find") ||
+            error.code === "PGRST202"
+          ) {
+            throw new Error(
+              "Falta instalar la función bulk_import_products en Supabase. Ejecuta la migración SQL que te entregamos.",
+            );
+          }
+          throw error;
+        }
 
-        updated,
+        const result = data as {
+          created?: number;
+          updated?: number;
+          stock_set?: number;
+          errors?: { nombre?: string; error?: string }[];
+        };
 
-        skipped:
-          skippedRows.length,
+        created += Number(result.created ?? 0);
+        updated += Number(result.updated ?? 0);
+        stockSet += Number(result.stock_set ?? 0);
 
-        rejected,
+        for (const err of result.errors ?? []) {
+          failures.push({
+            row: 0,
+            nombre: err.nombre ?? "?",
+            message: err.error ?? "error",
+          });
+        }
 
-        failures,
-      };
-    },
-
-    onSuccess: (
-      result,
-    ) => {
-      setProgress({
-        current: 0,
-        total: 0,
-      });
-
-      setPhase("");
-
-      setLastFailures(
-        result.failures,
-      );
-
-      if (
-        !result.failures.length
-      ) {
-        toast.success(
-          `Importación completa: ${result.created} creados, ${result.updated} actualizados, ${result.skipped} omitidos, ${result.rejected} rechazados`,
-        );
-      } else {
-        toast.warning(
-          `Importación terminada con ${result.failures.length} error(es)`,
-        );
+        setProgress({ current: i + 1, total: batches.length });
       }
 
-      setRows([]);
-
-      void qc.invalidateQueries({
-        queryKey: [
-          "shared-inventory",
-        ],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: [
-          "pos-products-shared",
-        ],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: [
-          "pos-variant-inventory-shared",
-        ],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: [
-          "import-existing-products-shared",
-        ],
-      });
-    },
-
-    onError: (
-      error: Error,
-    ) => {
-      setProgress({
-        current: 0,
-        total: 0,
-      });
-
+      setLastFailures(failures);
       setPhase("");
 
-      toast.error(
-        error.message,
+      return { created, updated, stockSet, failures: failures.length };
+    },
+
+    onSuccess: (result) => {
+      toast.success(
+        `Listo: ${result.created} nuevos, ${result.updated} actualizados, stock en ${result.stockSet}` +
+          (result.failures ? ` · ${result.failures} con error` : ""),
       );
+
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["categories"] });
+      void qc.invalidateQueries({ queryKey: ["import-existing-products-shared"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
   });
 
-  /*
-   * ============================================================
-   * EXPORTAR
-   * ============================================================
-   */
-
-  const exportInventory =
-    async (
-      format:
-        | "xlsx"
-        | "csv",
-    ) => {
-      const {
-        data,
-        error,
-      } =
-        await supabase.rpc(
-          "get_shared_inventory",
-        );
-
-      if (error) {
-        toast.error(
-          error.message,
-        );
-
-        return;
-      }
-
-      const output =
-        (data ?? []).map(
-          (
-            item: {
-              product_name?: string;
-              sku?: string | null;
-              barcode?: string | null;
-              price?: number;
-              cost?: number;
-              stock?: number;
-              min_stock?: number;
-              max_stock?: number | null;
-            },
-          ) => ({
-            nombre:
-              item.product_name ??
-              "",
-
-            sku:
-              item.sku ??
-              "",
-
-            codigo_barras:
-              item.barcode ??
-              "",
-
-            precio_venta:
-              item.price ??
-              0,
-
-            costo:
-              item.cost ??
-              0,
-
-            stock:
-              item.stock ??
-              0,
-
-            minimo:
-              item.min_stock ??
-              0,
-
-            maximo:
-              item.max_stock ??
-              "",
-          }),
-        );
-
-      if (
-        format ===
-        "csv"
-      ) {
-        await downloadCsv(
-          "inventario-compartido.csv",
-          output,
-        );
-      } else {
-        await downloadWorkbook(
-          "inventario-compartido.xlsx",
-          [
-            {
-              name:
-                "Inventario",
-              rows: output,
-            },
-          ],
-        );
-      }
-
-      toast.success(
-        "Exportación lista",
-      );
-    };
-
-  /*
-   * ============================================================
-   * PERMISOS
-   * ============================================================
-   */
-
   if (!isManager) {
-    return (
-      <p className="text-sm text-muted-foreground">
-        Solo managers pueden
-        importar o exportar
-        inventario.
-      </p>
-    );
+    return null;
   }
 
-  /*
-   * ============================================================
-   * UI
-   * ============================================================
-   */
-
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
+    <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+      <CardHeader className="border-b border-[#f0f0f0] pb-3">
+        <CardTitle className="flex items-center gap-2 text-base font-bold text-[#212121]">
+          <FileSpreadsheet className="h-5 w-5 text-[#1a73e8]" />
+          Importar / Exportar inventario
+        </CardTitle>
+        <p className="text-xs text-[#757575]">
+          Importación masiva por lotes de {BATCH_SIZE}: categorías, códigos,
+          precios, costos y stock central en segundos.
+        </p>
+      </CardHeader>
 
-        {/* ======================================================
-            IMPORTAR
-        ====================================================== */}
+      <CardContent className="space-y-4 pt-4">
+        {!branchId && (
+          <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+            <p>
+              Selecciona una sucursal arriba (solo contextualiza el movimiento;
+              el stock es central).
+            </p>
+          </div>
+        )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Upload className="h-4 w-4" />
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 rounded-xl"
+            onClick={() => void downloadTemplate()}
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Plantilla
+          </Button>
 
-              Importar Excel / CSV
-            </CardTitle>
-          </CardHeader>
+          <Button
+            type="button"
+            variant="outline"
+            className="min-h-11 rounded-xl"
+            disabled={parsing}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            {parsing ? "Leyendo…" : "Elegir Excel"}
+          </Button>
 
-          <CardContent className="space-y-3">
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void onFile(f);
+            }}
+          />
+        </div>
 
-            <Button
-              variant="outline"
-              className="w-full gap-2"
-              onClick={() =>
-                void downloadTemplate()
-              }
-            >
-              <Download className="h-4 w-4" />
-
-              Descargar plantilla
-            </Button>
-
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={(
-                event,
-              ) => {
-                const file =
-                  event.target.files?.[0];
-
-                if (file) {
-                  void onFile(
-                    file,
-                  );
-                }
-
-                event.target.value =
-                  "";
-              }}
-            />
-
-            <Button
-              className="w-full gap-2"
-              disabled={parsing}
-              onClick={() =>
-                fileRef.current?.click()
-              }
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-
-              {parsing
-                ? "Analizando..."
-                : "Seleccionar archivo"}
-            </Button>
-
-            {doImport.isPending &&
-              progress.total >
-                0 && (
-                <div className="space-y-1">
-
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full bg-primary transition-all"
-                      style={{
-                        width: `${Math.min(
-                          100,
-                          (progress.current /
-                            progress.total) *
-                            100,
-                        )}%`,
-                      }}
-                    />
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    {phase ||
-                      "Importando..."}{" "}
-                    (
-                    {
-                      progress.current
-                    }
-                    /
-                    {
-                      progress.total
-                    }
-                    )
-                  </p>
-
-                </div>
+        {rows.length > 0 && (
+          <>
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="secondary">Total {stats.total}</Badge>
+              <Badge className="bg-[#e8f5e9] text-[#2e7d32]">
+                Nuevos {stats.valid}
+              </Badge>
+              <Badge className="bg-[#e8f0fe] text-[#1a73e8]">
+                Existentes {stats.existing}
+              </Badge>
+              {stats.error > 0 && (
+                <Badge className="bg-[#fce4ec] text-[#c2185b]">
+                  Errores {stats.error}
+                </Badge>
               )}
+            </div>
 
-            {!doImport.isPending &&
-              lastFailures.length >
-                0 && (
-                <div className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+            <div className="space-y-1.5">
+              <Label>Acción sobre existentes</Label>
+              <Select
+                value={action}
+                onValueChange={(v) => setAction(v as ImportAction)}
+              >
+                <SelectTrigger className="h-11 rounded-xl">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="update_all">
+                    Actualizar todo (datos + precio + stock)
+                  </SelectItem>
+                  <SelectItem value="update_stock">Solo stock</SelectItem>
+                  <SelectItem value="update_price_cost">
+                    Solo precio y costo
+                  </SelectItem>
+                  <SelectItem value="update_data">
+                    Solo datos (nombre, código, categoría)
+                  </SelectItem>
+                  <SelectItem value="skip_existing">
+                    Saltar existentes
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
 
-                  <p className="text-xs text-destructive">
-                    {
-                      lastFailures.length
-                    }{" "}
-                    fila(s) no
-                    se pudieron
-                    guardar.
-                  </p>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-auto gap-1 p-1 text-xs"
-                    onClick={() =>
-                      void downloadImportFailures(
-                        lastFailures,
-                      )
-                    }
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-
-                    Descargar
-                  </Button>
-
-                </div>
-              )}
-
-            {rows.length >
-              0 && (
-              <>
-
-                <div className="flex flex-wrap gap-2 text-sm">
-
-                  <Badge variant="secondary">
-                    {
-                      stats.total
-                    }{" "}
-                    filas
-                  </Badge>
-
-                  <Badge className="bg-emerald-600">
-                    {
-                      stats.valid
-                    }{" "}
-                    válidos
-                  </Badge>
-
-                  <Badge className="bg-amber-500">
-                    {
-                      stats.existing
-                    }{" "}
-                    existentes
-                  </Badge>
-
-                  <Badge variant="destructive">
-                    {
-                      stats.error
-                    }{" "}
-                    errores
-                  </Badge>
-
-                </div>
-
-                <div>
-                  <Label>
-                    Productos
-                    existentes
-                  </Label>
-
-                  <Select
-                    value={
-                      action
-                    }
-                    onValueChange={(
-                      value,
-                    ) =>
-                      setAction(
-                        value as ImportAction,
-                      )
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-
-                    <SelectContent>
-
-                      <SelectItem value="update_all">
-                        Actualizar todo
-                      </SelectItem>
-
-                      <SelectItem value="update_stock">
-                        Solo stock
-                      </SelectItem>
-
-                      <SelectItem value="update_price_cost">
-                        Precio y costo
-                      </SelectItem>
-
-                      <SelectItem value="update_data">
-                        Datos del producto
-                      </SelectItem>
-
-                      <SelectItem value="skip_existing">
-                        No modificar existentes
-                      </SelectItem>
-
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {stats.error >
-                  0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="gap-1"
-                    onClick={() =>
-                      void downloadImportErrors(
-                        rows,
-                      )
-                    }
-                  >
-                    <AlertTriangle className="h-3.5 w-3.5" />
-
-                    Descargar errores
-                  </Button>
-                )}
-
-                <div className="flex gap-2">
-
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() =>
-                      setRows(
-                        [],
-                      )
-                    }
-                  >
-                    Cancelar
-                  </Button>
-
-                  <Button
-                    className="flex-1"
-                    disabled={
-                      doImport.isPending ||
-                      stats.valid +
-                        stats.existing ===
-                        0
-                    }
-                    onClick={() => {
-                      if (
-                        !confirm(
-                          `Esta operación modificará hasta ${
-                            stats.valid +
-                            stats.existing
-                          } productos. ¿Continuar?`,
-                        )
-                      ) {
-                        return;
-                      }
-
-                      doImport.mutate();
-                    }}
-                  >
-                    {doImport.isPending
-                      ? "Importando..."
-                      : "Importar"}
-                  </Button>
-
-                </div>
-
-              </>
+            {phase && (
+              <p className="text-sm font-medium text-[#1a73e8]">{phase}</p>
+            )}
+            {progress.total > 0 && (
+              <p className="text-xs text-[#757575]">
+                Lote {progress.current} / {progress.total}
+              </p>
             )}
 
-          </CardContent>
-        </Card>
-
-        {/* ======================================================
-            EXPORTAR
-        ====================================================== */}
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Download className="h-4 w-4" />
-
-              Exportar
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="flex flex-col gap-2">
-
             <Button
-              variant="outline"
-              onClick={() =>
-                void exportInventory(
-                  "xlsx",
-                )
-              }
+              type="button"
+              className="min-h-12 w-full rounded-xl bg-[#34a853] text-[15px] font-bold text-white hover:bg-[#2d8f47]"
+              disabled={doImport.isPending || !branchId}
+              onClick={() => doImport.mutate()}
             >
-              Inventario Excel
+              {doImport.isPending
+                ? "Importando…"
+                : `Importar ahora (${stats.valid + (action === "skip_existing" ? 0 : stats.existing)} filas)`}
             </Button>
 
-            <Button
-              variant="outline"
-              onClick={() =>
-                void exportInventory(
-                  "csv",
-                )
-              }
-            >
-              Inventario CSV
-            </Button>
+            {stats.error > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl"
+                onClick={() => void downloadImportErrors(rows)}
+              >
+                Descargar filas con error
+              </Button>
+            )}
 
-          </CardContent>
-        </Card>
-
-      </div>
-    </div>
+            {lastFailures.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-xl"
+                onClick={() => void downloadImportFailures(lastFailures)}
+              >
+                Descargar fallas del último import
+              </Button>
+            )}
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }
