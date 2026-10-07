@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+
+/**
+ * BLOQUE 13 — Visual Ajustes.
+ * Solo presentación. Sin tocar roles, RPC admin ni settings.
+ */
 import {
   useMutation,
   useQuery,
@@ -1254,9 +1259,9 @@ function AjustesPage() {
           value="sucursales"
           className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-[1fr_340px]"
         >
-          <Card>
-            <CardHeader>
-              <CardTitle>
+          <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+            <CardHeader className="border-b border-[#f0f0f0] pb-3">
+              <CardTitle className="text-base font-bold text-[#212121]">
                 Sucursales activas
               </CardTitle>
             </CardHeader>
@@ -1267,7 +1272,7 @@ function AjustesPage() {
                   (item) => (
                     <div
                       key={item.id}
-                      className="rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm"
+                      className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm active:bg-[#fafafa]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -1413,7 +1418,7 @@ function AjustesPage() {
 
           <Card className="h-fit">
             <CardHeader>
-              <CardTitle>
+              <CardTitle className="text-base font-bold text-[#212121]">
                 Nueva sucursal
               </CardTitle>
             </CardHeader>
@@ -1500,7 +1505,7 @@ function AjustesPage() {
               </div>
 
               <Button
-                className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-[15px] font-semibold hover:bg-[#1557b0]"
+                className="min-h-12 w-full rounded-xl bg-[#34a853] font-bold text-white hover:bg-[#2d8f47] touch-manipulation rounded-xl bg-[#1a73e8] text-[15px] font-semibold hover:bg-[#1557b0]"
                 disabled={
                   !isAdmin ||
                   !branch.name.trim() ||
