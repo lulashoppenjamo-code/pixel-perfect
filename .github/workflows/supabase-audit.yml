@@ -1,0 +1,70 @@
+name: Supabase Migration Audit
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_ID: hfvdfttrguybgjyinanp
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Verify migration filenames
+        shell: bash
+        run: |
+          echo "=== MIGRATIONS IN REPOSITORY ==="
+          find supabase/migrations -type f -maxdepth 2 -print | sort
+
+          echo ""
+          echo "=== INVALID MIGRATION PATHS ==="
+
+          find supabase/migrations -type f | while read file; do
+            base="$(basename "$file")"
+
+            if [[ "$file" != supabase/migrations/* ]]; then
+              echo "INVALID PATH: $file"
+              continue
+            fi
+
+            if [[ "$file" == supabase/migrations/supabase/* ]]; then
+              echo "INVALID NESTED PATH: $file"
+              continue
+            fi
+
+            if [[ ! "$base" =~ ^[0-9]{14}_.+\.sql$ ]]; then
+              echo "INVALID FILENAME: $file"
+            fi
+          done
+
+      - name: Link Supabase project
+        run: |
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Compare migration history
+        run: |
+          echo "=== REMOTE VS LOCAL MIGRATION HISTORY ==="
+          supabase migration list
+
+      - name: Preview pending migrations
+        run: |
+          echo "=== DRY RUN ==="
+          supabase db push --dry-run
