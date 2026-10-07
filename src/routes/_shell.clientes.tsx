@@ -9,6 +9,9 @@
  *
  * Los abonos pasan exclusivamente por:
  * register_credit_payment()
+ *
+ * BLOQUE 8 — Visual Clientes.
+ * Solo presentación. Sin tocar abonos, crédito ni CRUD lógico.
  */
 
 import { useMemo, useState } from "react";
@@ -665,92 +668,82 @@ function ClientesPage() {
         </Card>
       )}
 
-      <div className="grid grid-cols-2 gap-2.5 sm:gap-3 xl:grid-cols-4">
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-2.5 xl:grid-cols-4">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="flex items-center justify-between p-3 sm:p-4">
             <div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
                 Clientes
               </p>
-
-              <p className="mt-1 text-2xl font-semibold">
+              <p className="mt-1 text-xl font-bold text-[#1a73e8] sm:text-2xl">
                 {dashboard.totalCustomers}
               </p>
-
-              <p className="text-xs text-muted-foreground">
-                registrados
-              </p>
+              <p className="text-[10px] text-[#9e9e9e]">registrados</p>
             </div>
-
-            <Users className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f0fe]">
+              <Users className="h-4 w-4 text-[#1a73e8]" />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="flex items-center justify-between p-3 sm:p-4">
             <div>
-              <p className="text-xs text-muted-foreground">
-                Clientes activos
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
+                Activos
               </p>
-
-              <p className="mt-1 text-2xl font-semibold">
+              <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
                 {dashboard.customersWithPurchases}
               </p>
-
-              <p className="text-xs text-muted-foreground">
-                con compras
-              </p>
+              <p className="text-[10px] text-[#9e9e9e]">con compras</p>
             </div>
-
-            <UserCheck className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f5e9]">
+              <UserCheck className="h-4 w-4 text-[#2e7d32]" />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="flex items-center justify-between p-3 sm:p-4">
             <div>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
                 Saldo pendiente
               </p>
-
-              <p className="mt-1 text-2xl font-semibold">
+              <p className="mt-1 text-xl font-bold text-[#c62828] sm:text-2xl">
                 {money(dashboard.totalCredit)}
               </p>
-
-              <p className="text-xs text-muted-foreground">
+              <p className="text-[10px] text-[#9e9e9e]">
                 {dashboard.customersWithDebt} con deuda
               </p>
             </div>
-
-            <CreditCard className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#fce4ec]">
+              <CreditCard className="h-4 w-4 text-[#c62828]" />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="flex items-center justify-between p-4">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="flex items-center justify-between p-3 sm:p-4">
             <div>
-              <p className="text-xs text-muted-foreground">
-                Compras acumuladas
+              <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575] sm:text-[11px]">
+                Compras acum.
               </p>
-
-              <p className="mt-1 text-2xl font-semibold">
+              <p className="mt-1 text-xl font-bold text-[#212121] sm:text-2xl">
                 {money(dashboard.totalPurchases)}
               </p>
-
-              <p className="text-xs text-muted-foreground">
-                clientes registrados
-              </p>
+              <p className="text-[10px] text-[#9e9e9e]">total histórico</p>
             </div>
-
-            <ShoppingBag className="h-5 w-5 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e8f0fe]">
+              <ShoppingBag className="h-4 w-4 text-[#1a73e8]" />
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid max-w-full gap-4 overflow-x-hidden lg:grid-cols-3">
-        <Card className="border-[#e0e0e0] shadow-sm lg:col-span-1">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm lg:col-span-1">
+          <CardHeader className="border-b border-[#f0f0f0] pb-3">
+            <CardTitle className="text-base font-bold text-[#212121]">
               {form.id
                 ? "Editar cliente"
                 : "Nuevo cliente"}
@@ -857,7 +850,7 @@ function ClientesPage() {
               )}
 
               <Button
-                className="min-h-11 flex-1 touch-manipulation"
+                className="min-h-12 flex-1 touch-manipulation rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-sm hover:bg-[#2d8f47]"
                 disabled={
                   save.isPending ||
                   !form.name.trim()
@@ -919,7 +912,7 @@ function ClientesPage() {
                   onClick={() => setDebtFilter(key)}
                   className={
                     debtFilter === key
-                      ? "shrink-0 rounded-full bg-[#1a73e8] px-3.5 py-1.5 text-[12px] font-semibold text-white"
+                      ? "shrink-0 rounded-full bg-[#7c4dff] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
                       : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
                   }
                 >
@@ -937,13 +930,27 @@ function ClientesPage() {
                 return (
                   <div
                     key={customer.id}
-                    className="rounded-xl border bg-card p-3.5 shadow-sm"
+                    className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm active:bg-[#fafafa]"
                   >
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-sm font-bold text-[#1a73e8]">
+                        {(customer.name || "?").trim().charAt(0).toUpperCase()}
+                      </div>
                       <div className="min-w-0 flex-1">
-                        <p className="break-words text-[15px] font-bold leading-5 text-[#212121]">
-                          {customer.name}
-                        </p>
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="break-words text-[15px] font-bold leading-5 text-[#212121]">
+                            {customer.name}
+                          </p>
+                          {balance > 0 ? (
+                            <span className="shrink-0 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b]">
+                              Con saldo
+                            </span>
+                          ) : (
+                            <span className="shrink-0 rounded-full bg-[#e8f5e9] px-2 py-0.5 text-[10px] font-bold text-[#2e7d32]">
+                              Al corriente
+                            </span>
+                          )}
+                        </div>
                         <p className="mt-0.5 text-xs text-[#757575]">
                           {customer.phone ?? "Sin teléfono"}
                         </p>
@@ -953,21 +960,6 @@ function ClientesPage() {
                           </p>
                         ) : null}
                       </div>
-                      {balance > 0 ? (
-                        <Badge
-                          variant="destructive"
-                          className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-                        >
-                          Con saldo
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="secondary"
-                          className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium"
-                        >
-                          Al corriente
-                        </Badge>
-                      )}
                     </div>
 
                     <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg bg-[#f5f5f5] p-2.5">
@@ -1007,7 +999,7 @@ function ClientesPage() {
                       {balance > 0 ? (
                         <Button
                           size="sm"
-                          className="h-10 flex-1 touch-manipulation rounded-lg bg-[#43a047] text-[13px] font-semibold text-white hover:bg-[#388e3c]"
+                          className="h-10 flex-1 touch-manipulation rounded-lg bg-[#34a853] text-[13px] font-semibold text-white hover:bg-[#388e3c]"
                           onClick={() => {
                             setPayCustomerId(customer.id);
                             setPayAmount(balance.toFixed(2));
