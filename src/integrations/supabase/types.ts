@@ -573,6 +573,36 @@ export type Database = {
           },
         ]
       }
+      permission_catalog: {
+        Row: {
+          action: string
+          description: string | null
+          is_active: boolean
+          key: string
+          label: string
+          module: string
+          sort_order: number
+        }
+        Insert: {
+          action: string
+          description?: string | null
+          is_active?: boolean
+          key: string
+          label: string
+          module: string
+          sort_order?: number
+        }
+        Update: {
+          action?: string
+          description?: string | null
+          is_active?: boolean
+          key?: string
+          label?: string
+          module?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       product_variants: {
         Row: {
           cost_override: number | null
@@ -820,6 +850,29 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "suppliers"
             referencedColumns: ["id"]
+          },
+        ]
+      }
+      role_permissions: {
+        Row: {
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Insert: {
+          permission_key: string
+          role: Database["public"]["Enums"]["app_role"]
+        }
+        Update: {
+          permission_key?: string
+          role?: Database["public"]["Enums"]["app_role"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "role_permissions_permission_key_fkey"
+            columns: ["permission_key"]
+            isOneToOne: false
+            referencedRelation: "permission_catalog"
+            referencedColumns: ["key"]
           },
         ]
       }
@@ -1073,6 +1126,23 @@ export type Database = {
         }
         Returns: undefined
       }
+      admin_set_role_permission: {
+        Args: {
+          _enabled: boolean
+          _permission_key: string
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: undefined
+      }
+      admin_set_user_access: {
+        Args: {
+          _branch_id?: string
+          _is_active?: boolean
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: undefined
+      }
       available_stock: {
         Args: { _branch_id: string; _product_id: string; _variant_id?: string }
         Returns: number
@@ -1243,6 +1313,7 @@ export type Database = {
           sale_folio: string
         }[]
       }
+      get_my_permissions: { Args: never; Returns: string[] }
       get_shared_inventory: {
         Args: never
         Returns: {
@@ -1275,6 +1346,7 @@ export type Database = {
           variant_id: string
         }[]
       }
+      has_permission: { Args: { _permission_key: string }; Returns: boolean }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
