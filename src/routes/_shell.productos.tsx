@@ -22,6 +22,7 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+import { generateUniqueBarcode } from "@/lib/uniqueBarcode";
 import {
   useMutation,
   useQuery,
@@ -33,8 +34,8 @@ import {
   Trash2,
   Search,
   Package,
-  RefreshCw,
-} from "lucide-react";
+  RefreshCw,,
+  Hash} from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
@@ -314,6 +315,23 @@ function ProductosPage() {
     mutationFn: async () => {
       if (!form.name.trim()) {
         throw new Error("Nombre requerido");
+      }
+
+      const barcodeValue = form.barcode.trim();
+      if (barcodeValue) {
+        let q = supabase
+          .from("products")
+          .select("id")
+          .eq("barcode", barcodeValue);
+        if (form.id) {
+          q = q.neq("id", form.id);
+        }
+        const { data: clash } = await q.maybeSingle();
+        if (clash) {
+          throw new Error(
+            "Ese código de barras ya existe en otro producto. Genera uno nuevo.",
+          );
+        }
       }
 
       // productos.price solo puede actualizar price/cost/tax_rate
@@ -1092,17 +1110,50 @@ function ProductosPage() {
                       Código de barras
                     </Label>
 
-                    <Input
-                      value={form.barcode}
-                      onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          barcode: e.target.value,
-                        }))
-                      }
-                      placeholder="EAN / UPC"
-                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
-                    />
+                    <div className="flex gap-2">
+                      <Input
+                        value={form.barcode}
+                        onChange={(e) =>
+                          setForm((f) => ({
+                            ...f,
+                            barcode: e.target.value.slice(0, 64),
+                          }))
+                        }
+                        placeholder="EAN / UPC o genérico"
+                        maxLength={64}
+                        className="h-11 flex-1 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 shrink-0 rounded-xl border-[#e0e0e0] px-3"
+                        disabled={
+                          !(canCreate || canEdit) ||
+                          saveProduct.isPending
+                        }
+                        title="Generar código único (máx. 10 caracteres)"
+                        onClick={async () => {
+                          try {
+                            const code = await generateUniqueBarcode(10);
+                            setForm((f) => ({ ...f, barcode: code }));
+                            toast.success(`Código generado: ${code}`);
+                          } catch (err) {
+                            toast.error(
+                              err instanceof Error
+                                ? err.message
+                                : "No se pudo generar el código",
+                            );
+                          }
+                        }}
+                      >
+                        <Hash className="mr-1 h-4 w-4" />
+                        Generar
+                      </Button>
+                    </div>
+                    <p className="text-[10px] text-[#9e9e9e]">
+                      El botón crea un código de 10 caracteres que no se
+                      repite en ningún otro producto.
+                    </p>
                   </div>
                 </div>
               </div>
