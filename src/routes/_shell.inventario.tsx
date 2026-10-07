@@ -971,7 +971,7 @@ function InventarioPage() {
                               <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                                 {row.sku && (
                                   <span className="text-[11px] font-medium text-[#9e9e9e]">
-                                    {row.sku}
+                                    SKU {row.sku}
                                   </span>
                                 )}
 
@@ -983,6 +983,26 @@ function InventarioPage() {
                                     Variante
                                   </Badge>
                                 )}
+                              </div>
+
+                              <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-[#757575]">
+                                {row.barcode ? (
+                                  <p className="col-span-2 font-mono text-[#616161]">
+                                    Cód. {row.barcode}
+                                  </p>
+                                ) : null}
+                                <p>
+                                  Precio{" "}
+                                  <span className="font-semibold text-[#1a73e8]">
+                                    ${Number(row.price ?? 0).toFixed(2)}
+                                  </span>
+                                </p>
+                                <p>
+                                  Costo{" "}
+                                  <span className="font-semibold text-[#212121]">
+                                    ${Number(row.cost ?? 0).toFixed(2)}
+                                  </span>
+                                </p>
                               </div>
 
                               <p className="mt-1 text-xs text-[#757575]">
