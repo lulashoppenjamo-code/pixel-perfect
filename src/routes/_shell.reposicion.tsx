@@ -28,6 +28,11 @@ import {
   RequireNavAccess,
 } from "@/components/RequireNavAccess";
 
+/**
+ * BLOQUE 11 — Visual Reposición.
+ * Solo presentación. No modifica inventario real ni mutaciones de estado.
+ */
+
 import {
   PageHeader,
   PageShell,
@@ -1003,63 +1008,59 @@ function ReposicionPage() {
         icon={ShoppingCart}
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card>
-          <CardContent className="p-3.5 sm:p-4">
-            <p className="text-xs text-muted-foreground">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-2.5 lg:grid-cols-4">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
               Pendientes
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#e65100] sm:text-2xl">
               {pendingRequests.length}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-3.5 sm:p-4">
-            <p className="text-xs text-muted-foreground">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
               Comprados
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#1a73e8] sm:text-2xl">
               {purchasedRequests.length}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-3.5 sm:p-4">
-            <p className="text-xs text-muted-foreground">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
               Recibidos
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#2e7d32] sm:text-2xl">
               {receivedRequests.length}
             </p>
           </CardContent>
         </Card>
 
-        <Card>
-          <CardContent className="p-3.5 sm:p-4">
-            <p className="text-xs text-muted-foreground">
+        <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
               Agotados
             </p>
-
-            <p className="mt-1 text-2xl font-bold">
+            <p className="mt-1 text-xl font-bold text-[#c62828] sm:text-2xl">
               {outOfStock.length}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle className="text-base">
+      <Card className="mb-4 rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <CardHeader className="border-b border-[#f0f0f0] pb-3">
+          <CardTitle className="text-base font-bold text-[#212121]">
             Agregar producto a reposición
           </CardTitle>
 
-          <p className="text-xs text-muted-foreground">
+          <p className="text-xs text-[#757575]">
             Esto crea una lista de compra y no modifica las existencias.
           </p>
         </CardHeader>
@@ -1207,6 +1208,7 @@ function ReposicionPage() {
               )}
 
             <Button
+              className="min-h-12 rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-sm hover:bg-[#2d8f47]"
               disabled={
                 createRequest.isPending ||
                 !selectedProduct ||
@@ -1453,15 +1455,15 @@ function ReposicionPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
+      <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <CardHeader className="border-b border-[#f0f0f0] pb-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <CardTitle className="text-base">
+              <CardTitle className="text-base font-bold text-[#212121]">
                 Solicitudes de reposición
               </CardTitle>
 
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs text-[#757575]">
                 Recibir una solicitud no modifica el inventario.
               </p>
             </div>
@@ -1478,7 +1480,7 @@ function ReposicionPage() {
                     )
                   }
                   placeholder="Buscar producto..."
-                  className="h-11 rounded-xl border-[#e0e0e0] pl-9"
+                  className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
                 />
               </div>
 
@@ -1502,7 +1504,7 @@ function ReposicionPage() {
                     }
                     className={
                       statusFilter === key
-                        ? "shrink-0 rounded-full bg-[#1a73e8] px-3 py-1.5 text-[11px] font-semibold text-white"
+                        ? "shrink-0 rounded-full bg-[#7c4dff] px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm"
                         : "shrink-0 rounded-full bg-[#eeeeee] px-3 py-1.5 text-[11px] font-medium text-[#616161]"
                     }
                   >
@@ -1516,9 +1518,12 @@ function ReposicionPage() {
 
         <CardContent className="max-w-full overflow-x-auto">
           {requestsLoading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
-              Cargando solicitudes...
-            </p>
+            <div className="py-10 text-center">
+              <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
+              <p className="text-sm font-medium text-[#757575]">
+                Cargando solicitudes…
+              </p>
+            </div>
           ) : !branchId ? (
             <p className="py-8 text-center text-sm text-muted-foreground">
               Selecciona una sucursal para consultar las solicitudes.
