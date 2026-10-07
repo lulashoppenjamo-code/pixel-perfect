@@ -58,9 +58,13 @@ import {
   type ImportAction,
 } from "@/lib/excel";
 
-const CHUNK_SIZE = 250;
+const CHUNK_SIZE = 500;
 
-const STOCK_CONCURRENCY = 50;
+/** Movimientos de stock en paralelo por oleada */
+const STOCK_CONCURRENCY = 100;
+
+/** Tamaño de oleada visible en progreso */
+const STOCK_BATCH = 500;
 
 function chunkArray<T>(
   array: T[],
@@ -713,7 +717,7 @@ export function ImportExportPanel() {
         )
       ) {
         setPhase(
-          "Actualizando productos...",
+          "Actualizando productos (lotes de 500)...",
         );
 
         const items =
@@ -804,7 +808,7 @@ export function ImportExportPanel() {
         newRows.length
       ) {
         setPhase(
-          "Creando productos nuevos...",
+          "Creando productos (lotes de 500)...",
         );
 
         const items =
@@ -889,7 +893,7 @@ export function ImportExportPanel() {
             action === "update_stock"));
 
       if (needsStock) {
-        setPhase("Leyendo inventario actual...");
+        setPhase("Leyendo inventario actual (1 consulta)...");
 
         const { data: stockSnapshot, error: stockSnapError } =
           await (supabase as any).rpc("get_shared_inventory");
@@ -955,31 +959,36 @@ export function ImportExportPanel() {
           }
         }
 
-        setPhase(
-          `Aplicando stock (${jobs.length} movimientos, paralelo)...`,
+        /*
+         * Oleadas de STOCK_BATCH (500) con STOCK_CONCURRENCY
+         * llamadas en paralelo dentro de cada oleada.
+         */
+        const totalBatches = Math.max(
+          1,
+          Math.ceil(jobs.length / STOCK_BATCH),
         );
 
-        let doneJobs = 0;
+        for (let b = 0; b < jobs.length; b += STOCK_BATCH) {
+          const batch = jobs.slice(b, b + STOCK_BATCH);
+          const batchNo = Math.floor(b / STOCK_BATCH) + 1;
 
-        await runPool(jobs, STOCK_CONCURRENCY, async (job) => {
-          const { error } = await supabase.rpc("adjust_stock", {
-            _branch_id: branchId,
-            _product_id: job.productId,
-            _quantity: job.delta,
-            _notes: job.note,
+          setPhase(
+            `Stock lote ${batchNo}/${totalBatches} (${batch.length} productos, paralelo)...`,
+          );
+
+          await runPool(batch, STOCK_CONCURRENCY, async (job) => {
+            const { error } = await supabase.rpc("adjust_stock", {
+              _branch_id: branchId,
+              _product_id: job.productId,
+              _quantity: job.delta,
+              _notes: job.note,
+            });
+
+            if (error && !failedRows.has(job.row)) {
+              failedRows.set(job.row, error.message);
+            }
           });
-
-          if (error && !failedRows.has(job.row)) {
-            failedRows.set(job.row, error.message);
-          }
-
-          doneJobs += 1;
-          if (doneJobs % 25 === 0 || doneJobs === jobs.length) {
-            setPhase(
-              `Aplicando stock… ${doneJobs}/${jobs.length}`,
-            );
-          }
-        });
+        }
 
         bump();
       }
