@@ -13,6 +13,12 @@ import {
 } from "lucide-react";
 
 import { RequireNavAccess } from "@/components/RequireNavAccess";
+
+/**
+ * BLOQUE 10 — Visual Devoluciones.
+ * Solo presentación. Sin tocar refund_sale ni inventario compartido.
+ * Nota: canRefund se alinea con isManager (ya usado en openRefund / desktop).
+ */
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
@@ -39,8 +45,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-
-import { Badge } from "@/components/ui/badge";
 
 import {
   Dialog,
@@ -137,7 +141,8 @@ function paymentLabel(method: string) {
 
 function DevolucionesPage() {
   const { branchId } = useBranch();
-  const { isManager , can } = useAuth();
+  const { isManager } = useAuth();
+  const canRefund = isManager;
   const qc = useQueryClient();
 
   const [folioSearch, setFolioSearch] =
@@ -514,30 +519,21 @@ function DevolucionesPage() {
   const statusBadge = (
     status: string,
   ) => {
-    const variants: Record<
-      string,
-      | "default"
-      | "secondary"
-      | "destructive"
-      | "outline"
-    > = {
-      completed: "default",
-      partially_refunded:
-        "secondary",
-      refunded: "outline",
-      cancelled:
-        "destructive",
+    const styles: Record<string, string> = {
+      completed: "bg-[#e8f5e9] text-[#2e7d32]",
+      partially_refunded: "bg-[#fff3e0] text-[#e65100]",
+      refunded: "bg-[#e8f0fe] text-[#1a73e8]",
+      cancelled: "bg-[#fce4ec] text-[#c2185b]",
     };
 
     return (
-      <Badge
-        variant={
-          variants[status] ??
-          "outline"
-        }
+      <span
+        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+          styles[status] ?? "bg-[#eeeeee] text-[#616161]"
+        }`}
       >
         {statusLabel(status)}
-      </Badge>
+      </span>
     );
   };
 
@@ -580,15 +576,15 @@ function DevolucionesPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader className="pb-3">
+      <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <CardHeader className="border-b border-[#f0f0f0] pb-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <CardTitle className="text-base">
+            <CardTitle className="text-base font-bold text-[#212121]">
               Ventas recientes
             </CardTitle>
 
             <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[#9e9e9e]" />
 
               <Input
                 value={folioSearch}
@@ -598,7 +594,7 @@ function DevolucionesPage() {
                   )
                 }
                 placeholder="Buscar folio..."
-                className="h-11 rounded-xl border-[#e0e0e0] bg-[#fafafa] pl-9"
+                className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
               />
             </div>
           </div>
@@ -608,51 +604,65 @@ function DevolucionesPage() {
           {/* Móvil */}
           <div className="grid gap-2.5 lg:hidden">
             {isLoading && (
-              <div className="py-10 text-center text-sm text-muted-foreground">
-                Cargando ventas...
+              <div className="rounded-2xl border border-[#e0e0e0] bg-white py-12 text-center shadow-sm">
+                <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
+                <p className="text-sm font-medium text-[#757575]">Cargando ventas…</p>
               </div>
             )}
             {!isLoading && filteredSales.length === 0 && (
-              <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                No hay ventas disponibles para devolver.
+              <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm">
+                <PackageCheck className="mx-auto mb-3 h-10 w-10 text-[#c5cad3]" />
+                <p className="text-sm font-bold text-[#212121]">
+                  No hay ventas para devolver
+                </p>
+                <p className="mt-1 text-xs text-[#9e9e9e]">
+                  Busca otro folio o espera nuevas ventas
+                </p>
               </div>
             )}
             {filteredSales.map((sale) => (
               <div
                 key={sale.id}
-                className="rounded-xl border p-3.5 shadow-sm"
+                className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm active:bg-[#fafafa]"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <p className="font-mono text-[15px] font-bold text-[#212121]">
-                      #{sale.folio}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[#757575]">
-                      {new Date(sale.created_at).toLocaleString("es-MX")}
-                    </p>
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8]">
+                    <RotateCcw className="h-5 w-5" strokeWidth={1.75} />
                   </div>
-                  {statusBadge(sale.status)}
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-2 rounded-lg bg-[#f5f5f5] p-2.5 text-sm">
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
-                      Total
-                    </p>
-                    <p className="mt-0.5 font-bold text-[#212121]">
-                      {money(Number(sale.total))}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
-                      Pago
-                    </p>
-                    <p className="mt-0.5 text-[#424242]">
-                      {paymentLabel(sale.payment_method)}
-                    </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-[15px] font-bold text-[#212121]">
+                          #{sale.folio}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#9e9e9e]">
+                          {new Date(sale.created_at).toLocaleString("es-MX")}
+                        </p>
+                      </div>
+                      {statusBadge(sale.status)}
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-2 rounded-lg bg-[#f5f5f5] p-2.5 text-sm">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
+                          Total
+                        </p>
+                        <p className="mt-0.5 font-bold text-[#1a73e8]">
+                          {money(Number(sale.total))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-[#757575]">
+                          Pago
+                        </p>
+                        <p className="mt-0.5 text-[#424242]">
+                          {paymentLabel(sale.payment_method)}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
                 <Button
-                  className="mt-3 min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-white hover:bg-[#1557b0]"
+                  className="mt-3 min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-[14px] font-bold text-white hover:bg-[#1557b0]"
                   size="sm"
                   disabled={!canRefund}
                   onClick={() => openRefund(sale.id)}
@@ -961,6 +971,7 @@ function DevolucionesPage() {
             </Button>
 
             <Button
+              className="rounded-xl bg-[#34a853] font-bold text-white hover:bg-[#2d8f47]"
               disabled={
                 Object.keys(
                   selectedItems,
