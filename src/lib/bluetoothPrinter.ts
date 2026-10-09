@@ -151,6 +151,12 @@ function cutPaper() {
   return command(0x1d, 0x56, 0x00);
 }
 
+/** Pulso ESC/POS para abrir cajón de dinero (pin 2 o 5 según impresora) */
+function openCashDrawer() {
+  // Comando más común: ESC p 0 25 250
+  return command(0x1b, 0x70, 0x00, 0x19, 0xfa);
+}
+
 function moneyValue(value: number) {
   return `$${Number(value || 0).toFixed(2)}`;
 }
@@ -384,7 +390,7 @@ async function buildTicketText(
 
   for (const line of ticket.lines) {
     const name =
-      layout.showSku && line.sku ? `${line.name} (${line.sku})` : line.name;
+      layout.showSku && line.sku ? `\( {line.name} ( \){line.sku})` : line.name;
     chunks.push(
       encode(
         twoColumns(`${line.quantity} x ${name}`, moneyValue(line.total), width) +
@@ -619,7 +625,7 @@ async function writeInChunks(
   }
 }
 
-/** Garantiza conexión; si no hay ninguna, pide emparejar */
+/** Garantiza conexión; si no hay ninguna, lanza error claro (NO pide emparejar) */
 async function ensurePrinterConnected() {
   if (activeConnection?.device.gatt?.connected) {
     return activeConnection;
@@ -630,14 +636,11 @@ async function ensurePrinterConnected() {
     return activeConnection;
   }
 
-  // Último recurso: pedir al usuario emparejar
-  const paired = await connectBluetoothPrinter();
-  if (!paired || !activeConnection) {
-    throw new Error(
-      "No se pudo conectar la impresora Bluetooth. Emparéjala desde Ajustes.",
-    );
-  }
-  return activeConnection;
+  // Ya no llamamos a connectBluetoothPrinter() aquí.
+  // El emparejamiento solo se hace desde Ajustes.
+  throw new Error(
+    "La impresora Bluetooth no está conectada. Emparéjala desde Ajustes.",
+  );
 }
 
 /** Imprime bytes ESC/POS (tickets, cortes, reportes) */
@@ -662,6 +665,7 @@ export async function printTextBluetooth(text: string) {
 export async function printTicketBluetooth(
   ticket: TicketData,
   layoutOverride?: Partial<TicketPrintLayout>,
+  options?: { openDrawer?: boolean },
 ) {
   const connection = await ensurePrinterConnected();
 
@@ -677,6 +681,18 @@ export async function printTicketBluetooth(
     await writeInChunks(connection.characteristic, data);
     if (i < copies - 1) {
       await new Promise((r) => setTimeout(r, 120));
+    }
+  }
+
+  // Abrir cajón solo una vez por ticket (no por copia)
+  // y solo si se solicita explícitamente (por defecto sí)
+  const shouldOpenDrawer = options?.openDrawer !== false;
+  if (shouldOpenDrawer) {
+    try {
+      await writeInChunks(connection.characteristic, openCashDrawer());
+    } catch (e) {
+      // No convertimos un fallo del cajón en error de impresión
+      console.warn("No se pudo enviar el comando de apertura de cajón:", e);
     }
   }
 }
@@ -724,5 +740,5 @@ export async function printTestTicket(
     footer: "Impresora configurada correctamente.",
   };
 
-  await printTicketBluetooth(ticket, layout);
+  await printTicketBluetooth(ticket, layout, { openDrawer: false });
 }
