@@ -216,17 +216,24 @@ export function PosDeviceAuthorization() {
          * del cliente Supabase.
          */
         void data;
-      } catch (error) {
-        console.error(
-          "[AUTHORIZE POS DEVICE]",
-          error,
-        );
+      } catch (error: unknown) {
+        console.error("[AUTHORIZE POS DEVICE]", error);
 
-        toast.error(
-          error instanceof Error
-            ? error.message
-            : "No se pudo autorizar la tablet.",
-        );
+        const details =
+          typeof error === "object" && error !== null
+            ? error as { message?: string; details?: string; hint?: string; code?: string }
+            : null;
+
+        const message = [
+          details?.message,
+          details?.details,
+          details?.hint,
+          details?.code ? `Código: ${details.code}` : "",
+        ]
+          .filter(Boolean)
+          .join(" | ");
+
+        toast.error(message || "No se pudo autorizar la tablet. Revisa la consola.");
       } finally {
         setSaving(false);
       }
