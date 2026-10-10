@@ -14,6 +14,50 @@ export type Database = {
   }
   public: {
     Tables: {
+      authorized_pos_devices: {
+        Row: {
+          authorized_by: string
+          branch_id: string | null
+          created_at: string
+          device_name: string
+          device_secret_hash: string
+          id: string
+          is_active: boolean
+          last_used_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          authorized_by: string
+          branch_id?: string | null
+          created_at?: string
+          device_name?: string
+          device_secret_hash: string
+          id?: string
+          is_active?: boolean
+          last_used_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          authorized_by?: string
+          branch_id?: string | null
+          created_at?: string
+          device_name?: string
+          device_secret_hash?: string
+          id?: string
+          is_active?: boolean
+          last_used_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "authorized_pos_devices_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       branches: {
         Row: {
           address: string | null
@@ -1152,6 +1196,14 @@ export type Database = {
           _variant_id?: string
         }
         Returns: undefined
+      }
+      admin_authorize_pos_device: {
+        Args: {
+          _branch_id?: string
+          _device_name: string
+          _device_secret: string
+        }
+        Returns: string
       }
       admin_set_collaborator_pin: {
         Args: { _pin: string; _user_id: string }
