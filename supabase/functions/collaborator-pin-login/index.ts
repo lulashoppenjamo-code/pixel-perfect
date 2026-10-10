@@ -1,32 +1,15 @@
+
 /**
  * Edge Function: collaborator-pin-login
  *
  * Flujo:
+ * Tablet autorizada -> device_secret + user_id + PIN
+ * -> verify_collaborator_pin() -> usuario Auth real
+ * -> generateLink(magiclink) -> token_hash
+ * -> cliente verifyOtp(magiclink) -> sesión real
  *
- *   Tablet autorizada
- *        ↓
- *   device_secret + collaborator user_id + PIN
- *        ↓
- *   verify_collaborator_pin()
- *        ↓
- *   usuario real de Supabase
- *        ↓
- *   generateLink()
- *        ↓
- *   token_hash
- *        ↓
- *   cliente llama verifyOtp()
- *        ↓
- *   sesión real de Supabase
- *
- * IMPORTANTE:
- * - NO crea JWT manualmente.
- * - NO modifica auth.uid().
- * - NO modifica cashier_id.
- * - NO modifica ventas.
- * - NO modifica inventario.
- * - NO modifica permisos.
- * - NO expone la contraseña interna del colaborador.
+ * No crea JWT manualmente ni modifica ventas, inventario,
+ * cashier_id o permisos.
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
@@ -35,143 +18,70 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods":
-    "POST, OPTIONS",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-function json(
-  body: unknown,
-  status = 200,
-) {
-  return new Response(
-    JSON.stringify(body),
-    {
-      status,
-      headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
-      },
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
     },
-  );
+  });
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: corsHeaders,
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   if (req.method !== "POST") {
-    return json(
-      {
-        error: "method not allowed",
-      },
-      405,
-    );
+    return json({ error: "method not allowed" }, 405);
   }
 
   try {
-    const supabaseUrl =
-      Deno.env.get("SUPABASE_URL");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get(
+      "SUPABASE_SERVICE_ROLE_KEY",
+    );
 
-    const serviceRoleKey =
-      Deno.env.get(
-        "SUPABASE_SERVICE_ROLE_KEY",
-      );
-
-    if (
-      !supabaseUrl ||
-      !serviceRoleKey
-    ) {
-      console.error(
-        "Missing Supabase environment variables",
-      );
-
-      return json(
-        {
-          error: "server misconfigured",
-        },
-        500,
-      );
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Missing Supabase environment variables");
+      return json({ error: "server misconfigured" }, 500);
     }
-
-    /*
-     * ----------------------------------------------------------
-     * BODY
-     * ----------------------------------------------------------
-     */
 
     let body: Record<string, unknown>;
 
     try {
       body = await req.json();
     } catch {
-      return json(
-        {
-          error: "invalid json",
-        },
-        400,
-      );
+      return json({ error: "invalid json" }, 400);
     }
 
-    const deviceSecret =
-      String(
-        body.device_secret ?? "",
-      ).trim();
+    const deviceSecret = String(
+      body.device_secret ?? "",
+    ).trim();
 
-    const userId =
-      String(
-        body.user_id ?? "",
-      ).trim();
-
-    const pin =
-      String(
-        body.pin ?? "",
-      ).trim();
-
-    /*
-     * ----------------------------------------------------------
-     * VALIDACIONES BÁSICAS
-     * ----------------------------------------------------------
-     */
+    const userId = String(body.user_id ?? "").trim();
+    const pin = String(body.pin ?? "").trim();
 
     if (!deviceSecret) {
-      return json(
-        {
-          error: "device secret required",
-        },
-        400,
-      );
+      return json({ error: "device secret required" }, 400);
     }
 
     if (!userId) {
-      return json(
-        {
-          error: "user id required",
-        },
-        400,
-      );
+      return json({ error: "user id required" }, 400);
     }
 
     if (!/^\d{4}$/.test(pin)) {
       return json(
-        {
-          error:
-            "PIN must contain exactly 4 digits",
-        },
+        { error: "PIN must contain exactly 4 digits" },
         400,
       );
     }
 
-    /*
-     * ----------------------------------------------------------
-     * CLIENTE ADMINISTRATIVO
-     * ----------------------------------------------------------
-     *
-     * Service role solamente dentro de la Edge Function.
-     */
-
+    // Service role: solamente dentro de esta función.
     const admin = createClient(
       supabaseUrl,
       serviceRoleKey,
@@ -183,38 +93,15 @@ Deno.serve(async (req) => {
       },
     );
 
-    /*
-     * ----------------------------------------------------------
-     * 1. VERIFICAR DISPOSITIVO + PIN
-     * ----------------------------------------------------------
-     *
-     * La función SQL ya se encarga de:
-     *
-     * - dispositivo activo
-     * - colaborador activo
-     * - owner bloqueado
-     * - PIN correcto
-     * - bloqueo por intentos
-     * - bcrypt
-     * - registrar último uso
-     */
-
+    // 1. Verificar dispositivo autorizado y PIN.
     const {
       data: verifiedUserId,
       error: verifyError,
-    } = await admin.rpc(
-      "verify_collaborator_pin",
-      {
-        _device_secret:
-          deviceSecret,
-
-        _user_id:
-          userId,
-
-        _pin:
-          pin,
-      },
-    );
+    } = await admin.rpc("verify_collaborator_pin", {
+      _device_secret: deviceSecret,
+      _user_id: userId,
+      _pin: pin,
+    });
 
     if (verifyError) {
       console.error(
@@ -222,115 +109,47 @@ Deno.serve(async (req) => {
         verifyError.message,
       );
 
-      /*
-       * No revelamos si falló:
-       * - dispositivo
-       * - usuario
-       * - PIN
-       * - bloqueo
-       *
-       * al cliente.
-       */
-
-      return json(
-        {
-          error:
-            "invalid credentials",
-        },
-        401,
-      );
+      return json({ error: "invalid credentials" }, 401);
     }
 
-    if (
-      !verifiedUserId ||
-      verifiedUserId !== userId
-    ) {
-      return json(
-        {
-          error:
-            "invalid credentials",
-        },
-        401,
-      );
+    if (!verifiedUserId || verifiedUserId !== userId) {
+      return json({ error: "invalid credentials" }, 401);
     }
 
-    /*
-     * ----------------------------------------------------------
-     * 2. OBTENER USUARIO AUTH REAL
-     * ----------------------------------------------------------
-     */
-
+    // 2. Obtener el usuario real de Supabase Auth.
     const {
       data: userData,
       error: userError,
-    } =
-      await admin.auth.admin.getUserById(
-        userId,
-      );
+    } = await admin.auth.admin.getUserById(userId);
 
-    if (
-      userError ||
-      !userData?.user
-    ) {
-      console.error(
-        "getUserById:",
-        userError?.message,
-      );
-
-      return json(
-        {
-          error:
-            "collaborator not found",
-        },
-        401,
-      );
+    if (userError || !userData?.user) {
+      console.error("getUserById:", userError?.message);
+      return json({ error: "collaborator not found" }, 401);
     }
 
-    const user =
-      userData.user;
+    const user = userData.user;
 
-    /*
-     * ----------------------------------------------------------
-     * 3. VERIFICAR QUE LA CUENTA SIGA ACTIVA
-     * ----------------------------------------------------------
-     *
-     * La función SQL ya valida profiles.is_active.
-     * Aquí además comprobamos que Auth no esté bloqueado.
-     */
+    // 3. Comprobar que la cuenta no esté bloqueada.
+    // El cast evita depender de que la versión del tipo User
+    // declare explícitamente la propiedad banned_until.
+    const bannedUntil = (
+      user as typeof user & {
+        banned_until?: string | null;
+      }
+    ).banned_until;
 
-    if (
-      user.banned_until &&
-      user.banned_until !== "none"
-    ) {
+    if (bannedUntil && bannedUntil !== "none") {
       return json(
-        {
-          error:
-            "collaborator unavailable",
-        },
+        { error: "collaborator unavailable" },
         403,
       );
     }
 
-    /*
-     * ----------------------------------------------------------
-     * 4. CORREO INTERNO
-     * ----------------------------------------------------------
-     *
-     * admin-create-user crea las cuentas con un correo interno
-     * como:
-     *
-     * collaborator_UUID@auth.lulashop.local
-     *
-     * Ese correo nunca se muestra al colaborador.
-     */
-
-    const email =
-      user.email;
+    // 4. Correo interno asociado a la cuenta Auth.
+    const email = user.email;
 
     if (!email) {
-      console.error(
-        "Collaborator has no auth email",
-      );
+      console.error("Collaborator has no auth email");
 
       return json(
         {
@@ -341,95 +160,41 @@ Deno.serve(async (req) => {
       );
     }
 
-    /*
-     * ----------------------------------------------------------
-     * 5. GENERAR TOKEN DE MAGIC LINK
-     * ----------------------------------------------------------
-     *
-     * Supabase genera:
-     *
-     * - action_link
-     * - hashed_token
-     *
-     * Nosotros NO enviamos el action_link.
-     *
-     * Solamente devolvemos el hashed_token a la aplicación
-     * que ya demostró tener:
-     *
-     * - dispositivo autorizado
-     * - PIN correcto
-     */
-
+    // 5. Generar un magic link sin enviar el enlace por correo.
     const {
       data: linkData,
       error: linkError,
-    } =
-      await admin.auth.admin.generateLink(
-        {
-          type: "magiclink",
-          email,
-        },
-      );
+    } = await admin.auth.admin.generateLink({
+      type: "magiclink",
+      email,
+    });
 
-    if (
-      linkError ||
-      !linkData?.properties?.hashed_token
-    ) {
-      console.error(
-        "generateLink:",
-        linkError?.message,
-      );
+    const tokenHash = linkData?.properties?.hashed_token;
+
+    if (linkError || !tokenHash) {
+      console.error("generateLink:", linkError?.message);
 
       return json(
-        {
-          error:
-            "unable to create session",
-        },
+        { error: "unable to create session" },
         500,
       );
     }
 
-    /*
-     * ----------------------------------------------------------
-     * 6. DEVOLVER SOLAMENTE LO NECESARIO
-     * ----------------------------------------------------------
-     *
-     * El cliente usará:
-     *
-     * supabase.auth.verifyOtp({
-     *   token_hash,
-     *   type: "email"
-     * })
-     *
-     * para obtener la sesión real.
-     */
-
+    // 6. Devolver el token y su tipo real.
     return json(
       {
         ok: true,
-
-        user_id:
-          user.id,
-
-        token_hash:
-          linkData.properties.hashed_token,
-
-        type:
-          "email",
+        user_id: user.id,
+        token_hash: tokenHash,
+        type: "magiclink",
       },
       200,
     );
   } catch (error) {
-    console.error(
-      "collaborator-pin-login:",
-      error,
-    );
+    console.error("collaborator-pin-login:", error);
 
     return json(
-      {
-        error:
-          "internal server error",
-      },
+      { error: "internal server error" },
       500,
     );
   }
