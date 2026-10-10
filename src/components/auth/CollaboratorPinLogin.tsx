@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Loader2, LockKeyhole, UserRound } from "lucide-react";
@@ -34,59 +35,38 @@ export function CollaboratorPinLogin({
   const [pin, setPin] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const submit = async (
-    event: React.FormEvent,
-  ) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
 
     const cleanPin = pin.trim();
 
     if (!/^\d{4}$/.test(cleanPin)) {
-      toast.error(
-        "El PIN debe tener exactamente 4 dígitos.",
-      );
+      toast.error("El PIN debe tener exactamente 4 dígitos.");
       return;
     }
 
     if (!deviceSecret) {
-      toast.error(
-        "Esta tablet todavía no está autorizada.",
-      );
+      toast.error("Esta tablet todavía no está autorizada.");
       return;
     }
 
     if (!userId) {
-      toast.error(
-        "No se encontró el colaborador.",
-      );
+      toast.error("No se encontró el colaborador.");
       return;
     }
 
     setBusy(true);
 
     try {
-      /*
-       * ------------------------------------------------------
-       * 1. VERIFICAR DISPOSITIVO + PIN
-       * ------------------------------------------------------
-       */
-
-      const {
-        data,
-        error,
-      } =
+      // 1. Verificar dispositivo autorizado y PIN.
+      const { data, error } =
         await supabase.functions.invoke(
           "collaborator-pin-login",
           {
             body: {
-              device_secret:
-                deviceSecret,
-
-              user_id:
-                userId,
-
-              pin:
-                cleanPin,
+              device_secret: deviceSecret,
+              user_id: userId,
+              pin: cleanPin,
             },
           },
         );
@@ -97,61 +77,33 @@ export function CollaboratorPinLogin({
         );
       }
 
-      const tokenHash =
-        data?.token_hash;
+      const tokenHash = data?.token_hash;
 
       if (
         !data?.ok ||
+        data?.type !== "magiclink" ||
         !tokenHash
       ) {
-        throw new Error(
-          "No se pudo crear la sesión.",
-        );
+        throw new Error("No se pudo crear la sesión.");
       }
 
-      /*
-       * ------------------------------------------------------
-       * 2. CONVERTIR TOKEN EN SESIÓN REAL
-       * ------------------------------------------------------
-       *
-       * Supabase crea la sesión.
-       *
-       * No creamos JWT.
-       * No asignamos auth.uid().
-       * No tocamos cashier_id.
-       */
-
+      // 2. Intercambiar el token por una sesión real de Supabase.
       const {
         data: sessionData,
         error: otpError,
-      } =
-        await supabase.auth.verifyOtp({
-          token_hash:
-            tokenHash,
+      } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: "magiclink",
+      });
 
-          type:
-            "email",
-        });
-
-      if (
-        otpError ||
-        !sessionData.session
-      ) {
+      if (otpError || !sessionData.session) {
         throw new Error(
           "No se pudo establecer la sesión del colaborador.",
         );
       }
 
-      /*
-       * ------------------------------------------------------
-       * 3. VERIFICACIÓN FINAL
-       * ------------------------------------------------------
-       */
-
-      if (
-        sessionData.session.user.id !==
-        userId
-      ) {
+      // 3. Confirmar que la sesión corresponde al colaborador.
+      if (sessionData.session.user.id !== userId) {
         await supabase.auth.signOut();
 
         throw new Error(
@@ -164,7 +116,6 @@ export function CollaboratorPinLogin({
       );
 
       setPin("");
-
       onSuccess?.();
 
       await navigate({
@@ -172,10 +123,7 @@ export function CollaboratorPinLogin({
         replace: true,
       });
     } catch (error) {
-      console.error(
-        "[COLLABORATOR PIN LOGIN]",
-        error,
-      );
+      console.error("[COLLABORATOR PIN LOGIN]", error);
 
       toast.error(
         error instanceof Error
@@ -194,9 +142,7 @@ export function CollaboratorPinLogin({
           <UserRound className="h-7 w-7 text-primary" />
         </div>
 
-        <CardTitle>
-          {fullName}
-        </CardTitle>
+        <CardTitle>{fullName}</CardTitle>
 
         <CardDescription>
           Introduce tu PIN de 4 dígitos
@@ -204,14 +150,9 @@ export function CollaboratorPinLogin({
       </CardHeader>
 
       <CardContent>
-        <form
-          onSubmit={submit}
-          className="space-y-5"
-        >
+        <form onSubmit={submit} className="space-y-5">
           <div className="space-y-2">
-            <Label htmlFor="collaborator-pin">
-              PIN
-            </Label>
+            <Label htmlFor="collaborator-pin">PIN</Label>
 
             <Input
               id="collaborator-pin"
@@ -224,10 +165,9 @@ export function CollaboratorPinLogin({
               value={pin}
               disabled={busy}
               onChange={(event) => {
-                const value =
-                  event.target.value
-                    .replace(/\D/g, "")
-                    .slice(0, 4);
+                const value = event.target.value
+                  .replace(/\D/g, "")
+                  .slice(0, 4);
 
                 setPin(value);
               }}
@@ -238,10 +178,7 @@ export function CollaboratorPinLogin({
           <Button
             type="submit"
             className="h-12 w-full"
-            disabled={
-              busy ||
-              pin.length !== 4
-            }
+            disabled={busy || pin.length !== 4}
           >
             {busy ? (
               <>
