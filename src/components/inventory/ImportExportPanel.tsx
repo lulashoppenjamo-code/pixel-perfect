@@ -1,3 +1,4 @@
+
 /**
  * Import / Export Excel — Inventario compartido LULA OS (RÁPIDO)
  *
@@ -56,11 +57,61 @@ import {
 
 const BATCH_SIZE = 500;
 
+/**
+ * Evita errores de PostgreSQL JSONB por caracteres que no admite:
+ * - NUL (\u0000)
+ * - Sustitutos UTF-16 aislados
+ *
+ * Conserva los acentos, las letras y los pares Unicode válidos.
+ * Los caracteres inválidos se sustituyen por U+FFFD.
+ */
+function sanitizeJsonText(value: string | null | undefined): string {
+  if (value == null) return "";
+
+  let output = "";
+
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+
+    // PostgreSQL no admite el carácter NUL en texto.
+    if (code === 0) {
+      output += "\uFFFD";
+      continue;
+    }
+
+    // Sustituto alto: debe ir seguido de un sustituto bajo.
+    if (code >= 0xd800 && code <= 0xdbff) {
+      const next = value.charCodeAt(i + 1);
+
+      if (next >= 0xdc00 && next <= 0xdfff) {
+        output += value[i] + value[i + 1];
+        i++;
+      } else {
+        output += "\uFFFD";
+      }
+
+      continue;
+    }
+
+    // Un sustituto bajo aislado también es inválido.
+    if (code >= 0xdc00 && code <= 0xdfff) {
+      output += "\uFFFD";
+      continue;
+    }
+
+    output += value[i];
+  }
+
+  return output;
+}
+
 function chunkArray<T>(array: T[], size: number): T[][] {
   const result: T[][] = [];
+
   for (let i = 0; i < array.length; i += size) {
     result.push(array.slice(i, i + size));
   }
+
   return result;
 }
 
@@ -90,7 +141,9 @@ export function ImportExportPanel() {
       const { data, error } = await supabase
         .from("products")
         .select("id, name, sku, barcode");
+
       if (error) throw error;
+
       return (data ?? []) as {
         id: string;
         name: string;
@@ -102,9 +155,13 @@ export function ImportExportPanel() {
 
   const onFile = async (file: File) => {
     setParsing(true);
+
     try {
       const parsed = await parseProductFile(file, existingProducts);
       setRows(parsed);
+      setLastFailures([]);
+      setProgress({ current: 0, total: 0 });
+      setPhase("");
       toast.success(`${parsed.length} filas analizadas`);
     } catch (error) {
       toast.error(
@@ -136,9 +193,11 @@ export function ImportExportPanel() {
 
       const workable = rows.filter((row) => {
         if (row.status === "error") return false;
+
         if (row.status === "existing" && action === "skip_existing") {
           return false;
         }
+
         return true;
       });
 
@@ -146,31 +205,52 @@ export function ImportExportPanel() {
         throw new Error("No hay filas válidas para importar");
       }
 
-      const batches = chunkArray(workable, BATCH_SIZE);
+      // Sanear TODOS los registros antes del primer envío.
+      // Así, un carácter inválido en una fila posterior no provoca
+      // que se descubra el problema después de importar lotes anteriores.
+      const sanitizedRows = workable.map((row) => ({
+        ...row,
+        nombre: sanitizeJsonText(row.nombre),
+        sku: sanitizeJsonText(row.sku),
+        codigo_barras: sanitizeJsonText(row.codigo_barras),
+        categoria: sanitizeJsonText(row.categoria),
+        descripcion: sanitizeJsonText(row.descripcion),
+      }));
+
+      const batches = chunkArray(sanitizedRows, BATCH_SIZE);
+
       setProgress({ current: 0, total: batches.length });
+      setLastFailures([]);
 
       let created = 0;
       let updated = 0;
       let stockSet = 0;
-      const failures: { row: number; nombre: string; message: string }[] =
-        [];
+
+      const failures: {
+        row: number;
+        nombre: string;
+        message: string;
+      }[] = [];
 
       for (let i = 0; i < batches.length; i++) {
         const batch = batches[i]!;
+
         setPhase(
           `Importando lote ${i + 1}/${batches.length} (${batch.length} productos)...`,
         );
 
         const payload = batch.map((row) => {
-          // Si skip price/stock según action
+          // Se conserva el comportamiento original de cada acción.
           const includePrice =
             action === "update_all" ||
             action === "update_price_cost" ||
             row.status === "valid";
+
           const includeStock =
             action === "update_all" ||
             action === "update_stock" ||
             row.status === "valid";
+
           const includeData =
             action === "update_all" ||
             action === "update_data" ||
@@ -179,9 +259,13 @@ export function ImportExportPanel() {
           return {
             nombre: includeData ? row.nombre : row.nombre,
             sku: includeData ? row.sku : row.sku,
-            codigo_barras: includeData ? row.codigo_barras : row.codigo_barras,
+            codigo_barras: includeData
+              ? row.codigo_barras
+              : row.codigo_barras,
             categoria: includeData ? row.categoria : row.categoria,
-            precio_venta: includePrice ? row.precio_venta : row.precio_venta,
+            precio_venta: includePrice
+              ? row.precio_venta
+              : row.precio_venta,
             costo: includePrice ? row.costo : row.costo,
             stock: includeStock ? row.stock : row.stock,
             minimo: row.minimo,
@@ -199,7 +283,6 @@ export function ImportExportPanel() {
         );
 
         if (error) {
-          // Si la RPC no existe aún, error claro
           if (
             error.message?.includes("could not find") ||
             error.code === "PGRST202"
@@ -208,7 +291,10 @@ export function ImportExportPanel() {
               "Falta instalar la función bulk_import_products en Supabase. Ejecuta la migración SQL que te entregamos.",
             );
           }
-          throw error;
+
+          throw new Error(
+            `Error al importar el lote ${i + 1}/${batches.length}: ${error.message ?? "Error desconocido"}`,
+          );
         }
 
         const result = data as {
@@ -230,13 +316,21 @@ export function ImportExportPanel() {
           });
         }
 
-        setProgress({ current: i + 1, total: batches.length });
+        setProgress({
+          current: i + 1,
+          total: batches.length,
+        });
       }
 
       setLastFailures(failures);
       setPhase("");
 
-      return { created, updated, stockSet, failures: failures.length };
+      return {
+        created,
+        updated,
+        stockSet,
+        failures: failures.length,
+      };
     },
 
     onSuccess: (result) => {
@@ -248,11 +342,14 @@ export function ImportExportPanel() {
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["categories"] });
-      void qc.invalidateQueries({ queryKey: ["import-existing-products-shared"] });
+      void qc.invalidateQueries({
+        queryKey: ["import-existing-products-shared"],
+      });
       void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
     },
 
     onError: (error: Error) => {
+      setPhase("");
       toast.error(error.message);
     },
   });
@@ -268,6 +365,7 @@ export function ImportExportPanel() {
           <FileSpreadsheet className="h-5 w-5 text-[#1a73e8]" />
           Importar / Exportar inventario
         </CardTitle>
+
         <p className="text-xs text-[#757575]">
           Importación masiva por lotes de {BATCH_SIZE}: categorías, códigos,
           precios, costos y stock central en segundos.
@@ -324,12 +422,15 @@ export function ImportExportPanel() {
           <>
             <div className="flex flex-wrap gap-2">
               <Badge variant="secondary">Total {stats.total}</Badge>
+
               <Badge className="bg-[#e8f5e9] text-[#2e7d32]">
                 Nuevos {stats.valid}
               </Badge>
+
               <Badge className="bg-[#e8f0fe] text-[#1a73e8]">
                 Existentes {stats.existing}
               </Badge>
+
               {stats.error > 0 && (
                 <Badge className="bg-[#fce4ec] text-[#c2185b]">
                   Errores {stats.error}
@@ -339,6 +440,7 @@ export function ImportExportPanel() {
 
             <div className="space-y-1.5">
               <Label>Acción sobre existentes</Label>
+
               <Select
                 value={action}
                 onValueChange={(v) => setAction(v as ImportAction)}
@@ -346,17 +448,24 @@ export function ImportExportPanel() {
                 <SelectTrigger className="h-11 rounded-xl">
                   <SelectValue />
                 </SelectTrigger>
+
                 <SelectContent>
                   <SelectItem value="update_all">
                     Actualizar todo (datos + precio + stock)
                   </SelectItem>
-                  <SelectItem value="update_stock">Solo stock</SelectItem>
+
+                  <SelectItem value="update_stock">
+                    Solo stock
+                  </SelectItem>
+
                   <SelectItem value="update_price_cost">
                     Solo precio y costo
                   </SelectItem>
+
                   <SelectItem value="update_data">
                     Solo datos (nombre, código, categoría)
                   </SelectItem>
+
                   <SelectItem value="skip_existing">
                     Saltar existentes
                   </SelectItem>
@@ -365,8 +474,11 @@ export function ImportExportPanel() {
             </div>
 
             {phase && (
-              <p className="text-sm font-medium text-[#1a73e8]">{phase}</p>
+              <p className="text-sm font-medium text-[#1a73e8]">
+                {phase}
+              </p>
             )}
+
             {progress.total > 0 && (
               <p className="text-xs text-[#757575]">
                 Lote {progress.current} / {progress.total}
