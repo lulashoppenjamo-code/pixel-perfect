@@ -1,0 +1,78 @@
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.admin_set_role_permission(
+  _role public.app_role,
+  _permission_key text,
+  _enabled boolean
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  -- Solo una sesión con rol owner puede configurar permisos.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.user_roles ur
+    WHERE ur.user_id = auth.uid()
+      AND ur.role = 'owner'
+  ) THEN
+    RAISE EXCEPTION 'only owner can manage role permissions';
+  END IF;
+
+  -- El rol máster nunca se modifica desde esta pantalla.
+  IF _role = 'owner' THEN
+    RAISE EXCEPTION 'owner permissions are protected';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.permission_catalog pc
+    WHERE pc.key = _permission_key
+      AND pc.is_active = true
+  ) THEN
+    RAISE EXCEPTION 'permission not found or inactive';
+  END IF;
+
+  IF _enabled THEN
+    INSERT INTO public.role_permissions (
+      role,
+      permission_key
+    )
+    VALUES (
+      _role,
+      _permission_key
+    )
+    ON CONFLICT (role, permission_key)
+    DO NOTHING;
+  ELSE
+    DELETE FROM public.role_permissions
+    WHERE role = _role
+      AND permission_key = _permission_key;
+  END IF;
+END;
+$$;
+
+REVOKE ALL
+ON FUNCTION public.admin_set_role_permission(
+  public.app_role,
+  text,
+  boolean
+)
+FROM PUBLIC, anon;
+
+GRANT EXECUTE
+ON FUNCTION public.admin_set_role_permission(
+  public.app_role,
+  text,
+  boolean
+)
+TO authenticated, service_role;
+
+COMMIT;
