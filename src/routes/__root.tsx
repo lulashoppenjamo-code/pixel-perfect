@@ -241,7 +241,7 @@ export const Route =
 
     notFoundComponent: NotFoundComponent,
 
-    errorComponent: ErrorComponent,
+    errorComponent: ErrorComponent as never,
   });
 
 function RootShell({
