@@ -924,8 +924,8 @@ function ProductosPage() {
     <PageShell>
       <PageHeader
         icon={Package}
-        title="Artículos"
-        description="Catálogo, precios, costos, impuestos y códigos de barras."
+        title="La gestión del inventario"
+        description="Artículos, categorías, precios y existencias."
       />
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
@@ -986,7 +986,7 @@ function ProductosPage() {
               value="lista"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              Catálogo
+              Artículos
             </TabsTrigger>
             <TabsTrigger
               value="form"
@@ -998,7 +998,7 @@ function ProductosPage() {
               value="categorias"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              Categorías
+              Categoría
             </TabsTrigger>
           </TabsList>
         </div>
@@ -1095,7 +1095,7 @@ function ProductosPage() {
           )}
 
           {!loading && filtered.length > 0 && (
-            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            <div className="space-y-2 pb-20">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
                 const available = Number(stock?.availableStock ?? 0);
@@ -1112,48 +1112,46 @@ function ProductosPage() {
                       row.stock_status === "low_stock",
                   );
 
+                const marginPct =
+                  Number(p.cost) > 0 && Number(p.price) > 0
+                    ? (
+                        ((Number(p.price) - Number(p.cost)) /
+                          Number(p.price)) *
+                        100
+                      ).toFixed(3)
+                    : null;
+
+                const variantRows = sharedInventory.filter(
+                  (row) => row.product_id === p.id && row.variant_id,
+                );
+
                 return (
-                  <Card
+                  <div
                     key={p.id}
+                    role="button"
+                    tabIndex={0}
                     className={cn(
-                      "relative min-h-[200px] overflow-hidden rounded-xl border border-[#eeeeee] bg-white shadow-sm transition hover:border-[#1a73e8] hover:shadow-md sm:min-h-[220px]",
+                      "rounded-xl border border-[#e8e8e8] bg-white px-3 py-3 shadow-sm transition",
                       canOpenForm &&
-                        "cursor-pointer touch-manipulation active:scale-[0.98]",
+                        "cursor-pointer touch-manipulation active:scale-[0.995] hover:border-[#90caf9] hover:shadow",
                       !p.is_active && "opacity-50",
                     )}
                     onClick={() => {
                       if (canOpenForm) editProduct(p);
                     }}
+                    onKeyDown={(e) => {
+                      if (
+                        (e.key === "Enter" || e.key === " ") &&
+                        canOpenForm
+                      ) {
+                        e.preventDefault();
+                        editProduct(p);
+                      }
+                    }}
                   >
-                    {agotado && (
-                      <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
-                        Agotado
-                      </div>
-                    )}
-
-                    {lowStock && (
-                      <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fff3e0] px-2 py-0.5 text-[10px] font-bold text-[#e65100] shadow-sm">
-                        Stock bajo
-                      </div>
-                    )}
-
-                    {canDelete && p.is_active && (
-                      <button
-                        type="button"
-                        className="absolute right-1.5 top-1.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-background active:scale-95"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeProduct.mutate(p.id);
-                        }}
-                        aria-label={`Desactivar ${p.name}`}
-                        disabled={removeProduct.isPending}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    )}
-
-                    <CardContent className="flex h-full min-h-[200px] flex-col p-0 text-center sm:min-h-[220px]">
-                      <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
+                    <div className="flex gap-3">
+                      {/* Imagen */}
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] sm:h-[72px] sm:w-[72px]">
                         {p.image_url ? (
                           <img
                             src={p.image_url}
@@ -1162,108 +1160,166 @@ function ProductosPage() {
                             loading="lazy"
                           />
                         ) : (
-                          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-2xl sm:h-[4.5rem] sm:w-[4.5rem] sm:text-3xl">
+                          <span className="text-2xl">
                             {p.emoji ?? "📦"}
                           </span>
                         )}
                       </div>
 
-                      <div className="flex flex-1 flex-col px-1.5 pb-2 pt-1.5">
-                        <p className="line-clamp-2 min-h-[2.25rem] text-[12px] font-bold leading-snug text-[#212121] sm:text-[13px]">
-                          {p.name}
-                        </p>
+                      {/* Contenido principal */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="truncate text-[15px] font-semibold leading-snug text-[#212121]">
+                              {p.name}
+                              {p.sku ? (
+                                <span className="ml-1 font-normal text-[#757575]">
+                                  {p.sku}
+                                </span>
+                              ) : null}
+                            </p>
+                            <p className="mt-0.5 text-[15px] font-bold text-[#1a73e8]">
+                              {money(Number(p.price))}
+                              {marginPct !== null && (
+                                <span className="ml-1 text-[12px] font-semibold text-[#34a853]">
+                                  ({marginPct}%)
+                                </span>
+                              )}
+                            </p>
+                          </div>
 
-                        {p.sku && (
-                          <p className="mt-0.5 max-w-full truncate text-[10px] font-medium text-[#9e9e9e]">
-                            {p.sku}
-                          </p>
-                        )}
-
-                        <p className="mt-auto pt-1 text-[15px] font-bold leading-none text-[#1a73e8]">
-                          {money(Number(p.price))}
-                          {Number(p.cost) > 0 && Number(p.price) > 0 ? (
-                            <span className="ml-1 text-[11px] font-semibold text-[#34a853]">
-                              (
-                              {(
-                                ((Number(p.price) - Number(p.cost)) /
-                                  Number(p.price)) *
-                                100
-                              ).toFixed(1)}
-                              %)
-                            </span>
-                          ) : null}
-                        </p>
-
-                        <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
-                          <Badge
-                            variant={agotado ? "destructive" : "secondary"}
-                            className="rounded-full px-2 text-[10px] sm:text-xs"
-                          >
-                            {available} disp.
-                          </Badge>
-
-                          {reserved > 0 && (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full px-2 text-[10px] sm:text-xs"
-                            >
-                              {reserved} res.
-                            </Badge>
-                          )}
-
-                          {hasVariants && (
-                            <Badge
-                              variant="outline"
-                              className="rounded-full px-2 text-[10px] sm:text-xs"
-                            >
-                              {stock?.variants ?? 0} var.
-                            </Badge>
-                          )}
+                          <div className="shrink-0 pt-0.5 text-right">
+                            {agotado ? (
+                              <span className="text-[13px] font-medium text-[#e53935]">
+                                Agotado
+                              </span>
+                            ) : lowStock ? (
+                              <span className="text-[13px] font-medium text-[#ef6c00]">
+                                {available} En existencia
+                              </span>
+                            ) : (
+                              <span className="text-[13px] font-medium text-[#757575]">
+                                {available} En existencia
+                              </span>
+                            )}
+                            {reserved > 0 && (
+                              <p className="text-[11px] text-[#9e9e9e]">
+                                {reserved} res.
+                              </p>
+                            )}
+                          </div>
                         </div>
 
-                        {p.categories?.name && (
-                          <p className="mt-0.5 max-w-full truncate text-[10px] text-[#9e9e9e]">
-                            {p.categories.name}
-                          </p>
-                        )}
+                        {/* Chips de variantes / códigos estilo Zobaze */}
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {variantRows.length > 0
+                            ? variantRows.slice(0, 6).map((row) => (
+                                <span
+                                  key={row.id}
+                                  className="inline-flex max-w-[140px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white"
+                                  title={
+                                    row.sku ||
+                                    row.barcode ||
+                                    row.product_name
+                                  }
+                                >
+                                  {row.sku ||
+                                    row.barcode ||
+                                    "Var"}
+                                </span>
+                              ))
+                            : (p.sku || p.barcode) && (
+                                <span className="inline-flex max-w-[140px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white">
+                                  {p.sku || p.barcode}
+                                </span>
+                              )}
+                          {hasVariants &&
+                            variantRows.length > 6 && (
+                              <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
+                                +{variantRows.length - 6}
+                              </span>
+                            )}
+                        </div>
                       </div>
-                    </CardContent>
-                  </Card>
+
+                      {canDelete && p.is_active && (
+                        <button
+                          type="button"
+                          className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-destructive hover:bg-red-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeProduct.mutate(p.id);
+                          }}
+                          aria-label={`Desactivar ${p.name}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>
           )}
+
+          {/* FAB estilo Zobaze */}
+          <div className="pointer-events-none fixed bottom-20 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6">
+            {canCreateProduct && (
+              <button
+                type="button"
+                className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#1a73e8] text-2xl font-light text-white shadow-lg transition hover:bg-[#1557b0] active:scale-95"
+                onClick={startNewProduct}
+                aria-label="Crear producto"
+              >
+                +
+              </button>
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="form" className="mt-3 sm:mt-4">
           <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
-            <div className="bg-[#1a73e8] px-4 py-3.5 text-white sm:px-5">
-              <p className="text-[10px] font-medium uppercase tracking-wide text-white/80 sm:text-[11px]">
-                Gestión de inventarios
-              </p>
+            {/* Barra superior estilo Zobaze */}
+            <div className="flex items-center gap-2 border-b border-[#e8e8e8] bg-white px-3 py-2.5">
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[#616161] hover:bg-[#f5f5f5]"
+                onClick={() => {
+                  setForm(emptyProduct);
+                  setActiveTab("lista");
+                }}
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
 
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <h2 className="break-words text-lg font-bold leading-tight sm:text-xl">
-                  {form.id ? "Editar artículo" : "Nuevo artículo"}
-                </h2>
+              {form.id && (canDelete || isManager) && (
+                <Button
+                  type="button"
+                  className="h-9 rounded-md bg-[#e53935] px-4 text-sm font-bold text-white hover:bg-[#c62828]"
+                  disabled={removeProduct.isPending}
+                  onClick={() => {
+                    if (form.id) removeProduct.mutate(form.id);
+                  }}
+                >
+                  BORRAR
+                </Button>
+              )}
 
-                {form.id && canCreateProduct && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="h-8 shrink-0 rounded-lg bg-white/20 text-white hover:bg-white/30"
-                    onClick={startNewProduct}
-                  >
-                    + Crear nuevo
-                  </Button>
-                )}
-              </div>
+              <h2 className="flex-1 text-center text-[15px] font-bold uppercase tracking-wide text-[#1a73e8]">
+                {form.id ? "Gestionar artículo" : "Nuevo artículo"}
+              </h2>
 
-              {form.id && form.name && (
-                <p className="mt-0.5 truncate text-sm text-white/85">
-                  {form.name}
-                </p>
+              {form.id && canCreateProduct && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 rounded-lg border-[#1a73e8] text-[#1a73e8]"
+                  onClick={startNewProduct}
+                >
+                  + Nuevo
+                </Button>
               )}
             </div>
 
