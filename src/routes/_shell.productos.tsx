@@ -2062,6 +2062,42 @@ function ProductosPage() {
                                     )}
                                   </span>
                                 </div>
+                                {v.barcode ? (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    <span className="font-mono text-[10px] text-[#9e9e9e]">
+                                      {v.barcode}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1 rounded-md border border-[#34a853]/40 bg-[#e8f5e9] px-2 py-0.5 text-[10px] font-semibold text-[#2e7d32]"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          const labelName = [
+                                            form.name?.trim(),
+                                            v.name,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" — ");
+                                          downloadBarcodeLabel(
+                                            labelName || v.name,
+                                            String(price),
+                                            v.barcode!,
+                                          );
+                                        } catch (err) {
+                                          toast.error(
+                                            err instanceof Error
+                                              ? err.message
+                                              : "No se pudo crear la etiqueta",
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Etiqueta
+                                    </button>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           </button>
@@ -2453,31 +2489,44 @@ function ProductosPage() {
                     <ScanLine className="mr-1 h-4 w-4" />
                     Escanear
                   </Button>
-                  {variantForm.barcode.trim() && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-10 rounded-xl"
-                      onClick={() => {
-                        try {
-                          downloadBarcodeLabel(
-                            variantForm.name || form.name || "Variante",
-                            variantForm.price || form.price,
-                            variantForm.barcode.trim(),
-                          );
-                        } catch (err) {
-                          toast.error(
-                            err instanceof Error
-                              ? err.message
-                              : "No se pudo crear la etiqueta",
-                          );
-                        }
-                      }}
-                    >
-                      <Download className="mr-1 h-4 w-4" />
-                      Etiqueta
-                    </Button>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-full rounded-xl border-[#34a853] text-[#2e7d32] sm:w-auto"
+                    disabled={!variantForm.barcode.trim()}
+                    onClick={() => {
+                      const code = variantForm.barcode.trim();
+                      if (!code) {
+                        toast.error(
+                          "Primero genera o escribe el código de barras de la variante.",
+                        );
+                        return;
+                      }
+                      try {
+                        // Nombre de variante + producto para identificarla al imprimir
+                        const labelName = [
+                          form.name?.trim(),
+                          variantForm.name.trim(),
+                        ]
+                          .filter(Boolean)
+                          .join(" — ");
+                        downloadBarcodeLabel(
+                          labelName || "Variante",
+                          variantForm.price || form.price,
+                          code,
+                        );
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "No se pudo crear la etiqueta",
+                        );
+                      }
+                    }}
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    Descargar etiqueta PNG HD
+                  </Button>
                 </div>
               </div>
 
