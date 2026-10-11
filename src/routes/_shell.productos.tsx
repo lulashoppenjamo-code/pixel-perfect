@@ -2461,7 +2461,7 @@ function ProductosPage() {
                     }
                     onClick={async () => {
                       try {
-                        const code = await generateUniqueBarcode(12);
+                        const code = await generateUniqueBarcode(10);
                         setVariantForm((f) => ({ ...f, barcode: code }));
                         toast.success(`Código generado: ${code}`);
                       } catch (err) {
