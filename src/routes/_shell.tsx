@@ -59,7 +59,7 @@ import {
 
 export const Route = createFileRoute("/_shell")({
   component: ShellLayout,
-  errorComponent: ShellErrorComponent,
+  errorComponent: ShellErrorComponent as never,
 });
 
 function ShellErrorComponent({

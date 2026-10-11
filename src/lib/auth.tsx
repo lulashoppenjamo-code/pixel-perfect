@@ -79,7 +79,7 @@ async function loadRoles(
     const {
       data,
       error,
-    } = await supabase.rpc(
+    } = await (supabase as any).rpc(
       "get_my_roles",
     );
 
@@ -145,7 +145,7 @@ async function loadRoles(
       const {
         data,
         error,
-      } = await supabase.rpc(
+      } = await (supabase as any).rpc(
         "has_role",
         {
           _user_id: uid,
@@ -188,7 +188,7 @@ async function loadPermissions(): Promise<{
     const {
       data,
       error,
-    } = await supabase.rpc(
+    } = await (supabase as any).rpc(
       "get_my_permissions",
     );
 
@@ -246,7 +246,7 @@ async function loadUserProfile(
   try {
     const {
       error,
-    } = await supabase.rpc(
+    } = await (supabase as any).rpc(
       "ensure_profile",
       {},
     );

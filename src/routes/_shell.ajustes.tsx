@@ -2695,5 +2695,3 @@ description="Sucursales, usuarios, roles y configuración general del negocio."
 
 );
 }
-
-Pon los cambios aquí y regresarlo para subirlo a github

@@ -1205,6 +1205,10 @@ export type Database = {
         }
         Returns: string
       }
+      admin_revoke_pos_device: {
+        Args: { _device_id: string }
+        Returns: undefined
+      }
       admin_set_collaborator_pin: {
         Args: { _pin: string; _user_id: string }
         Returns: undefined
@@ -1229,6 +1233,10 @@ export type Database = {
       available_stock: {
         Args: { _branch_id: string; _product_id: string; _variant_id?: string }
         Returns: number
+      }
+      bulk_import_products: {
+        Args: { _branch_id?: string; _items: Json }
+        Returns: Json
       }
       cancel_online_order: {
         Args: { _order_id: string }
@@ -1383,6 +1391,14 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      get_collaborators_for_pin_login: {
+        Args: { _device_secret: string }
+        Returns: {
+          branch_id: string
+          full_name: string
+          user_id: string
+        }[]
+      }
       get_customer_balance: { Args: { _customer_id: string }; Returns: number }
       get_customer_credit_history: {
         Args: { _customer_id: string }
@@ -1528,6 +1544,10 @@ export type Database = {
           _variant_id?: string
         }
         Returns: undefined
+      }
+      verify_collaborator_pin: {
+        Args: { _device_secret: string; _pin: string; _user_id: string }
+        Returns: string
       }
     }
     Enums: {
