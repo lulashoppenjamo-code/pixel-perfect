@@ -1931,6 +1931,92 @@ function ProductosPage() {
                 )}
               </div>
 
+              {/* EXISTENCIAS — solo lectura desde shared_inventory */}
+              {form.id && (
+                <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                    Existencias
+                  </p>
+                  {(() => {
+                    const stock = stockMap.get(form.id!);
+                    const available = Number(stock?.availableStock ?? 0);
+                    const reserved = Number(stock?.reservedStock ?? 0);
+                    const physical = Number(stock?.stock ?? 0);
+                    const isLow = sharedInventory.some(
+                      (row) =>
+                        row.product_id === form.id &&
+                        row.stock_status === "low_stock",
+                    );
+                    const agotado = available <= 0;
+                    const statusLabel = agotado
+                      ? "Agotado"
+                      : isLow
+                        ? "Inventario bajo"
+                        : "OK";
+                    const statusClass = agotado
+                      ? "text-[#e53935]"
+                      : isLow
+                        ? "text-[#ef6c00]"
+                        : "text-[#34a853]";
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Disponibles
+                            </p>
+                            <p
+                              className={`text-lg font-bold ${
+                                agotado ? "text-[#e53935]" : "text-[#212121]"
+                              }`}
+                            >
+                              {available}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Reservado
+                            </p>
+                            <p className="text-lg font-bold text-[#212121]">
+                              {reserved}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Físico
+                            </p>
+                            <p className="text-lg font-bold text-[#212121]">
+                              {physical}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Estado
+                            </p>
+                            <p className={`text-lg font-bold ${statusClass}`}>
+                              {statusLabel}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-4 text-[#9e9e9e]">
+                          Solo lectura. El stock se ajusta en Inventario o al
+                          recibir compras. Al vender, el POS descuenta del
+                          inventario compartido.
+                        </p>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {!form.id && (
+                <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-2 text-xs text-[#757575]">
+                  Guarda el artículo para ver existencias del inventario
+                  compartido.
+                </p>
+              )}
+
               {/* VARIANTES estilo Zobaze — sin límite */}
               {form.id && (
                 <div className="space-y-2">
