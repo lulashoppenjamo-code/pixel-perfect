@@ -103,7 +103,7 @@ function useUserBranchAccess() {
       const {
         data,
         error,
-      } = await supabase
+      } = await (supabase as any)
         .from("user_branch_access")
         .select(
           "user_id, branch_id",

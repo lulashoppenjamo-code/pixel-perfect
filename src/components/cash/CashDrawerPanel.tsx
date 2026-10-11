@@ -1921,3 +1921,7 @@ function Stat({
     </div>
   );
 }
+function getSupabaseErrorMessage(error: unknown): string {
+  const e = error as { message?: string; details?: string; hint?: string } | null;
+  return e?.details || e?.hint || "";
+}

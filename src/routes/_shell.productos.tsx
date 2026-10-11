@@ -338,7 +338,7 @@ function ProductosPage() {
       // productos.price solo puede actualizar price/cost/tax_rate
       // (vía RPC update_product_prices)
       if (form.id && canPrice && !canEdit) {
-        const { error } = await supabase.rpc(
+        const { error } = await (supabase as any).rpc(
           "update_product_prices",
           {
             _product_id: form.id,
@@ -433,7 +433,7 @@ function ProductosPage() {
 
   const removeProduct = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc(
+      const { error } = await (supabase as any).rpc(
         "deactivate_product",
         {
           _product_id: id,
