@@ -636,7 +636,7 @@ function ProductosPage() {
     queryKey: ["product-variants", form.id ?? "none"],
     enabled: Boolean(form.id),
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from("product_variants")
         .select(
           "id, product_id, name, sku, barcode, cost_override, price_override, image_url",
@@ -936,7 +936,7 @@ function ProductosPage() {
           );
         }
 
-        let vq = supabase
+        let vq = (supabase as any)
           .from("product_variants")
           .select("id")
           .eq("barcode", barcodeValue);
@@ -958,7 +958,7 @@ function ProductosPage() {
             "No tienes permiso para crear variantes.",
           );
         }
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("product_variants")
           .update({
             price_override: priceVal,
@@ -981,7 +981,7 @@ function ProductosPage() {
       };
 
       if (variantForm.id) {
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from("product_variants")
           .update({
             name: payload.name,
@@ -998,7 +998,7 @@ function ProductosPage() {
         return;
       }
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("product_variants")
         .insert(payload);
 
@@ -1044,7 +1044,7 @@ function ProductosPage() {
         throw new Error("No tienes permiso para eliminar variantes.");
       }
 
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from("product_variants")
         .delete()
         .eq("id", variantId)
@@ -2566,7 +2566,7 @@ function ProductosPage() {
                   : variantForm.id
                     ? "Guardar variante"
                     : "Crear variante"}
-
+              </Button>
             </div>
           </div>
         </div>
