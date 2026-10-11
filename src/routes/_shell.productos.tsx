@@ -520,23 +520,29 @@ type ProductVariantRow = {
   product_id: string;
   name: string;
   sku: string | null;
+  barcode: string | null;
   cost_override: number | null;
   price_override: number | null;
+  image_url: string | null;
 };
 
 type VariantForm = {
   id?: string;
   name: string;
   sku: string;
+  barcode: string;
   price: string;
   cost: string;
+  image_url: string;
 };
 
 const emptyVariantForm: VariantForm = {
   name: "",
   sku: "",
+  barcode: "",
   price: "",
   cost: "",
+  image_url: "",
 };
 
 function ProductosPage() {
@@ -633,7 +639,7 @@ function ProductosPage() {
       const { data, error } = await supabase
         .from("product_variants")
         .select(
-          "id, product_id, name, sku, cost_override, price_override",
+          "id, product_id, name, sku, barcode, cost_override, price_override, image_url",
         )
         .eq("product_id", form.id!)
         .order("name");
@@ -914,6 +920,38 @@ function ProductosPage() {
         throw new Error("Costo de variante no válido");
       }
 
+      const barcodeValue = variantForm.barcode.trim();
+
+      // Unicidad de barcode en productos y variantes (código independiente).
+      if (barcodeValue && !priceOnly) {
+        const { data: productClash, error: pErr } = await supabase
+          .from("products")
+          .select("id")
+          .eq("barcode", barcodeValue)
+          .maybeSingle();
+        if (pErr) throw pErr;
+        if (productClash) {
+          throw new Error(
+            "Ese código de barras ya pertenece a otro producto.",
+          );
+        }
+
+        let vq = supabase
+          .from("product_variants")
+          .select("id")
+          .eq("barcode", barcodeValue);
+        if (variantForm.id) {
+          vq = vq.neq("id", variantForm.id);
+        }
+        const { data: variantClash, error: vErr } = await vq.maybeSingle();
+        if (vErr) throw vErr;
+        if (variantClash) {
+          throw new Error(
+            "Ese código de barras ya pertenece a otra variante.",
+          );
+        }
+      }
+
       if (priceOnly) {
         if (!variantForm.id) {
           throw new Error(
@@ -936,8 +974,10 @@ function ProductosPage() {
         product_id: form.id,
         name,
         sku: variantForm.sku.trim() || null,
+        barcode: barcodeValue || null,
         price_override: priceVal,
         cost_override: costVal,
+        image_url: variantForm.image_url.trim() || null,
       };
 
       if (variantForm.id) {
@@ -946,8 +986,10 @@ function ProductosPage() {
           .update({
             name: payload.name,
             sku: payload.sku,
+            barcode: payload.barcode,
             price_override: payload.price_override,
             cost_override: payload.cost_override,
+            image_url: payload.image_url,
           })
           .eq("id", variantForm.id)
           .eq("product_id", form.id);
@@ -1104,7 +1146,11 @@ function ProductosPage() {
   const loading = productsLoading || inventoryLoading;
 
   const handleBarcodeDetected = (value: string) => {
-    setForm((current) => ({ ...current, barcode: value }));
+    if (variantModalOpen) {
+      setVariantForm((current) => ({ ...current, barcode: value }));
+    } else {
+      setForm((current) => ({ ...current, barcode: value }));
+    }
     setScannerOpen(false);
     toast.success(`Código leído: ${value}`);
   };
@@ -1902,6 +1948,7 @@ function ProductosPage() {
                             ...emptyVariantForm,
                             price: form.price,
                             cost: form.cost,
+                            image_url: form.image_url || "",
                           });
                           setVariantModalOpen(true);
                         }}
@@ -1954,6 +2001,7 @@ function ProductosPage() {
                                 id: v.id,
                                 name: v.name,
                                 sku: v.sku ?? "",
+                                barcode: v.barcode ?? "",
                                 price:
                                   v.price_override != null
                                     ? String(v.price_override)
@@ -1962,6 +2010,7 @@ function ProductosPage() {
                                   v.cost_override != null
                                     ? String(v.cost_override)
                                     : form.cost,
+                                image_url: v.image_url ?? form.image_url ?? "",
                               });
                               setVariantModalOpen(true);
                             }}
@@ -1987,6 +2036,11 @@ function ProductosPage() {
                                     </span>
                                   ) : null}
                                 </p>
+                                {v.barcode ? (
+                                  <p className="truncate font-mono text-[11px] text-[#9e9e9e]">
+                                    {v.barcode}
+                                  </p>
+                                ) : null}
                                 <div className="mt-1 grid grid-cols-3 gap-1 text-[11px] text-[#757575]">
                                   <span>
                                     Venta{" "}
@@ -2201,7 +2255,13 @@ function ProductosPage() {
             <div className="space-y-4 p-4">
               <div className="flex gap-3">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[#f5f5f5] text-2xl">
-                  {form.image_url ? (
+                  {variantForm.image_url ? (
+                    <img
+                      src={variantForm.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : form.image_url ? (
                     <img
                       src={form.image_url}
                       alt=""
@@ -2227,6 +2287,197 @@ function ProductosPage() {
                     className="h-11 rounded-xl"
                     disabled={priceOnly}
                   />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-[#757575]">
+                  Imagen de la variante
+                </Label>
+                <Input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="h-11 cursor-pointer rounded-xl border-[#e0e0e0] text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-[#e8f0fe] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#1a73e8]"
+                  disabled={
+                    priceOnly ||
+                    !(canEditProduct || isManager) ||
+                    saveVariant.isPending
+                  }
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    if (priceOnly || !(canEditProduct || isManager)) {
+                      toast.error("No tienes permiso para cambiar imágenes.");
+                      event.target.value = "";
+                      return;
+                    }
+                    if (file.size > 5 * 1024 * 1024) {
+                      toast.error("La imagen no debe superar 5 MB");
+                      event.target.value = "";
+                      return;
+                    }
+                    try {
+                      const ext =
+                        file.name.split(".").pop()?.toLowerCase() || "jpg";
+                      const {
+                        data: { user: upUser },
+                      } = await supabase.auth.getUser();
+                      if (!upUser?.id) {
+                        throw new Error("Sesión requerida para subir imagen");
+                      }
+                      if (!form.id) {
+                        throw new Error(
+                          "Guarda el producto antes de subir imagen de variante.",
+                        );
+                      }
+                      const path = `${form.id}/variants/${crypto.randomUUID()}.${ext}`;
+                      const { error: upErr } = await supabase.storage
+                        .from("product-images")
+                        .upload(path, file, {
+                          upsert: false,
+                          contentType: file.type || "image/jpeg",
+                        });
+                      if (upErr) throw upErr;
+                      const { data: pub } = supabase.storage
+                        .from("product-images")
+                        .getPublicUrl(path);
+                      setVariantForm((f) => ({
+                        ...f,
+                        image_url: pub.publicUrl,
+                      }));
+                      toast.success("Imagen de variante cargada");
+                    } catch (err) {
+                      toast.error(
+                        err instanceof Error
+                          ? err.message
+                          : "No se pudo subir la imagen",
+                      );
+                    } finally {
+                      event.target.value = "";
+                    }
+                  }}
+                />
+                {variantForm.image_url && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-lg"
+                    disabled={priceOnly || !(canEditProduct || isManager)}
+                    onClick={() =>
+                      setVariantForm((f) => ({ ...f, image_url: "" }))
+                    }
+                  >
+                    Quitar imagen
+                  </Button>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Códigos (independientes del producto)
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">SKU</Label>
+                    <Input
+                      value={variantForm.sku}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          sku: e.target.value,
+                        }))
+                      }
+                      placeholder="SKU variante"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Código de barras
+                    </Label>
+                    <Input
+                      value={variantForm.barcode}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          barcode: e.target.value.slice(0, 64),
+                        }))
+                      }
+                      placeholder="EAN / UPC o genérico"
+                      maxLength={64}
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-xl border-[#e0e0e0]"
+                    disabled={
+                      priceOnly ||
+                      !(canEditProduct || isManager) ||
+                      saveVariant.isPending
+                    }
+                    onClick={async () => {
+                      try {
+                        const code = await generateUniqueBarcode(12);
+                        setVariantForm((f) => ({ ...f, barcode: code }));
+                        toast.success(`Código generado: ${code}`);
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "No se pudo generar el código",
+                        );
+                      }
+                    }}
+                  >
+                    <Hash className="mr-1 h-4 w-4" />
+                    Generar
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 rounded-xl bg-[#1a73e8] text-white hover:bg-[#1557b0]"
+                    disabled={
+                      priceOnly ||
+                      !(canEditProduct || isManager) ||
+                      saveVariant.isPending
+                    }
+                    onClick={() => setScannerOpen(true)}
+                  >
+                    <ScanLine className="mr-1 h-4 w-4" />
+                    Escanear
+                  </Button>
+                  {variantForm.barcode.trim() && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 rounded-xl"
+                      onClick={() => {
+                        try {
+                          downloadBarcodeLabel(
+                            variantForm.name || form.name || "Variante",
+                            variantForm.price || form.price,
+                            variantForm.barcode.trim(),
+                          );
+                        } catch (err) {
+                          toast.error(
+                            err instanceof Error
+                              ? err.message
+                              : "No se pudo crear la etiqueta",
+                          );
+                        }
+                      }}
+                    >
+                      <Download className="mr-1 h-4 w-4" />
+                      Etiqueta
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -2283,56 +2534,22 @@ function ProductosPage() {
               </div>
 
               {variantForm.id && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-xl border bg-[#fafafa] px-3 py-2">
-                    <p className="text-[10px] uppercase text-[#9e9e9e]">
-                      Existencias disponibles
-                    </p>
-                    <p className="text-lg font-bold text-[#212121]">
-                      {Number(
-                        sharedInventory.find(
-                          (row) =>
-                            row.product_id === form.id &&
-                            row.variant_id === variantForm.id,
-                        )?.available_stock ?? 0,
-                      )}
-                    </p>
-                    <p className="text-[10px] text-[#9e9e9e]">
-                      Solo lectura — se ajusta en inventario / compras
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs text-[#757575]">SKU</Label>
-                    <Input
-                      value={variantForm.sku}
-                      onChange={(e) =>
-                        setVariantForm((f) => ({
-                          ...f,
-                          sku: e.target.value,
-                        }))
-                      }
-                      className="h-11 rounded-xl font-mono text-sm"
-                      disabled={priceOnly}
-                    />
-                  </div>
-                </div>
-              )}
-
-              {!variantForm.id && (
-                <div className="space-y-1">
-                  <Label className="text-xs text-[#757575]">SKU</Label>
-                  <Input
-                    value={variantForm.sku}
-                    onChange={(e) =>
-                      setVariantForm((f) => ({
-                        ...f,
-                        sku: e.target.value,
-                      }))
-                    }
-                    placeholder="Opcional"
-                    className="h-11 rounded-xl font-mono text-sm"
-                    disabled={priceOnly}
-                  />
+                <div className="rounded-xl border bg-[#fafafa] px-3 py-2">
+                  <p className="text-[10px] uppercase text-[#9e9e9e]">
+                    Existencias disponibles
+                  </p>
+                  <p className="text-lg font-bold text-[#212121]">
+                    {Number(
+                      sharedInventory.find(
+                        (row) =>
+                          row.product_id === form.id &&
+                          row.variant_id === variantForm.id,
+                      )?.available_stock ?? 0,
+                    )}
+                  </p>
+                  <p className="text-[10px] text-[#9e9e9e]">
+                    Solo lectura — se ajusta en inventario / compras
+                  </p>
                 </div>
               )}
 
@@ -2349,7 +2566,7 @@ function ProductosPage() {
                   : variantForm.id
                     ? "Guardar variante"
                     : "Crear variante"}
-              </Button>
+
             </div>
           </div>
         </div>
