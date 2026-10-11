@@ -4,19 +4,14 @@
  *
  * RESPONSIVE:
  * - Mobile first para celular y tablet.
- * - Sin cambiar la lógica del motor.
+ * - Conserva el motor existente.
  *
  * INVENTARIO:
- * - La fuente oficial es shared_inventory.
- * - El inventario es único y compartido entre sucursales.
+ * - Fuente oficial: shared_inventory.
+ * - Inventario único y compartido entre sucursales.
+ * - Las variantes conservan sus propios variant_id.
  *
- * Para productos con variantes:
- * - shared_inventory puede tener varias filas con el mismo product_id.
- * - cada variante conserva su propio variant_id.
- * - la tarjeta del producto muestra la suma de available_stock.
- *
- * BLOQUE 3 — Visual Artículos (grilla, tarjetas, filtros, Agotado).
- * Solo presentación. Sin tocar shared_inventory ni mutaciones.
+ * BLOQUE 3 — Visual Artículos.
  */
 
 import { useMemo, useState } from "react";
@@ -30,7 +25,6 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  Pencil,
   Trash2,
   Search,
   Package,
@@ -49,21 +43,18 @@ import { money } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-
 import {
   Select,
   SelectContent,
@@ -71,7 +62,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import { Badge } from "@/components/ui/badge";
 import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
@@ -80,7 +70,6 @@ export const Route = createFileRoute("/_shell/productos")({
   head: () => ({
     meta: [{ title: "Productos — Lula OS" }],
   }),
-
   component: () => (
     <RequireNavAccess navKey="productos">
       <ProductosPage />
@@ -137,23 +126,36 @@ type ProductRow = {
 
 function ProductosPage() {
   const { isManager, can } = useAuth();
+
   const canCreate = can("productos.create");
   const canEdit = can("productos.edit");
   const canDelete = can("productos.delete");
   const canPrice = can("productos.price");
+
+  // Los usuarios que solo tienen permiso de precios
+  // pueden modificar precios de productos existentes,
+  // pero no crear productos ni editar sus demás campos.
+  const priceOnly = canPrice && !canEdit && !isManager;
+  const canOpenForm = canEdit || canPrice || isManager;
+  const canCreateProduct =
+    !priceOnly && (canCreate || isManager);
+  const canEditProduct = canEdit || isManager;
+
   const qc = useQueryClient();
 
   const [form, setForm] = useState<ProductForm>(emptyProduct);
   const [catName, setCatName] = useState("");
   const [catParent, setCatParent] = useState("none");
   const [search, setSearch] = useState("");
-  /** Filtro visual de stock (client-side sobre stockMap compartido). */
-  const [stockFilter, setStockFilter] = useState<"all" | "low" | "out">("all");
+  const [stockFilter, setStockFilter] =
+    useState<"all" | "low" | "out">("all");
+  const [activeTab, setActiveTab] =
+    useState<"lista" | "form" | "categorias">("lista");
+  const [selectedCategoryId, setSelectedCategoryId] =
+    useState<string | null>(null);
 
   /*
-   * ============================================================
    * CATEGORÍAS
-   * ============================================================
    */
 
   const {
@@ -168,15 +170,12 @@ function ProductosPage() {
         .order("name");
 
       if (error) throw error;
-
       return data ?? [];
     },
   });
 
   /*
-   * ============================================================
    * PRODUCTOS
-   * ============================================================
    */
 
   const {
@@ -187,35 +186,30 @@ function ProductosPage() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select(
-          `
-            id,
-            sku,
-            barcode,
-            name,
-            description,
-            category_id,
-            price,
-            cost,
-            tax_rate,
-            emoji,
-            image_url,
-            is_active,
-            categories(name)
-          `,
-        )
+        .select(`
+          id,
+          sku,
+          barcode,
+          name,
+          description,
+          category_id,
+          price,
+          cost,
+          tax_rate,
+          emoji,
+          image_url,
+          is_active,
+          categories(name)
+        `)
         .order("name");
 
       if (error) throw error;
-
       return (data ?? []) as ProductRow[];
     },
   });
 
   /*
-   * ============================================================
    * INVENTARIO COMPARTIDO
-   * ============================================================
    */
 
   const {
@@ -228,9 +222,8 @@ function ProductosPage() {
   });
 
   /*
-   * ============================================================
-   * MAPA DE STOCK POR PRODUCTO
-   * ============================================================
+   * EXISTENCIAS AGRUPADAS POR PRODUCTO
+   * No modifica shared_inventory ni sus variantes.
    */
 
   const stockMap = useMemo(() => {
@@ -254,7 +247,7 @@ function ProductosPage() {
           reservedStock: Number(row.reserved_stock ?? 0),
           availableStock: Number(row.available_stock ?? 0),
           variants: row.variant_id ? 1 : 0,
-          hasVariants: !!row.variant_id,
+          hasVariants: Boolean(row.variant_id),
         });
         continue;
       }
@@ -273,20 +266,26 @@ function ProductosPage() {
   }, [sharedInventory]);
 
   /*
-   * ============================================================
-   * FILTRO
-   * ============================================================
+   * BÚSQUEDA Y FILTROS
    */
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return products.filter((p) => {
+      if (
+        selectedCategoryId &&
+        p.category_id !== selectedCategoryId
+      ) {
+        return false;
+      }
+
       if (q) {
         const match =
           p.name.toLowerCase().includes(q) ||
           (p.sku ?? "").toLowerCase().includes(q) ||
           (p.barcode ?? "").toLowerCase().includes(q);
+
         if (!match) return false;
       }
 
@@ -294,6 +293,7 @@ function ProductosPage() {
 
       const stock = stockMap.get(p.id);
       const available = Number(stock?.availableStock ?? 0);
+
       const isLow = sharedInventory.some(
         (row) =>
           row.product_id === p.id &&
@@ -302,32 +302,69 @@ function ProductosPage() {
 
       if (stockFilter === "out") return available <= 0;
       if (stockFilter === "low") return isLow && available > 0;
+
       return true;
     });
-  }, [products, search, stockFilter, stockMap, sharedInventory]);
+  }, [
+    products,
+    search,
+    stockFilter,
+    stockMap,
+    sharedInventory,
+    selectedCategoryId,
+  ]);
 
   /*
-   * ============================================================
    * GUARDAR PRODUCTO
-   * ============================================================
+   *
+   * Las comprobaciones se hacen dentro de la mutación,
+   * no solamente en los botones de la interfaz.
    */
 
   const saveProduct = useMutation({
     mutationFn: async () => {
+      // Un usuario con permiso exclusivo de precios no puede crear.
+      if (!form.id) {
+        if (priceOnly || !canCreateProduct) {
+          throw new Error(
+            "No tienes permiso para crear productos.",
+          );
+        }
+      } else if (priceOnly) {
+        // Puede actualizar exclusivamente precios de un producto existente.
+        if (!canPrice) {
+          throw new Error(
+            "No tienes permiso para modificar precios.",
+          );
+        }
+      } else if (!canEditProduct) {
+        throw new Error(
+          "No tienes permiso para editar este producto.",
+        );
+      }
+
       if (!form.name.trim()) {
         throw new Error("Nombre requerido");
       }
 
+      // La comprobación de código duplicado se conserva.
       const barcodeValue = form.barcode.trim();
-      if (barcodeValue) {
+
+      if (barcodeValue && !priceOnly) {
         let q = supabase
           .from("products")
           .select("id")
           .eq("barcode", barcodeValue);
+
         if (form.id) {
           q = q.neq("id", form.id);
         }
-        const { data: clash } = await q.maybeSingle();
+
+        const { data: clash, error: barcodeError } =
+          await q.maybeSingle();
+
+        if (barcodeError) throw barcodeError;
+
         if (clash) {
           throw new Error(
             "Ese código de barras ya existe en otro producto. Genera uno nuevo.",
@@ -335,9 +372,8 @@ function ProductosPage() {
         }
       }
 
-      // productos.price solo puede actualizar price/cost/tax_rate
-      // (vía RPC update_product_prices)
-      if (form.id && canPrice && !canEdit) {
+      // Acceso limitado: usar la RPC existente para cambiar precios.
+      if (form.id && priceOnly) {
         const { error } = await (supabase as any).rpc(
           "update_product_prices",
           {
@@ -349,7 +385,6 @@ function ProductosPage() {
         );
 
         if (error) throw error;
-
         return;
       }
 
@@ -357,8 +392,7 @@ function ProductosPage() {
         sku: form.sku.trim() || null,
         barcode: form.barcode.trim() || null,
         name: form.name.trim(),
-        description:
-          form.description.trim() || null,
+        description: form.description.trim() || null,
         category_id:
           form.category_id === "none"
             ? null
@@ -367,8 +401,7 @@ function ProductosPage() {
         cost: Number(form.cost) || 0,
         tax_rate: Number(form.tax_rate) || 0,
         emoji: form.emoji || "📦",
-        image_url:
-          form.image_url.trim() || null,
+        image_url: form.image_url.trim() || null,
         is_active: true,
       };
 
@@ -379,7 +412,6 @@ function ProductosPage() {
           .eq("id", form.id);
 
         if (error) throw error;
-
         return;
       }
 
@@ -392,29 +424,15 @@ function ProductosPage() {
 
     onSuccess: () => {
       toast.success(
-        form.id
-          ? "Producto actualizado"
-          : "Producto creado",
+        form.id ? "Producto actualizado" : "Producto creado",
       );
 
       setForm(emptyProduct);
 
-      void qc.invalidateQueries({
-        queryKey: ["products"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["pos-products"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["inv-products"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["shared-inventory"],
-      });
-
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["inv-products"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({
         queryKey: ["shared-inventory", "products"],
       });
@@ -426,13 +444,17 @@ function ProductosPage() {
   });
 
   /*
-   * ============================================================
    * DESACTIVAR PRODUCTO
-   * ============================================================
    */
 
   const removeProduct = useMutation({
     mutationFn: async (id: string) => {
+      if (!canDelete && !isManager) {
+        throw new Error(
+          "No tienes permiso para desactivar productos.",
+        );
+      }
+
       const { error } = await (supabase as any).rpc(
         "deactivate_product",
         {
@@ -446,18 +468,9 @@ function ProductosPage() {
     onSuccess: () => {
       toast.success("Producto desactivado");
 
-      void qc.invalidateQueries({
-        queryKey: ["products"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["pos-products"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["shared-inventory"],
-      });
-
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({
         queryKey: ["shared-inventory", "products"],
       });
@@ -469,27 +482,26 @@ function ProductosPage() {
   });
 
   /*
-   * ============================================================
    * CREAR CATEGORÍA
-   * ============================================================
    */
 
   const saveCategory = useMutation({
     mutationFn: async () => {
-      if (!catName.trim()) {
+      if (!isManager) {
         throw new Error(
-          "Nombre de categoría requerido",
+          "Solo un administrador puede crear categorías.",
         );
+      }
+
+      if (!catName.trim()) {
+        throw new Error("Nombre de categoría requerido");
       }
 
       const { error } = await supabase
         .from("categories")
         .insert({
           name: catName.trim(),
-          parent_id:
-            catParent === "none"
-              ? null
-              : catParent,
+          parent_id: catParent === "none" ? null : catParent,
         });
 
       if (error) throw error;
@@ -497,13 +509,10 @@ function ProductosPage() {
 
     onSuccess: () => {
       toast.success("Categoría creada");
-
       setCatName("");
       setCatParent("none");
 
-      void qc.invalidateQueries({
-        queryKey: ["categories"],
-      });
+      void qc.invalidateQueries({ queryKey: ["categories"] });
     },
 
     onError: (e: Error) => {
@@ -512,12 +521,15 @@ function ProductosPage() {
   });
 
   /*
-   * ============================================================
-   * EDITAR PRODUCTO
-   * ============================================================
+   * ABRIR PRODUCTO EXISTENTE
    */
 
   const editProduct = (p: ProductRow) => {
+    if (!canOpenForm) {
+      toast.error("No tienes permiso para abrir este producto.");
+      return;
+    }
+
     setForm({
       id: p.id,
       sku: p.sku ?? "",
@@ -531,12 +543,31 @@ function ProductosPage() {
       emoji: p.emoji ?? "📦",
       image_url: p.image_url ?? "",
     });
+
+    setActiveTab("form");
   };
 
+  const startNewProduct = () => {
+    if (!canCreateProduct) {
+      toast.error("No tienes permiso para crear productos.");
+      return;
+    }
+
+    setForm(emptyProduct);
+    setActiveTab("form");
+  };
+
+  const selectedCategoryName = useMemo(() => {
+    if (!selectedCategoryId) return null;
+
+    return (
+      categories.find((c) => c.id === selectedCategoryId)?.name ??
+      null
+    );
+  }, [categories, selectedCategoryId]);
+
   /*
-   * ============================================================
    * RESUMEN DE INVENTARIO
-   * ============================================================
    */
 
   const inventorySummary = useMemo(() => {
@@ -571,8 +602,7 @@ function ProductosPage() {
     };
   }, [sharedInventory, stockMap]);
 
-  const loading =
-    productsLoading || inventoryLoading;
+  const loading = productsLoading || inventoryLoading;
 
   return (
     <PageShell>
@@ -582,9 +612,7 @@ function ProductosPage() {
         description="Catálogo, precios, costos, impuestos y códigos de barras."
       />
 
-      {/* ========================================================
-          RESUMEN
-          ======================================================== */}
+      {/* RESUMEN */}
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
         <Card className="border-[#e0e0e0] shadow-sm">
@@ -632,7 +660,12 @@ function ProductosPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="lista">
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) =>
+          setActiveTab(v as "lista" | "form" | "categorias")
+        }
+      >
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
           <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm sm:w-full">
             <TabsTrigger
@@ -646,7 +679,7 @@ function ProductosPage() {
               value="form"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              {form.id ? "Gestionar" : "Nuevo"}
+              {form.id ? "Editar" : "Nuevo"}
             </TabsTrigger>
 
             <TabsTrigger
@@ -658,9 +691,7 @@ function ProductosPage() {
           </TabsList>
         </div>
 
-        {/* ======================================================
-            CATÁLOGO
-            ====================================================== */}
+        {/* CATÁLOGO */}
 
         <TabsContent
           value="lista"
@@ -669,14 +700,11 @@ function ProductosPage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-
               <Input
                 className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
                 placeholder="Buscar artículo, SKU o código…"
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
+                onChange={(e) => setSearch(e.target.value)}
               />
             </div>
 
@@ -723,20 +751,43 @@ function ProductosPage() {
             </div>
           )}
 
+          {selectedCategoryName && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e3f2fd] bg-[#e3f2fd]/60 px-3 py-2">
+              <span className="text-sm text-[#1565c0]">
+                Categoría: <strong>{selectedCategoryName}</strong>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-lg border-[#90caf9] text-[#1565c0]"
+                onClick={() => setSelectedCategoryId(null)}
+              >
+                Ver todos
+              </Button>
+            </div>
+          )}
+
           {!loading && filtered.length === 0 && (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm sm:px-6 sm:py-14">
               <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f0fe] text-4xl">
                 📦
               </div>
-
               <div>
                 <p className="text-base font-bold text-[#212121]">
                   Sin artículos
                 </p>
-
                 <p className="mt-1 max-w-sm text-sm leading-5 text-[#757575]">
                   Crea un producto en la pestaña Nuevo o ajusta la búsqueda.
                 </p>
+                {canCreateProduct && (
+                  <Button
+                    className="mt-3 rounded-xl"
+                    onClick={startNewProduct}
+                  >
+                    + Crear nuevo
+                  </Button>
+                )}
               </div>
             </div>
           )}
@@ -745,82 +796,59 @@ function ProductosPage() {
             <div className="grid grid-cols-3 gap-1.5 sm:gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
+                const available = Number(stock?.availableStock ?? 0);
+                const reserved = Number(stock?.reservedStock ?? 0);
+                const hasVariants = stock?.hasVariants ?? false;
+                const agotado = available <= 0;
 
-                const available =
-                  Number(
-                    stock?.availableStock ?? 0,
+                const lowStock =
+                  !agotado &&
+                  Boolean(stock) &&
+                  sharedInventory.some(
+                    (row) =>
+                      row.product_id === p.id &&
+                      row.stock_status === "low_stock",
                   );
-
-                const totalStock =
-                  Number(
-                    stock?.stock ?? 0,
-                  );
-
-                const reserved =
-                  Number(
-                    stock?.reservedStock ?? 0,
-                  );
-
-                const hasVariants =
-                  stock?.hasVariants ?? false;
-
-                const agotado =
-                  available <= 0;
 
                 return (
                   <Card
                     key={p.id}
                     className={cn(
-                      "relative min-h-[200px] cursor-pointer touch-manipulation overflow-hidden rounded-xl border border-[#eeeeee] bg-white shadow-sm transition active:scale-[0.98] hover:border-[#1a73e8] hover:shadow-md sm:min-h-[220px]",
-                      !p.is_active &&
-                        "opacity-50",
+                      "relative min-h-[200px] overflow-hidden rounded-xl border border-[#eeeeee] bg-white shadow-sm transition hover:border-[#1a73e8] hover:shadow-md sm:min-h-[220px]",
+                      canOpenForm &&
+                        "cursor-pointer touch-manipulation active:scale-[0.98]",
+                      !p.is_active && "opacity-50",
                     )}
-                    onClick={() =>
-                      isManager &&
-                      editProduct(p)
-                    }
+                    onClick={() => {
+                      if (canOpenForm) editProduct(p);
+                    }}
                   >
-                    {/* ESTADO */}
-
                     {agotado && (
                       <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
                         Agotado
                       </div>
                     )}
 
-                    {!agotado &&
-                      stock &&
-                      sharedInventory.some(
-                        (row) =>
-                          row.product_id ===
-                            p.id &&
-                          row.stock_status ===
-                            "low_stock",
-                      ) && (
-                        <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fff3e0] px-2 py-0.5 text-[10px] font-bold text-[#e65100] shadow-sm">
-                          Stock bajo
-                        </div>
-                      )}
+                    {lowStock && (
+                      <div className="absolute left-1.5 top-1.5 z-10 whitespace-nowrap rounded-full bg-[#fff3e0] px-2 py-0.5 text-[10px] font-bold text-[#e65100] shadow-sm">
+                        Stock bajo
+                      </div>
+                    )}
 
-                    {/* ELIMINAR */}
-
-                    {canDelete &&
-                      p.is_active && (
-                        <button
-                          type="button"
-                          className="absolute right-1.5 top-1.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-background active:scale-95"
-                          onClick={(e) => {
-                            e.stopPropagation();
-
-                            removeProduct.mutate(
-                              p.id,
-                            );
-                          }}
-                          aria-label={`Desactivar ${p.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
+                    {canDelete && p.is_active && (
+                      <button
+                        type="button"
+                        className="absolute right-1.5 top-1.5 z-20 flex h-10 w-10 items-center justify-center rounded-full bg-background/90 text-destructive shadow-sm transition hover:bg-background active:scale-95"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeProduct.mutate(p.id);
+                        }}
+                        aria-label={`Desactivar ${p.name}`}
+                        disabled={removeProduct.isPending}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
 
                     <CardContent className="flex h-full min-h-[200px] flex-col p-0 text-center sm:min-h-[220px]">
                       <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
@@ -851,13 +879,11 @@ function ProductosPage() {
 
                         <p className="mt-auto pt-1 text-[15px] font-bold leading-none text-[#1a73e8]">
                           {money(Number(p.price))}
-                          {Number(p.cost) > 0 &&
-                          Number(p.price) > 0 ? (
+                          {Number(p.cost) > 0 && Number(p.price) > 0 ? (
                             <span className="ml-1 text-[11px] font-semibold text-[#34a853]">
                               (
                               {(
-                                ((Number(p.price) -
-                                  Number(p.cost)) /
+                                ((Number(p.price) - Number(p.cost)) /
                                   Number(p.price)) *
                                 100
                               ).toFixed(1)}
@@ -868,11 +894,7 @@ function ProductosPage() {
 
                         <div className="mt-1 flex flex-wrap items-center justify-center gap-1">
                           <Badge
-                            variant={
-                              agotado
-                                ? "destructive"
-                                : "secondary"
-                            }
+                            variant={agotado ? "destructive" : "secondary"}
                             className="rounded-full px-2 text-[10px] sm:text-xs"
                           >
                             {available} disp.
@@ -911,26 +933,38 @@ function ProductosPage() {
           )}
         </TabsContent>
 
-        {/* ======================================================
-            FORMULARIO PRODUCTO
-            ====================================================== */}
+        {/* FORMULARIO DE PRODUCTO */}
 
-        <TabsContent
-          value="form"
-          className="mt-3 sm:mt-4"
-        >
+        <TabsContent value="form" className="mt-3 sm:mt-4">
           <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
             <div className="bg-[#1a73e8] px-4 py-3.5 text-white sm:px-5">
               <p className="text-[10px] font-medium uppercase tracking-wide text-white/80 sm:text-[11px]">
                 Gestión de inventarios
               </p>
 
-              <h2 className="break-words text-lg font-bold leading-tight sm:text-xl">
-                {form.id
-                  ? form.name ||
-                    "Gestionar artículo"
-                  : "Nuevo artículo"}
-              </h2>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <h2 className="break-words text-lg font-bold leading-tight sm:text-xl">
+                  {form.id ? "Editar artículo" : "Nuevo artículo"}
+                </h2>
+
+                {form.id && canCreateProduct && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="h-8 shrink-0 rounded-lg bg-white/20 text-white hover:bg-white/30"
+                    onClick={startNewProduct}
+                  >
+                    + Crear nuevo
+                  </Button>
+                )}
+              </div>
+
+              {form.id && form.name && (
+                <p className="mt-0.5 truncate text-sm text-white/85">
+                  {form.name}
+                </p>
+              )}
             </div>
 
             <div className="space-y-4 p-3.5 sm:p-5">
@@ -938,46 +972,38 @@ function ProductosPage() {
 
               <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[76px_minmax(0,1fr)]">
                 <div className="space-y-1.5">
-                  <Label className="text-xs text-[#757575]">
-                    Emoji
-                  </Label>
-
+                  <Label className="text-xs text-[#757575]">Emoji</Label>
                   <Input
                     value={form.emoji}
                     onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        emoji: e.target.value,
-                      }))
+                      setForm((f) => ({ ...f, emoji: e.target.value }))
                     }
                     className="h-11 rounded-xl border-[#e0e0e0] text-center text-lg"
+                    disabled={priceOnly}
                   />
                 </div>
 
                 <div className="min-w-0 space-y-1.5">
-                  <Label className="text-xs text-[#757575]">
-                    Nombre *
-                  </Label>
-
+                  <Label className="text-xs text-[#757575]">Nombre *</Label>
                   <Input
                     value={form.name}
                     onChange={(e) =>
-                      setForm((f) => ({
-                        ...f,
-                        name: e.target.value,
-                      }))
+                      setForm((f) => ({ ...f, name: e.target.value }))
                     }
                     placeholder="Nombre del producto"
                     className="h-11 rounded-xl border-[#e0e0e0]"
+                    disabled={priceOnly}
                   />
                 </div>
               </div>
 
               {/* Imagen */}
+
               <div className="space-y-2">
                 <Label className="text-xs text-[#757575]">
                   Imagen del producto
                 </Label>
+
                 <div className="flex items-center gap-3">
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] text-2xl">
                     {form.image_url ? (
@@ -990,6 +1016,7 @@ function ProductosPage() {
                       <span>{form.emoji || "📦"}</span>
                     )}
                   </div>
+
                   <div className="min-w-0 flex-1 space-y-2">
                     <Input
                       type="file"
@@ -997,33 +1024,43 @@ function ProductosPage() {
                       capture="environment"
                       className="h-11 cursor-pointer rounded-xl border-[#e0e0e0] text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-[#e8f0fe] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#1a73e8]"
                       disabled={
-                        !(canCreate || canEdit) ||
+                        priceOnly ||
+                        !(canCreateProduct || canEditProduct) ||
                         saveProduct.isPending
                       }
                       onChange={async (event) => {
                         const file = event.target.files?.[0];
                         if (!file) return;
-                        if (file.size > 5 * 1024 * 1024) {
+
+                        if (priceOnly || !(canCreateProduct || canEditProduct)) {
                           toast.error(
-                            "La imagen no debe superar 5 MB",
+                            "No tienes permiso para cambiar imágenes.",
                           );
+                          event.target.value = "";
                           return;
                         }
+
+                        if (file.size > 5 * 1024 * 1024) {
+                          toast.error("La imagen no debe superar 5 MB");
+                          event.target.value = "";
+                          return;
+                        }
+
                         try {
                           const ext =
-                            file.name
-                              .split(".")
-                              .pop()
-                              ?.toLowerCase() || "jpg";
+                            file.name.split(".").pop()?.toLowerCase() ||
+                            "jpg";
+
                           const {
                             data: { user: upUser },
                           } = await supabase.auth.getUser();
+
                           if (!upUser?.id) {
                             throw new Error(
                               "Sesión requerida para subir imagen",
                             );
                           }
-                          // Path {product_id}/... exigido por política Storage
+
                           if (!form.id) {
                             throw new Error(
                               "Primero guarda el producto y después agrega la imagen.",
@@ -1031,23 +1068,25 @@ function ProductosPage() {
                           }
 
                           const path = `${form.id}/${crypto.randomUUID()}.${ext}`;
-                          const { error: upErr } =
-                            await supabase.storage
-                              .from("product-images")
-                              .upload(path, file, {
-                                upsert: false,
-                                contentType:
-                                  file.type || "image/jpeg",
-                              });
+
+                          const { error: upErr } = await supabase.storage
+                            .from("product-images")
+                            .upload(path, file, {
+                              upsert: false,
+                              contentType: file.type || "image/jpeg",
+                            });
+
                           if (upErr) throw upErr;
-                          const { data: pub } =
-                            supabase.storage
-                              .from("product-images")
-                              .getPublicUrl(path);
+
+                          const { data: pub } = supabase.storage
+                            .from("product-images")
+                            .getPublicUrl(path);
+
                           setForm((f) => ({
                             ...f,
                             image_url: pub.publicUrl,
                           }));
+
                           toast.success("Imagen cargada");
                         } catch (err) {
                           toast.error(
@@ -1060,22 +1099,24 @@ function ProductosPage() {
                         }
                       }}
                     />
-                    {form.image_url ? (
+
+                    {form.image_url && (
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         className="h-9 rounded-lg"
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct)
+                        }
                         onClick={() =>
-                          setForm((f) => ({
-                            ...f,
-                            image_url: "",
-                          }))
+                          setForm((f) => ({ ...f, image_url: "" }))
                         }
                       >
                         Quitar imagen
                       </Button>
-                    ) : null}
+                    )}
                   </div>
                 </div>
               </div>
@@ -1089,20 +1130,15 @@ function ProductosPage() {
 
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-[#757575]">
-                      SKU
-                    </Label>
-
+                    <Label className="text-xs text-[#757575]">SKU</Label>
                     <Input
                       value={form.sku}
                       onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          sku: e.target.value,
-                        }))
+                        setForm((f) => ({ ...f, sku: e.target.value }))
                       }
                       placeholder="SKU-001"
                       className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
                     />
                   </div>
 
@@ -1123,13 +1159,16 @@ function ProductosPage() {
                         placeholder="EAN / UPC o genérico"
                         maxLength={64}
                         className="h-11 flex-1 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                        disabled={priceOnly}
                       />
+
                       <Button
                         type="button"
                         variant="outline"
                         className="h-11 shrink-0 rounded-xl border-[#e0e0e0] px-3"
                         disabled={
-                          !(canCreate || canEdit) ||
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct) ||
                           saveProduct.isPending
                         }
                         title="Generar código único (máx. 10 caracteres)"
@@ -1151,6 +1190,7 @@ function ProductosPage() {
                         Generar
                       </Button>
                     </div>
+
                     <p className="text-[10px] text-[#9e9e9e]">
                       El botón crea un código de 10 caracteres que no se
                       repite en ningún otro producto.
@@ -1163,7 +1203,6 @@ function ProductosPage() {
                 <Label className="text-xs text-[#757575]">
                   Descripción
                 </Label>
-
                 <Input
                   value={form.description}
                   onChange={(e) =>
@@ -1173,37 +1212,28 @@ function ProductosPage() {
                     }))
                   }
                   className="h-11 rounded-xl border-[#e0e0e0]"
+                  disabled={priceOnly}
                 />
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs text-[#757575]">
-                  Categoría
-                </Label>
+                <Label className="text-xs text-[#757575]">Categoría</Label>
 
                 <Select
                   value={form.category_id}
                   onValueChange={(v) =>
-                    setForm((f) => ({
-                      ...f,
-                      category_id: v,
-                    }))
+                    setForm((f) => ({ ...f, category_id: v }))
                   }
+                  disabled={priceOnly}
                 >
                   <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
                     <SelectValue placeholder="Sin categoría" />
                   </SelectTrigger>
 
                   <SelectContent>
-                    <SelectItem value="none">
-                      Sin categoría
-                    </SelectItem>
-
+                    <SelectItem value="none">Sin categoría</SelectItem>
                     {categories.map((c) => (
-                      <SelectItem
-                        key={c.id}
-                        value={c.id}
-                      >
+                      <SelectItem key={c.id} value={c.id}>
                         {c.name}
                       </SelectItem>
                     ))}
@@ -1211,7 +1241,7 @@ function ProductosPage() {
                 </Select>
               </div>
 
-              {/* Precio / Costo / IVA */}
+              {/* Precio, costo e IVA */}
 
               <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
@@ -1223,47 +1253,34 @@ function ProductosPage() {
                     <Label className="text-xs text-[#757575]">
                       Precio venta
                     </Label>
-
                     <Input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.price}
                       onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          price: e.target.value,
-                        }))
+                        setForm((f) => ({ ...f, price: e.target.value }))
                       }
                       className="h-11 rounded-xl border-[#e0e0e0] bg-white text-base font-bold text-[#1a73e8]"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-[#757575]">
-                      Costo
-                    </Label>
-
+                    <Label className="text-xs text-[#757575]">Costo</Label>
                     <Input
                       type="number"
                       min="0"
                       step="0.01"
                       value={form.cost}
                       onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          cost: e.target.value,
-                        }))
+                        setForm((f) => ({ ...f, cost: e.target.value }))
                       }
                       className="h-11 rounded-xl border-[#e0e0e0] bg-white"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-[#757575]">
-                      IVA
-                    </Label>
-
+                    <Label className="text-xs text-[#757575]">IVA</Label>
                     <Input
                       type="number"
                       min="0"
@@ -1280,32 +1297,21 @@ function ProductosPage() {
                   </div>
                 </div>
 
-                {Number(form.price) > 0 &&
-                  Number(form.cost) >= 0 && (
-                    <p className="mt-2 break-words text-xs text-[#757575]">
-                      Margen aprox.:{" "}
-                      <span className="font-semibold text-[#34a853]">
-                        {money(
-                          Number(form.price) -
-                            Number(form.cost),
-                        )}
-                      </span>
-
-                      {Number(form.price) > 0 && (
-                        <span>
-                          {" "}
-                          (
-                          {(
-                            ((Number(form.price) -
-                              Number(form.cost)) /
-                              Number(form.price)) *
-                            100
-                          ).toFixed(0)}
-                          %)
-                        </span>
-                      )}
-                    </p>
-                  )}
+                {Number(form.price) > 0 && Number(form.cost) >= 0 && (
+                  <p className="mt-2 break-words text-xs text-[#757575]">
+                    Margen aprox.:{" "}
+                    <span className="font-semibold text-[#34a853]">
+                      {money(Number(form.price) - Number(form.cost))}
+                    </span>{" "}
+                    (
+                    {(
+                      ((Number(form.price) - Number(form.cost)) /
+                        Number(form.price)) *
+                      100
+                    ).toFixed(0)}
+                    %)
+                  </p>
+                )}
               </div>
 
               <div className="flex flex-col gap-2 pt-1 sm:flex-row">
@@ -1314,12 +1320,10 @@ function ProductosPage() {
                   disabled={
                     saveProduct.isPending ||
                     (form.id
-                      ? !(canEdit || canPrice)
-                      : !canCreate)
+                      ? !(priceOnly ? canPrice : canEditProduct)
+                      : !canCreateProduct)
                   }
-                  onClick={() =>
-                    saveProduct.mutate()
-                  }
+                  onClick={() => saveProduct.mutate()}
                 >
                   {saveProduct.isPending
                     ? "Guardando…"
@@ -1332,11 +1336,23 @@ function ProductosPage() {
                   <Button
                     variant="outline"
                     className="min-h-11 w-full touch-manipulation rounded-xl border-[#e0e0e0] sm:w-auto"
-                    onClick={() =>
-                      setForm(emptyProduct)
-                    }
+                    onClick={() => {
+                      setForm(emptyProduct);
+                      setActiveTab("lista");
+                    }}
                   >
                     Cancelar
+                  </Button>
+                )}
+
+                {canCreateProduct && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 w-full touch-manipulation rounded-xl border-[#1a73e8] text-[#1a73e8] sm:w-auto"
+                    onClick={startNewProduct}
+                  >
+                    + Crear nuevo
                   </Button>
                 )}
               </div>
@@ -1344,14 +1360,9 @@ function ProductosPage() {
           </div>
         </TabsContent>
 
-        {/* ======================================================
-            CATEGORÍAS
-            ====================================================== */}
+        {/* CATEGORÍAS */}
 
-        <TabsContent
-          value="categorias"
-          className="mt-3 sm:mt-4"
-        >
+        <TabsContent value="categorias" className="mt-3 sm:mt-4">
           <div className="grid gap-3 md:grid-cols-2 md:gap-4">
             <Card>
               <CardHeader className="pb-3">
@@ -1363,39 +1374,29 @@ function ProductosPage() {
               <CardContent className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Nombre</Label>
-
                   <Input
                     value={catName}
-                    onChange={(e) =>
-                      setCatName(e.target.value)
-                    }
+                    onChange={(e) => setCatName(e.target.value)}
                     className="h-11 rounded-xl"
+                    disabled={!isManager}
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label>
-                    Padre (opcional)
-                  </Label>
-
+                  <Label>Padre (opcional)</Label>
                   <Select
                     value={catParent}
                     onValueChange={setCatParent}
+                    disabled={!isManager}
                   >
                     <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
 
                     <SelectContent>
-                      <SelectItem value="none">
-                        Ninguno
-                      </SelectItem>
-
+                      <SelectItem value="none">Ninguno</SelectItem>
                       {categories.map((c) => (
-                        <SelectItem
-                          key={c.id}
-                          value={c.id}
-                        >
+                        <SelectItem key={c.id} value={c.id}>
                           {c.name}
                         </SelectItem>
                       ))}
@@ -1405,13 +1406,8 @@ function ProductosPage() {
 
                 <Button
                   className="min-h-11 w-full touch-manipulation rounded-xl"
-                  disabled={
-                    !isManager ||
-                    saveCategory.isPending
-                  }
-                  onClick={() =>
-                    saveCategory.mutate()
-                  }
+                  disabled={!isManager || saveCategory.isPending}
+                  onClick={() => saveCategory.mutate()}
                 >
                   {saveCategory.isPending
                     ? "Creando…"
@@ -1422,9 +1418,7 @@ function ProductosPage() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">
-                  Listado
-                </CardTitle>
+                <CardTitle className="text-base">Listado</CardTitle>
               </CardHeader>
 
               <CardContent>
@@ -1435,11 +1429,17 @@ function ProductosPage() {
                 ) : (
                   <ul className="space-y-1.5 text-sm">
                     {categories.map((c) => (
-                      <li
-                        key={c.id}
-                        className="min-h-11 rounded-xl border px-3 py-2.5"
-                      >
-                        {c.name}
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="flex min-h-11 w-full items-center rounded-xl border px-3 py-2.5 text-left transition hover:border-[#1a73e8] hover:bg-[#e8f0fe] active:scale-[0.99]"
+                          onClick={() => {
+                            setSelectedCategoryId(c.id);
+                            setActiveTab("lista");
+                          }}
+                        >
+                          {c.name}
+                        </button>
                       </li>
                     ))}
 
