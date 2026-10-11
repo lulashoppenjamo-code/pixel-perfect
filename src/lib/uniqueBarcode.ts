@@ -1,28 +1,37 @@
+
 /**
- * Genera un código de producto único (máx. 10 caracteres).
- * Verifica unicidad en products.barcode antes de devolverlo.
+ * Genera un código de producto único, compuesto solo por números.
+ * Verifica la unicidad en products.barcode antes de devolverlo.
+ *
+ * Compatible con los productos existentes:
+ * - No modifica códigos de barras guardados.
+ * - No cambia tablas, columnas ni RPC.
+ * - Conserva el límite de 4 a 10 caracteres.
  */
 import { supabase } from "@/integrations/supabase/client";
 
-const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sin 0/O/1/I para legibilidad
+const ALPHABET = "0123456789";
 const CODE_LEN = 10;
 const MAX_ATTEMPTS = 40;
 
 function randomCode(length = CODE_LEN): string {
   let out = "";
   const bytes = new Uint8Array(length);
+
   crypto.getRandomValues(bytes);
+
   for (let i = 0; i < length; i++) {
     out += ALPHABET[bytes[i]! % ALPHABET.length];
   }
+
   return out;
 }
 
 export async function generateUniqueBarcode(
   length = CODE_LEN,
 ): Promise<string> {
-  if (length < 4 || length > 10) {
-    throw new Error("El código debe tener entre 4 y 10 caracteres");
+  if (!Number.isInteger(length) || length < 4 || length > 10) {
+    throw new Error("El código debe tener entre 4 y 10 dígitos");
   }
 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
