@@ -30,6 +30,7 @@ import {
   Download,
   X,
   Camera,
+  Plus,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -513,6 +514,31 @@ function BarcodeScanner({
   );
 }
 
+
+type ProductVariantRow = {
+  id: string;
+  product_id: string;
+  name: string;
+  sku: string | null;
+  cost_override: number | null;
+  price_override: number | null;
+};
+
+type VariantForm = {
+  id?: string;
+  name: string;
+  sku: string;
+  price: string;
+  cost: string;
+};
+
+const emptyVariantForm: VariantForm = {
+  name: "",
+  sku: "",
+  price: "",
+  cost: "",
+};
+
 function ProductosPage() {
   const { isManager, can } = useAuth();
 
@@ -539,6 +565,8 @@ function ProductosPage() {
   const [selectedCategoryId, setSelectedCategoryId] =
     useState<string | null>(null);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [variantForm, setVariantForm] = useState<VariantForm>(emptyVariantForm);
+  const [variantModalOpen, setVariantModalOpen] = useState(false);
 
   const {
     data: categories = [],
@@ -594,6 +622,27 @@ function ProductosPage() {
     queryKey: ["shared-inventory", "products"],
     queryFn: getSharedInventory,
   });
+
+  const {
+    data: productVariants = [],
+    isLoading: variantsLoading,
+  } = useQuery<ProductVariantRow[]>({
+    queryKey: ["product-variants", form.id ?? "none"],
+    enabled: Boolean(form.id),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select(
+          "id, product_id, name, sku, cost_override, price_override",
+        )
+        .eq("product_id", form.id!)
+        .order("name");
+
+      if (error) throw error;
+      return (data ?? []) as ProductVariantRow[];
+    },
+  });
+
 
   const stockMap = useMemo(() => {
     const map = new Map<
@@ -831,7 +880,159 @@ function ProductosPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const editProduct = (p: ProductRow) => {
+
+  const saveVariant = useMutation({
+    mutationFn: async () => {
+      if (!form.id) {
+        throw new Error(
+          "Primero guarda el producto y después agrega variantes.",
+        );
+      }
+
+      if (!canEditProduct && !isManager) {
+        throw new Error("No tienes permiso para gestionar variantes.");
+      }
+
+      const name = variantForm.name.trim();
+      if (!name) {
+        throw new Error("Nombre de variante requerido");
+      }
+
+      const priceVal =
+        variantForm.price.trim() === ""
+          ? null
+          : Number(variantForm.price);
+      const costVal =
+        variantForm.cost.trim() === ""
+          ? null
+          : Number(variantForm.cost);
+
+      if (priceVal != null && (!Number.isFinite(priceVal) || priceVal < 0)) {
+        throw new Error("Precio de variante no válido");
+      }
+      if (costVal != null && (!Number.isFinite(costVal) || costVal < 0)) {
+        throw new Error("Costo de variante no válido");
+      }
+
+      if (priceOnly) {
+        if (!variantForm.id) {
+          throw new Error(
+            "No tienes permiso para crear variantes.",
+          );
+        }
+        const { error } = await supabase
+          .from("product_variants")
+          .update({
+            price_override: priceVal,
+            cost_override: costVal,
+          })
+          .eq("id", variantForm.id)
+          .eq("product_id", form.id);
+        if (error) throw error;
+        return;
+      }
+
+      const payload = {
+        product_id: form.id,
+        name,
+        sku: variantForm.sku.trim() || null,
+        price_override: priceVal,
+        cost_override: costVal,
+      };
+
+      if (variantForm.id) {
+        const { error } = await supabase
+          .from("product_variants")
+          .update({
+            name: payload.name,
+            sku: payload.sku,
+            price_override: payload.price_override,
+            cost_override: payload.cost_override,
+          })
+          .eq("id", variantForm.id)
+          .eq("product_id", form.id);
+
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await supabase
+        .from("product_variants")
+        .insert(payload);
+
+      if (error) throw error;
+
+      // Marcar el producto como con variantes (columna existente).
+      const { error: flagError } = await supabase
+        .from("products")
+        .update({ has_variants: true })
+        .eq("id", form.id);
+
+      if (flagError) {
+        // No bloqueamos la creación de la variante si el flag falla.
+        console.warn("has_variants flag:", flagError.message);
+      }
+    },
+
+    onSuccess: () => {
+      toast.success(
+        variantForm.id ? "Variante actualizada" : "Variante creada",
+      );
+      setVariantForm(emptyVariantForm);
+      setVariantModalOpen(false);
+      void qc.invalidateQueries({
+        queryKey: ["product-variants", form.id ?? "none"],
+      });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+    },
+
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
+  });
+
+  const removeVariant = useMutation({
+    mutationFn: async (variantId: string) => {
+      if (!form.id) {
+        throw new Error("Producto no válido");
+      }
+      if (!canEditProduct && !isManager) {
+        throw new Error("No tienes permiso para eliminar variantes.");
+      }
+
+      const { error } = await supabase
+        .from("product_variants")
+        .delete()
+        .eq("id", variantId)
+        .eq("product_id", form.id);
+
+      if (error) throw error;
+    },
+
+    onSuccess: () => {
+      toast.success("Variante eliminada");
+      setVariantModalOpen(false);
+      setVariantForm(emptyVariantForm);
+      void qc.invalidateQueries({
+        queryKey: ["product-variants", form.id ?? "none"],
+      });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory", "products"],
+      });
+    },
+
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
+  });
+
+
+    const editProduct = (p: ProductRow) => {
     if (!canOpenForm) {
       toast.error("No tienes permiso para abrir este producto.");
       return;
@@ -1684,6 +1885,146 @@ function ProductosPage() {
                 )}
               </div>
 
+              {/* VARIANTES estilo Zobaze — sin límite */}
+              {form.id && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                      Variantes
+                    </p>
+                    {(canEditProduct || isManager) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-lg bg-[#1a73e8] text-white hover:bg-[#1557b0]"
+                        onClick={() => {
+                          setVariantForm({
+                            ...emptyVariantForm,
+                            price: form.price,
+                            cost: form.cost,
+                          });
+                          setVariantModalOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Agregar variante
+                      </Button>
+                    )}
+                  </div>
+
+                  {!form.id ? null : variantsLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Cargando variantes…
+                    </p>
+                  ) : productVariants.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#e0e0e0] px-3 py-6 text-center text-sm text-[#757575]">
+                      Sin variantes. Agrega todas las que necesites (sin
+                      límite).
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {productVariants.map((v) => {
+                        const inv = sharedInventory.find(
+                          (row) =>
+                            row.product_id === form.id &&
+                            row.variant_id === v.id,
+                        );
+                        const available = Number(
+                          inv?.available_stock ?? 0,
+                        );
+                        const price =
+                          v.price_override != null
+                            ? Number(v.price_override)
+                            : Number(form.price) || 0;
+                        const cost =
+                          v.cost_override != null
+                            ? Number(v.cost_override)
+                            : Number(form.cost) || 0;
+
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="w-full rounded-xl border border-[#e8e8e8] bg-white p-3 text-left shadow-sm transition hover:border-[#90caf9]"
+                            onClick={() => {
+                              if (!(canEditProduct || isManager || canPrice)) {
+                                return;
+                              }
+                              setVariantForm({
+                                id: v.id,
+                                name: v.name,
+                                sku: v.sku ?? "",
+                                price:
+                                  v.price_override != null
+                                    ? String(v.price_override)
+                                    : form.price,
+                                cost:
+                                  v.cost_override != null
+                                    ? String(v.cost_override)
+                                    : form.cost,
+                              });
+                              setVariantModalOpen(true);
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] text-xl">
+                                {form.image_url ? (
+                                  <img
+                                    src={form.image_url}
+                                    alt=""
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <span>{form.emoji || "📦"}</span>
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate font-semibold text-[#212121]">
+                                  {v.name}
+                                  {v.sku ? (
+                                    <span className="ml-1 font-normal text-[#757575]">
+                                      {v.sku}
+                                    </span>
+                                  ) : null}
+                                </p>
+                                <div className="mt-1 grid grid-cols-3 gap-1 text-[11px] text-[#757575]">
+                                  <span>
+                                    Venta{" "}
+                                    <strong className="text-[#1a73e8]">
+                                      {money(price)}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    Costo{" "}
+                                    <strong>{money(cost)}</strong>
+                                  </span>
+                                  <span className="text-right">
+                                    {available <= 0 ? (
+                                      <strong className="text-[#e53935]">
+                                        Agotado
+                                      </strong>
+                                    ) : (
+                                      <strong>{available} disp.</strong>
+                                    )}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!form.id && (canCreateProduct) && (
+                <p className="rounded-xl bg-[#e8f0fe] px-3 py-2 text-xs text-[#1565c0]">
+                  Guarda el producto primero para poder agregar variantes
+                  ilimitadas.
+                </p>
+              )}
+
               <div className="flex flex-col gap-2 pt-1 sm:flex-row">
                 <Button
                   className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0] sm:flex-1"
@@ -1820,6 +2161,200 @@ function ProductosPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+
+      {variantModalOpen && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+            <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-2.5">
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-[#f5f5f5]"
+                onClick={() => {
+                  setVariantModalOpen(false);
+                  setVariantForm(emptyVariantForm);
+                }}
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              {variantForm.id && (canEditProduct || isManager) && (
+                <Button
+                  type="button"
+                  className="h-9 rounded-md bg-[#e53935] px-4 text-sm font-bold text-white hover:bg-[#c62828]"
+                  disabled={removeVariant.isPending}
+                  onClick={() => {
+                    if (variantForm.id) {
+                      removeVariant.mutate(variantForm.id);
+                    }
+                  }}
+                >
+                  BORRAR
+                </Button>
+              )}
+              <h3 className="flex-1 text-center text-[15px] font-bold uppercase tracking-wide text-[#1a73e8]">
+                {variantForm.id ? "Editar variante" : "Nueva variante"}
+              </h3>
+              <span className="w-9" />
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="flex gap-3">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[#f5f5f5] text-2xl">
+                  {form.image_url ? (
+                    <img
+                      src={form.image_url}
+                      alt=""
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <span>{form.emoji || "📦"}</span>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Label className="text-xs text-[#757575]">
+                    Nombre de variante *
+                  </Label>
+                  <Input
+                    value={variantForm.name}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Ej. FB1027 / Rojo / Talla M"
+                    className="h-11 rounded-xl"
+                    disabled={priceOnly}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">
+                    Precio venta
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={variantForm.price}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        price: e.target.value,
+                      }))
+                    }
+                    className="h-11 rounded-xl font-bold text-[#1a73e8]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">Costo</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={variantForm.cost}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        cost: e.target.value,
+                      }))
+                    }
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">
+                    Margen (%)
+                  </Label>
+                  <div className="flex h-11 items-center justify-center rounded-xl border bg-[#fafafa] text-sm font-semibold text-[#34a853]">
+                    {Number(variantForm.price) > 0
+                      ? (
+                          ((Number(variantForm.price) -
+                            Number(variantForm.cost || 0)) /
+                            Number(variantForm.price)) *
+                          100
+                        ).toFixed(3)
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+
+              {variantForm.id && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-xl border bg-[#fafafa] px-3 py-2">
+                    <p className="text-[10px] uppercase text-[#9e9e9e]">
+                      Existencias disponibles
+                    </p>
+                    <p className="text-lg font-bold text-[#212121]">
+                      {Number(
+                        sharedInventory.find(
+                          (row) =>
+                            row.product_id === form.id &&
+                            row.variant_id === variantForm.id,
+                        )?.available_stock ?? 0,
+                      )}
+                    </p>
+                    <p className="text-[10px] text-[#9e9e9e]">
+                      Solo lectura — se ajusta en inventario / compras
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-[#757575]">SKU</Label>
+                    <Input
+                      value={variantForm.sku}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          sku: e.target.value,
+                        }))
+                      }
+                      className="h-11 rounded-xl font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {!variantForm.id && (
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">SKU</Label>
+                  <Input
+                    value={variantForm.sku}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        sku: e.target.value,
+                      }))
+                    }
+                    placeholder="Opcional"
+                    className="h-11 rounded-xl font-mono text-sm"
+                    disabled={priceOnly}
+                  />
+                </div>
+              )}
+
+              <Button
+                className="min-h-11 w-full rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0]"
+                disabled={
+                  saveVariant.isPending ||
+                  (!(canEditProduct || isManager) && !canPrice)
+                }
+                onClick={() => saveVariant.mutate()}
+              >
+                {saveVariant.isPending
+                  ? "Guardando…"
+                  : variantForm.id
+                    ? "Guardar variante"
+                    : "Crear variante"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       {scannerOpen && (
         <BarcodeScanner
