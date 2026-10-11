@@ -1,20 +1,16 @@
+
 /**
  * Productos y categorías — LULA OS
  * Ruta: src/routes/_shell.productos.tsx
  *
- * RESPONSIVE:
- * - Mobile first para celular y tablet.
- * - Conserva el motor existente.
- *
- * INVENTARIO:
- * - Fuente oficial: shared_inventory.
- * - Inventario único y compartido entre sucursales.
- * - Las variantes conservan sus propios variant_id.
- *
- * BLOQUE 3 — Visual Artículos.
+ * - Catálogo responsive.
+ * - Inventario oficial: shared_inventory.
+ * - Escáner con BarcodeDetector cuando está disponible.
+ * - Etiquetas PNG HD con código de barras Code 128.
+ * - Sin nuevas dependencias, tablas ni migraciones.
  */
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { generateUniqueBarcode } from "@/lib/uniqueBarcode";
@@ -30,6 +26,10 @@ import {
   Package,
   RefreshCw,
   Hash,
+  ScanLine,
+  Download,
+  X,
+  Camera,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -124,6 +124,395 @@ type ProductRow = {
     | null;
 };
 
+/*
+ * Patrones oficiales de módulos Code 128.
+ * El generador de etiquetas usa Code Set B.
+ */
+const CODE128_PATTERNS = [
+  "212222", "222122", "222221", "121223", "121322",
+  "131222", "122213", "122312", "132212", "221213",
+  "221312", "231212", "112232", "122132", "122231",
+  "113222", "123122", "123221", "223211", "221132",
+  "221231", "213212", "223112", "312131", "311222",
+  "321122", "321221", "312212", "322112", "322211",
+  "212123", "212321", "232121", "111323", "131123",
+  "131321", "112313", "132113", "132311", "211313",
+  "231113", "231311", "112133", "112331", "132131",
+  "113123", "113321", "133121", "313121", "211331",
+  "231131", "213113", "213311", "213131", "311123",
+  "311321", "331121", "312113", "312311", "332111",
+  "314111", "221411", "431111", "111224", "111422",
+  "121124", "121421", "141122", "141221", "112214",
+  "112412", "122114", "122411", "142112", "142211",
+  "241211", "221114", "413111", "241112", "134111",
+  "111242", "121142", "121241", "114212", "124112",
+  "124211", "411212", "421112", "421211", "212141",
+  "214121", "412121", "111143", "111341", "131141",
+  "114113", "114311", "411113", "411311", "113141",
+  "114131", "311141", "411131", "211412", "211214",
+  "211232", "2331112",
+];
+
+function getCode128Values(value: string): number[] {
+  const text = value.trim();
+
+  if (!text) {
+    throw new Error("El producto necesita un código de barras.");
+  }
+
+  // Code Set B codifica caracteres ASCII imprimibles (32–126).
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 32 || code > 126) {
+      throw new Error(
+        "El código contiene caracteres que no admite Code 128.",
+      );
+    }
+  }
+
+  const values = [104];
+
+  for (let i = 0; i < text.length; i++) {
+    values.push(text.charCodeAt(i) - 32);
+  }
+
+  let checksum = 104;
+
+  for (let i = 1; i < values.length; i++) {
+    checksum += values[i]! * i;
+  }
+
+  values.push(checksum % 103);
+  values.push(106);
+
+  return values;
+}
+
+function downloadBarcodeLabel(
+  productName: string,
+  price: string,
+  barcode: string,
+): void {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;
+  canvas.height = 600;
+
+  const context = canvas.getContext("2d");
+
+  if (!context) {
+    throw new Error("No se pudo preparar la etiqueta.");
+  }
+
+  const values = getCode128Values(barcode);
+  const patterns = values.map((value) => CODE128_PATTERNS[value]);
+
+  if (patterns.some((pattern) => !pattern)) {
+    throw new Error("No se pudo generar el código de barras.");
+  }
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#111111";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  const safeName = productName.trim() || "Producto";
+  context.font = "bold 48px Arial, sans-serif";
+
+  let displayName = safeName;
+
+  while (
+    context.measureText(displayName).width > 1080 &&
+    displayName.length > 4
+  ) {
+    displayName = `${displayName.slice(0, -4)}…`;
+  }
+
+  context.fillText(displayName, 600, 90, 1080);
+
+  context.font = "bold 64px Arial, sans-serif";
+  context.fillText(
+    money(Number(price) || 0),
+    600,
+    180,
+    1080,
+  );
+
+  const totalModules = patterns.reduce(
+    (total, pattern) =>
+      total +
+      [...(pattern ?? "")].reduce(
+        (sum, digit) => sum + Number(digit),
+        0,
+      ),
+    0,
+  );
+
+  const left = 70;
+  const right = 1130;
+  const barWidth = (right - left) / totalModules;
+  const barTop = 250;
+  const barHeight = 210;
+
+  let x = left;
+
+  context.fillStyle = "#000000";
+
+  for (const pattern of patterns) {
+    if (!pattern) continue;
+
+    for (let i = 0; i < pattern.length; i++) {
+      const width = Number(pattern[i]) * barWidth;
+
+      if (i % 2 === 0) {
+        context.fillRect(
+          x,
+          barTop,
+          Math.max(width, 1),
+          barHeight,
+        );
+      }
+
+      x += width;
+    }
+  }
+
+  context.font = "32px monospace";
+  context.fillStyle = "#111111";
+  context.fillText(barcode, 600, 510, 1080);
+
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      toast.error("No se pudo crear el archivo PNG.");
+      return;
+    }
+
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+
+    anchor.href = url;
+    anchor.download = `etiqueta-${barcode}.png`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast.success("Etiqueta PNG descargada.");
+  }, "image/png");
+}
+
+/*
+ * Escáner de cámara.
+ * No requiere librerías externas.
+ */
+type DetectedBarcode = {
+  rawValue?: string;
+};
+
+type BarcodeDetectorInstance = {
+  detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]>;
+};
+
+type BarcodeDetectorConstructor = new (options?: {
+  formats?: string[];
+}) => BarcodeDetectorInstance;
+
+function BarcodeScanner({
+  onDetected,
+  onClose,
+}: {
+  onDetected: (value: string) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraError, setCameraError] = useState("");
+  const [starting, setStarting] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let intervalId: number | undefined;
+    let detecting = false;
+
+    const startScanner = async () => {
+      try {
+        const Detector = (
+          window as Window & {
+            BarcodeDetector?: BarcodeDetectorConstructor;
+          }
+        ).BarcodeDetector;
+
+        if (!Detector) {
+          throw new Error(
+            "Este navegador no admite el escáner integrado. Puedes escribir el código manualmente o probar con Chrome actualizado.",
+          );
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error(
+            "La cámara no está disponible. Abre Pixel Perfect mediante una conexión HTTPS y revisa los permisos del navegador.",
+          );
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+          },
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const video = videoRef.current;
+
+        if (!video) {
+          throw new Error("No se pudo inicializar la vista de cámara.");
+        }
+
+        video.srcObject = stream;
+        await video.play();
+
+        const detector = new Detector({
+          formats: [
+            "ean_13",
+            "ean_8",
+            "upc_a",
+            "upc_e",
+            "code_128",
+            "code_39",
+            "itf",
+            "codabar",
+            "qr_code",
+          ],
+        });
+
+        setStarting(false);
+
+        intervalId = window.setInterval(async () => {
+          if (
+            cancelled ||
+            detecting ||
+            !videoRef.current ||
+            videoRef.current.readyState < 2
+          ) {
+            return;
+          }
+
+          detecting = true;
+
+          try {
+            const results = await detector.detect(videoRef.current);
+            const found = results.find(
+              (result) => result.rawValue?.trim(),
+            );
+
+            if (found?.rawValue && !cancelled) {
+              cancelled = true;
+              onDetected(found.rawValue.trim());
+            }
+          } catch {
+            // La detección puede fallar en un fotograma;
+            // se vuelve a intentar en el siguiente.
+          } finally {
+            detecting = false;
+          }
+        }, 250);
+      } catch (error) {
+        if (!cancelled) {
+          setCameraError(
+            error instanceof Error
+              ? error.message
+              : "No se pudo iniciar el escáner.",
+          );
+          setStarting(false);
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [onDetected]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-3">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b p-4">
+          <div className="flex items-center gap-2">
+            <Camera className="h-5 w-5 text-[#1a73e8]" />
+            <h3 className="font-bold">Escanear código</h3>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Cerrar escáner"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <div className="overflow-hidden rounded-xl bg-black">
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="aspect-video w-full object-cover"
+            />
+          </div>
+
+          {starting && (
+            <p className="text-sm text-muted-foreground">
+              Iniciando cámara…
+            </p>
+          )}
+
+          {cameraError && (
+            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              {cameraError}
+            </div>
+          )}
+
+          {!cameraError && !starting && (
+            <p className="text-sm text-muted-foreground">
+              Centra el código de barras dentro de la cámara y espera a que se detecte.
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={onClose}
+          >
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProductosPage() {
   const { isManager, can } = useAuth();
 
@@ -132,13 +521,9 @@ function ProductosPage() {
   const canDelete = can("productos.delete");
   const canPrice = can("productos.price");
 
-  // Los usuarios que solo tienen permiso de precios
-  // pueden modificar precios de productos existentes,
-  // pero no crear productos ni editar sus demás campos.
   const priceOnly = canPrice && !canEdit && !isManager;
   const canOpenForm = canEdit || canPrice || isManager;
-  const canCreateProduct =
-    !priceOnly && (canCreate || isManager);
+  const canCreateProduct = !priceOnly && (canCreate || isManager);
   const canEditProduct = canEdit || isManager;
 
   const qc = useQueryClient();
@@ -153,10 +538,7 @@ function ProductosPage() {
     useState<"lista" | "form" | "categorias">("lista");
   const [selectedCategoryId, setSelectedCategoryId] =
     useState<string | null>(null);
-
-  /*
-   * CATEGORÍAS
-   */
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   const {
     data: categories = [],
@@ -173,10 +555,6 @@ function ProductosPage() {
       return data ?? [];
     },
   });
-
-  /*
-   * PRODUCTOS
-   */
 
   const {
     data: products = [],
@@ -208,10 +586,6 @@ function ProductosPage() {
     },
   });
 
-  /*
-   * INVENTARIO COMPARTIDO
-   */
-
   const {
     data: sharedInventory = [],
     isLoading: inventoryLoading,
@@ -220,11 +594,6 @@ function ProductosPage() {
     queryKey: ["shared-inventory", "products"],
     queryFn: getSharedInventory,
   });
-
-  /*
-   * EXISTENCIAS AGRUPADAS POR PRODUCTO
-   * No modifica shared_inventory ni sus variantes.
-   */
 
   const stockMap = useMemo(() => {
     const map = new Map<
@@ -265,18 +634,11 @@ function ProductosPage() {
     return map;
   }, [sharedInventory]);
 
-  /*
-   * BÚSQUEDA Y FILTROS
-   */
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
 
     return products.filter((p) => {
-      if (
-        selectedCategoryId &&
-        p.category_id !== selectedCategoryId
-      ) {
+      if (selectedCategoryId && p.category_id !== selectedCategoryId) {
         return false;
       }
 
@@ -314,40 +676,24 @@ function ProductosPage() {
     selectedCategoryId,
   ]);
 
-  /*
-   * GUARDAR PRODUCTO
-   *
-   * Las comprobaciones se hacen dentro de la mutación,
-   * no solamente en los botones de la interfaz.
-   */
-
   const saveProduct = useMutation({
     mutationFn: async () => {
-      // Un usuario con permiso exclusivo de precios no puede crear.
       if (!form.id) {
         if (priceOnly || !canCreateProduct) {
-          throw new Error(
-            "No tienes permiso para crear productos.",
-          );
+          throw new Error("No tienes permiso para crear productos.");
         }
       } else if (priceOnly) {
-        // Puede actualizar exclusivamente precios de un producto existente.
         if (!canPrice) {
-          throw new Error(
-            "No tienes permiso para modificar precios.",
-          );
+          throw new Error("No tienes permiso para modificar precios.");
         }
       } else if (!canEditProduct) {
-        throw new Error(
-          "No tienes permiso para editar este producto.",
-        );
+        throw new Error("No tienes permiso para editar este producto.");
       }
 
       if (!form.name.trim()) {
         throw new Error("Nombre requerido");
       }
 
-      // La comprobación de código duplicado se conserva.
       const barcodeValue = form.barcode.trim();
 
       if (barcodeValue && !priceOnly) {
@@ -356,9 +702,7 @@ function ProductosPage() {
           .select("id")
           .eq("barcode", barcodeValue);
 
-        if (form.id) {
-          q = q.neq("id", form.id);
-        }
+        if (form.id) q = q.neq("id", form.id);
 
         const { data: clash, error: barcodeError } =
           await q.maybeSingle();
@@ -372,7 +716,6 @@ function ProductosPage() {
         }
       }
 
-      // Acceso limitado: usar la RPC existente para cambiar precios.
       if (form.id && priceOnly) {
         const { error } = await (supabase as any).rpc(
           "update_product_prices",
@@ -394,9 +737,7 @@ function ProductosPage() {
         name: form.name.trim(),
         description: form.description.trim() || null,
         category_id:
-          form.category_id === "none"
-            ? null
-            : form.category_id,
+          form.category_id === "none" ? null : form.category_id,
         price: Number(form.price) || 0,
         cost: Number(form.cost) || 0,
         tax_rate: Number(form.tax_rate) || 0,
@@ -415,18 +756,12 @@ function ProductosPage() {
         return;
       }
 
-      const { error } = await supabase
-        .from("products")
-        .insert(payload);
-
+      const { error } = await supabase.from("products").insert(payload);
       if (error) throw error;
     },
 
     onSuccess: () => {
-      toast.success(
-        form.id ? "Producto actualizado" : "Producto creado",
-      );
-
+      toast.success(form.id ? "Producto actualizado" : "Producto creado");
       setForm(emptyProduct);
 
       void qc.invalidateQueries({ queryKey: ["products"] });
@@ -438,28 +773,18 @@ function ProductosPage() {
       });
     },
 
-    onError: (e: Error) => {
-      toast.error(e.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
-
-  /*
-   * DESACTIVAR PRODUCTO
-   */
 
   const removeProduct = useMutation({
     mutationFn: async (id: string) => {
       if (!canDelete && !isManager) {
-        throw new Error(
-          "No tienes permiso para desactivar productos.",
-        );
+        throw new Error("No tienes permiso para desactivar productos.");
       }
 
       const { error } = await (supabase as any).rpc(
         "deactivate_product",
-        {
-          _product_id: id,
-        },
+        { _product_id: id },
       );
 
       if (error) throw error;
@@ -467,7 +792,6 @@ function ProductosPage() {
 
     onSuccess: () => {
       toast.success("Producto desactivado");
-
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
@@ -476,33 +800,23 @@ function ProductosPage() {
       });
     },
 
-    onError: (e: Error) => {
-      toast.error(e.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
-
-  /*
-   * CREAR CATEGORÍA
-   */
 
   const saveCategory = useMutation({
     mutationFn: async () => {
       if (!isManager) {
-        throw new Error(
-          "Solo un administrador puede crear categorías.",
-        );
+        throw new Error("Solo un administrador puede crear categorías.");
       }
 
       if (!catName.trim()) {
         throw new Error("Nombre de categoría requerido");
       }
 
-      const { error } = await supabase
-        .from("categories")
-        .insert({
-          name: catName.trim(),
-          parent_id: catParent === "none" ? null : catParent,
-        });
+      const { error } = await supabase.from("categories").insert({
+        name: catName.trim(),
+        parent_id: catParent === "none" ? null : catParent,
+      });
 
       if (error) throw error;
     },
@@ -511,18 +825,11 @@ function ProductosPage() {
       toast.success("Categoría creada");
       setCatName("");
       setCatParent("none");
-
       void qc.invalidateQueries({ queryKey: ["categories"] });
     },
 
-    onError: (e: Error) => {
-      toast.error(e.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
-
-  /*
-   * ABRIR PRODUCTO EXISTENTE
-   */
 
   const editProduct = (p: ProductRow) => {
     if (!canOpenForm) {
@@ -561,14 +868,9 @@ function ProductosPage() {
     if (!selectedCategoryId) return null;
 
     return (
-      categories.find((c) => c.id === selectedCategoryId)?.name ??
-      null
+      categories.find((c) => c.id === selectedCategoryId)?.name ?? null
     );
   }, [categories, selectedCategoryId]);
-
-  /*
-   * RESUMEN DE INVENTARIO
-   */
 
   const inventorySummary = useMemo(() => {
     let totalUnits = 0;
@@ -582,15 +884,11 @@ function ProductosPage() {
       totalAvailable += item.availableStock;
       totalReserved += item.reservedStock;
 
-      if (item.availableStock <= 0) {
-        outOfStock += 1;
-      }
+      if (item.availableStock <= 0) outOfStock += 1;
     }
 
     for (const row of sharedInventory) {
-      if (row.stock_status === "low_stock") {
-        lowStock += 1;
-      }
+      if (row.stock_status === "low_stock") lowStock += 1;
     }
 
     return {
@@ -604,6 +902,24 @@ function ProductosPage() {
 
   const loading = productsLoading || inventoryLoading;
 
+  const handleBarcodeDetected = (value: string) => {
+    setForm((current) => ({ ...current, barcode: value }));
+    setScannerOpen(false);
+    toast.success(`Código leído: ${value}`);
+  };
+
+  const handleDownloadLabel = () => {
+    try {
+      downloadBarcodeLabel(form.name, form.price, form.barcode);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo generar la etiqueta.",
+      );
+    }
+  };
+
   return (
     <PageShell>
       <PageHeader
@@ -611,8 +927,6 @@ function ProductosPage() {
         title="Artículos"
         description="Catálogo, precios, costos, impuestos y códigos de barras."
       />
-
-      {/* RESUMEN */}
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
         <Card className="border-[#e0e0e0] shadow-sm">
@@ -662,8 +976,8 @@ function ProductosPage() {
 
       <Tabs
         value={activeTab}
-        onValueChange={(v) =>
-          setActiveTab(v as "lista" | "form" | "categorias")
+        onValueChange={(value) =>
+          setActiveTab(value as "lista" | "form" | "categorias")
         }
       >
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
@@ -674,14 +988,12 @@ function ProductosPage() {
             >
               Catálogo
             </TabsTrigger>
-
             <TabsTrigger
               value="form"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               {form.id ? "Editar" : "Nuevo"}
             </TabsTrigger>
-
             <TabsTrigger
               value="categorias"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
@@ -691,12 +1003,7 @@ function ProductosPage() {
           </TabsList>
         </div>
 
-        {/* CATÁLOGO */}
-
-        <TabsContent
-          value="lista"
-          className="mt-3 space-y-3 sm:mt-4 sm:space-y-4"
-        >
+        <TabsContent value="lista" className="mt-3 space-y-3 sm:mt-4 sm:space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
             <div className="relative w-full sm:max-w-sm">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -712,9 +1019,7 @@ function ProductosPage() {
               variant="outline"
               size="icon"
               className="h-11 w-11 shrink-0 touch-manipulation rounded-xl"
-              onClick={() => {
-                void refetchInventory();
-              }}
+              onClick={() => void refetchInventory()}
               title="Actualizar existencias"
               aria-label="Actualizar existencias"
             >
@@ -781,10 +1086,7 @@ function ProductosPage() {
                   Crea un producto en la pestaña Nuevo o ajusta la búsqueda.
                 </p>
                 {canCreateProduct && (
-                  <Button
-                    className="mt-3 rounded-xl"
-                    onClick={startNewProduct}
-                  >
+                  <Button className="mt-3 rounded-xl" onClick={startNewProduct}>
                     + Crear nuevo
                   </Button>
                 )}
@@ -933,8 +1235,6 @@ function ProductosPage() {
           )}
         </TabsContent>
 
-        {/* FORMULARIO DE PRODUCTO */}
-
         <TabsContent value="form" className="mt-3 sm:mt-4">
           <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
             <div className="bg-[#1a73e8] px-4 py-3.5 text-white sm:px-5">
@@ -968,8 +1268,6 @@ function ProductosPage() {
             </div>
 
             <div className="space-y-4 p-3.5 sm:p-5">
-              {/* Identidad */}
-
               <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[76px_minmax(0,1fr)]">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-[#757575]">Emoji</Label>
@@ -996,8 +1294,6 @@ function ProductosPage() {
                   />
                 </div>
               </div>
-
-              {/* Imagen */}
 
               <div className="space-y-2">
                 <Label className="text-xs text-[#757575]">
@@ -1032,7 +1328,10 @@ function ProductosPage() {
                         const file = event.target.files?.[0];
                         if (!file) return;
 
-                        if (priceOnly || !(canCreateProduct || canEditProduct)) {
+                        if (
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct)
+                        ) {
                           toast.error(
                             "No tienes permiso para cambiar imágenes.",
                           );
@@ -1121,8 +1420,6 @@ function ProductosPage() {
                 </div>
               </div>
 
-              {/* Códigos */}
-
               <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Códigos
@@ -1147,53 +1444,77 @@ function ProductosPage() {
                       Código de barras
                     </Label>
 
-                    <div className="flex gap-2">
-                      <Input
-                        value={form.barcode}
-                        onChange={(e) =>
-                          setForm((f) => ({
-                            ...f,
-                            barcode: e.target.value.slice(0, 64),
-                          }))
-                        }
-                        placeholder="EAN / UPC o genérico"
-                        maxLength={64}
-                        className="h-11 flex-1 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
-                        disabled={priceOnly}
-                      />
+                    <Input
+                      value={form.barcode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          barcode: e.target.value.slice(0, 64),
+                        }))
+                      }
+                      placeholder="EAN / UPC o código interno"
+                      maxLength={64}
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
 
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                       <Button
                         type="button"
                         variant="outline"
-                        className="h-11 shrink-0 rounded-xl border-[#e0e0e0] px-3"
+                        className="h-11 rounded-xl border-[#e0e0e0]"
                         disabled={
                           priceOnly ||
                           !(canCreateProduct || canEditProduct) ||
                           saveProduct.isPending
                         }
-                        title="Generar código único (máx. 10 caracteres)"
                         onClick={async () => {
                           try {
                             const code = await generateUniqueBarcode(10);
                             setForm((f) => ({ ...f, barcode: code }));
                             toast.success(`Código generado: ${code}`);
-                          } catch (err) {
+                          } catch (error) {
                             toast.error(
-                              err instanceof Error
-                                ? err.message
+                              error instanceof Error
+                                ? error.message
                                 : "No se pudo generar el código",
                             );
                           }
                         }}
                       >
-                        <Hash className="mr-1 h-4 w-4" />
+                        <Hash className="mr-2 h-4 w-4" />
                         Generar
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 rounded-xl border-[#e0e0e0]"
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct) ||
+                          saveProduct.isPending
+                        }
+                        onClick={() => setScannerOpen(true)}
+                      >
+                        <ScanLine className="mr-2 h-4 w-4" />
+                        Escanear
                       </Button>
                     </div>
 
-                    <p className="text-[10px] text-[#9e9e9e]">
-                      El botón crea un código de 10 caracteres que no se
-                      repite en ningún otro producto.
+                    <Button
+                      type="button"
+                      className="h-11 w-full rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
+                      disabled={!form.barcode.trim()}
+                      onClick={handleDownloadLabel}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Descargar etiqueta PNG HD
+                    </Button>
+
+                    <p className="text-[10px] text-[#757575]">
+                      La etiqueta usa Code 128. El escáner depende del soporte
+                      del navegador y de los permisos de cámara.
                     </p>
                   </div>
                 </div>
@@ -1218,7 +1539,6 @@ function ProductosPage() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs text-[#757575]">Categoría</Label>
-
                 <Select
                   value={form.category_id}
                   onValueChange={(v) =>
@@ -1229,7 +1549,6 @@ function ProductosPage() {
                   <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
                     <SelectValue placeholder="Sin categoría" />
                   </SelectTrigger>
-
                   <SelectContent>
                     <SelectItem value="none">Sin categoría</SelectItem>
                     {categories.map((c) => (
@@ -1240,8 +1559,6 @@ function ProductosPage() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* Precio, costo e IVA */}
 
               <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
                 <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
@@ -1287,10 +1604,7 @@ function ProductosPage() {
                       step="0.01"
                       value={form.tax_rate}
                       onChange={(e) =>
-                        setForm((f) => ({
-                          ...f,
-                          tax_rate: e.target.value,
-                        }))
+                        setForm((f) => ({ ...f, tax_rate: e.target.value }))
                       }
                       className="h-11 rounded-xl border-[#e0e0e0] bg-white"
                     />
@@ -1360,8 +1674,6 @@ function ProductosPage() {
           </div>
         </TabsContent>
 
-        {/* CATEGORÍAS */}
-
         <TabsContent value="categorias" className="mt-3 sm:mt-4">
           <div className="grid gap-3 md:grid-cols-2 md:gap-4">
             <Card>
@@ -1392,7 +1704,6 @@ function ProductosPage() {
                     <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
-
                     <SelectContent>
                       <SelectItem value="none">Ninguno</SelectItem>
                       {categories.map((c) => (
@@ -1409,9 +1720,7 @@ function ProductosPage() {
                   disabled={!isManager || saveCategory.isPending}
                   onClick={() => saveCategory.mutate()}
                 >
-                  {saveCategory.isPending
-                    ? "Creando…"
-                    : "Crear categoría"}
+                  {saveCategory.isPending ? "Creando…" : "Crear categoría"}
                 </Button>
               </CardContent>
             </Card>
@@ -1455,6 +1764,13 @@ function ProductosPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {scannerOpen && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
     </PageShell>
   );
 }
