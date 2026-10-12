@@ -108,6 +108,13 @@ function ShellErrorComponent({
 }
 
 function ShellLayout() {
+  /*
+   * Etapa 2 — Unificación visual catálogo/stock:
+   * - "Artículos" (/productos) = catálogo + ficha + stock lectura + variantes
+   * - "Movimientos" (/inventario) = ajustes, alertas, movimientos (sin duplicar catálogo)
+   * Rutas y permisos (navKey) sin cambios.
+   */
+
   const { user, roles, signOut } = useAuth();
 
   const {
@@ -188,13 +195,13 @@ function ShellLayout() {
       key: "ventas",
     },
     {
-      label: "Productos",
+      label: "Artículos",
       path: "/productos",
       icon: Package,
       key: "productos",
     },
     {
-      label: "Inventario",
+      label: "Movimientos",
       path: "/inventario",
       icon: Boxes,
       key: "inventario",
@@ -570,7 +577,7 @@ function ShellLayout() {
                       : location.pathname.startsWith("/gastos")
                         ? "Gastos"
                         : location.pathname.startsWith("/inventario")
-                          ? "Inventario"
+                          ? "Movimientos"
                           : location.pathname.startsWith("/clientes")
                             ? "Clientes"
                             : location.pathname.startsWith("/ajustes")
