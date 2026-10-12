@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   useMutation,
   useQuery,
@@ -75,20 +75,21 @@ import { RestockList } from "@/components/inventory/RestockList";
 import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgress";
 
 /**
- * BLOQUE 4 — Visual Inventario (tabs, filtros, tarjetas de existencia).
+ * BLOQUE 4 — Visual Inventario / Movimientos.
  * Solo presentación. NO toca inventario compartido, RPCs ni arquitectura.
+ * Etapa 3: catálogo en Artículos; aquí stock, ajustes, límites, conteo e historial.
  */
 
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
     meta: [
       {
-        title: "Inventario — Lula OS",
+        title: "Movimientos — Lula OS",
       },
       {
         name: "description",
         content:
-          "Inventario compartido, ajustes, conteo físico, límites e historial.",
+          "Movimientos de stock, ajustes, conteo físico, límites e historial.",
       },
     ],
   }),
@@ -148,6 +149,7 @@ function InventarioPage() {
   const { isManager } = useAuth();
   const { branchId, branches, loading: branchLoading } = useBranch();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const activeBranch = branches.find(
     (branch) => branch.id === branchId,
@@ -747,8 +749,8 @@ function InventarioPage() {
     <PageShell>
       <PageHeader
         icon={Boxes}
-        title="Inventario"
-        description="Inventario único compartido entre las sucursales."
+        title="Movimientos"
+        description="Ajustes, límites, conteo físico e historial. El catálogo se edita en Artículos."
         action={
           lowStock.length > 0 ? (
             <Badge
@@ -761,6 +763,23 @@ function InventarioPage() {
           ) : undefined
         }
       />
+
+      <div className="mb-3 flex flex-col gap-2 rounded-xl border border-[#e3f2fd] bg-[#e3f2fd]/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-[#1565c0]">
+          Catálogo, precios y variantes:{" "}
+          <strong>Artículos</strong>. Aquí solo
+          movimientos y control de stock.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-9 shrink-0 rounded-lg border-[#90caf9] text-[#1565c0]"
+          onClick={() => navigate({ to: "/productos" })}
+        >
+          Ir a Artículos
+        </Button>
+      </div>
 
       {inventoryError && (
         <Card className="border-destructive/30">
@@ -778,7 +797,7 @@ function InventarioPage() {
               value="existencias"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              Existencias
+              Stock actual
             </TabsTrigger>
 
             <TabsTrigger
@@ -949,9 +968,20 @@ function InventarioPage() {
 
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-2">
-                                <p className="break-words text-sm font-bold leading-5 text-[#212121]">
-                                  {row.product_name}
-                                </p>
+                                <div className="min-w-0 flex-1">
+                                  <p className="break-words text-sm font-bold leading-5 text-[#212121]">
+                                    {row.product_name}
+                                  </p>
+                                  <button
+                                    type="button"
+                                    className="mt-0.5 text-[11px] font-semibold text-[#1a73e8]"
+                                    onClick={() =>
+                                      navigate({ to: "/productos" })
+                                    }
+                                  >
+                                    Ver en Artículos
+                                  </button>
+                                </div>
 
                                 {isOut ? (
                                   <span className="shrink-0 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b]">
@@ -1135,17 +1165,28 @@ function InventarioPage() {
                             )}
                           >
                             <TableCell className="font-medium">
-                              {row.emoji ?? "📦"}{" "}
-                              {row.product_name}
-
-                              {row.variant_id && (
-                                <Badge
-                                  variant="outline"
-                                  className="ml-2"
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span>
+                                  {row.emoji ?? "📦"}{" "}
+                                  {row.product_name}
+                                </span>
+                                {row.variant_id && (
+                                  <Badge
+                                    variant="outline"
+                                  >
+                                    Variante
+                                  </Badge>
+                                )}
+                                <button
+                                  type="button"
+                                  className="text-xs font-semibold text-[#1a73e8] hover:underline"
+                                  onClick={() =>
+                                    navigate({ to: "/productos" })
+                                  }
                                 >
-                                  Variante
-                                </Badge>
-                              )}
+                                  Ver en Artículos
+                                </button>
+                              </div>
                             </TableCell>
 
                             <TableCell className="font-mono text-xs text-muted-foreground">
