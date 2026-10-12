@@ -35,6 +35,7 @@ import {
 
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useBranch } from "@/lib/branch";
 import {
   getSharedInventory,
   type SharedInventoryRow,
@@ -557,7 +558,9 @@ function ProductosPage() {
   const canOpenForm = canEdit || canPrice || isManager;
   const canCreateProduct = !priceOnly && (canCreate || isManager);
   const canEditProduct = canEdit || isManager;
+  const canAdjustStock = isManager;
 
+  const { branchId } = useBranch();
   const qc = useQueryClient();
 
   const [form, setForm] = useState<ProductForm>(emptyProduct);
@@ -573,6 +576,9 @@ function ProductosPage() {
   const [scannerOpen, setScannerOpen] = useState(false);
   const [variantForm, setVariantForm] = useState<VariantForm>(emptyVariantForm);
   const [variantModalOpen, setVariantModalOpen] = useState(false);
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustDir, setAdjustDir] = useState<"in" | "out">("in");
+  const [adjustNotes, setAdjustNotes] = useState("");
 
   const {
     data: categories = [],
@@ -1074,7 +1080,48 @@ function ProductosPage() {
   });
 
 
-    const editProduct = (p: ProductRow) => {
+  
+  const adjustProductStock = useMutation({
+    mutationFn: async () => {
+      if (!canAdjustStock) {
+        throw new Error("Solo un administrador puede ajustar existencias.");
+      }
+      if (!branchId) {
+        throw new Error("Selecciona una sucursal activa antes de ajustar.");
+      }
+      if (!form.id) {
+        throw new Error("Guarda el producto antes de ajustar stock.");
+      }
+      const quantity = Math.abs(Number(adjustQty));
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new Error("La cantidad debe ser mayor que cero.");
+      }
+      const signed = adjustDir === "in" ? quantity : -quantity;
+      const { error } = await supabase.rpc("adjust_stock", {
+        _branch_id: branchId,
+        _product_id: form.id,
+        _quantity: signed,
+        _notes:
+          adjustNotes.trim() ||
+          (adjustDir === "in" ? "Ajuste de entrada" : "Ajuste de salida"),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Existencias actualizadas.");
+      setAdjustQty("");
+      setAdjustNotes("");
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory", "products"],
+      });
+      void qc.invalidateQueries({ queryKey: ["inventory-movements"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editProduct = (p: ProductRow) => {
     if (!canOpenForm) {
       toast.error("No tienes permiso para abrir este producto.");
       return;
@@ -2000,10 +2047,78 @@ function ProductosPage() {
                           </div>
                         </div>
                         <p className="mt-2 text-[11px] leading-4 text-[#9e9e9e]">
-                          Solo lectura. El stock se ajusta en Inventario o al
-                          recibir compras. Al vender, el POS descuenta del
-                          inventario compartido.
+                          Inventario compartido. Al vender, el POS descuenta
+                          automáticamente. Compras y conteos también actualizan
+                          el stock.
                         </p>
+
+                        {canAdjustStock ? (
+                          <div className="mt-3 space-y-2 rounded-xl border border-[#e0e0e0] bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                              Ajuste rápido
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setAdjustDir("in")}
+                                className={
+                                  adjustDir === "in"
+                                    ? "rounded-full bg-[#34a853] px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-full bg-[#eeeeee] px-3 py-1.5 text-xs font-medium text-[#616161]"
+                                }
+                              >
+                                Entrada +
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAdjustDir("out")}
+                                className={
+                                  adjustDir === "out"
+                                    ? "rounded-full bg-[#e53935] px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-full bg-[#eeeeee] px-3 py-1.5 text-xs font-medium text-[#616161]"
+                                }
+                              >
+                                Salida −
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                placeholder="Cantidad"
+                                value={adjustQty}
+                                onChange={(e) => setAdjustQty(e.target.value)}
+                                className="h-11 rounded-xl"
+                              />
+                              <Input
+                                placeholder="Nota (opcional)"
+                                value={adjustNotes}
+                                onChange={(e) => setAdjustNotes(e.target.value)}
+                                className="h-11 rounded-xl"
+                              />
+                              <Button
+                                type="button"
+                                className="h-11 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
+                                disabled={adjustProductStock.isPending}
+                                onClick={() => adjustProductStock.mutate()}
+                              >
+                                {adjustProductStock.isPending
+                                  ? "Aplicando…"
+                                  : "Aplicar"}
+                              </Button>
+                            </div>
+                            <p className="text-[10px] text-[#9e9e9e]">
+                              Usa la misma función que Movimientos (adjust_stock).
+                              No modifica el flujo de ventas.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[11px] text-[#9e9e9e]">
+                            Solo un administrador puede ajustar existencias desde
+                            aquí o en Movimientos.
+                          </p>
+                        )}
                       </>
                     );
                   })()}
@@ -2717,4 +2832,3 @@ function ProductosPage() {
     </PageShell>
   );
 }
- 
