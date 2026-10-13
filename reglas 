@@ -1,0 +1,18 @@
+REGLA PERMANENTE: PROTEGER EL ACCESO POR PIN DE PIXEL PERFECT
+
+El acceso por PIN de colaboradoras es una función crítica para la operación de Lula Shop.
+
+La función "supabase/functions/collaborator-pin-login/index.ts" se volvió a publicar con el código actual y el acceso volvió a funcionar.
+
+Restricciones obligatorias:
+
+1. No cambiar el flujo de autenticación por PIN sin autorización expresa.
+2. No modificar ni restablecer PIN, usuarios, permisos, sesiones, RLS, tablas o funciones de base de datos como solución improvisada.
+3. No reemplazar el tipo de respuesta "magiclink" ni modificar la validación de sesión sin comprobar la compatibilidad entre el servidor y el cliente.
+4. Antes de publicar cambios, revisar qué funciones y archivos se desplegarán.
+5. No publicar cambios adicionales junto con una reparación de autenticación.
+6. Después de cualquier publicación relacionada con el acceso, comprobar el ingreso por PIN en ambas tablets y verificar que el acceso del propietario continúa funcionando.
+7. Si el acceso falla, detener los cambios, recopilar el error y los registros disponibles y solicitar autorización antes de intervenir.
+8. Mantener el código fuente y el historial de cambios en GitHub. Registrar la versión publicada y la fecha de cada despliegue.
+
+No afirmar que el acceso está protegido definitivamente hasta comprobar que el código fuente, la función publicada y el flujo de sesión coinciden.
