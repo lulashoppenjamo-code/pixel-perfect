@@ -45,26 +45,24 @@ type UserBranchAccessRow = {
   is_primary: boolean;
 };
 
+type SupabaseDiagnosticError = {
+  message?: string;
+  code?: string;
+  details?: string;
+  hint?: string;
+};
+
 export function UserBranchAccessManager({
   userId,
   userName,
   primaryBranchId,
 }: UserBranchAccessManagerProps) {
-  const {
-    isAdmin,
-    can,
-  } = useAuth();
-
-  const {
-    branches,
-  } = useBranch();
-
-  const qc =
-    useQueryClient();
+  const { isAdmin, can } = useAuth();
+  const { branches } = useBranch();
+  const qc = useQueryClient();
 
   const canManage =
-    isAdmin ||
-    can("usuarios.manage");
+    isAdmin || can("usuarios.manage");
 
   const [
     selectedBranchId,
@@ -79,204 +77,183 @@ export function UserBranchAccessManager({
       "user-branch-access",
       userId,
     ],
+    enabled: canManage && !!userId,
+    queryFn: async () => {
+      const { data, error } = await (
+        supabase as any
+      ).rpc("admin_get_user_branch_access", {
+        _user_id: userId,
+      });
 
-    enabled:
-      canManage &&
-      !!userId,
+      if (error) {
+        throw error;
+      }
 
-    queryFn:
-      async () => {
-        const {
-          data,
-          error,
-        } = await (
-          supabase as any
-        ).rpc(
-          "admin_get_user_branch_access",
-          {
-            _user_id:
-              userId,
-          },
-        );
-
-        if (error) {
-          throw error;
-        }
-
-        return (
-          data ?? []
-        ) as UserBranchAccessRow[];
-      },
+      return (data ?? []) as UserBranchAccessRow[];
+    },
   });
 
   useEffect(() => {
     setSelectedBranchId("");
   }, [userId]);
 
-  const addBranch =
-    useMutation({
-      mutationFn:
-        async () => {
-          if (!canManage) {
-            throw new Error(
-              "No tienes permiso para administrar sucursales del usuario.",
-            );
-          }
+  const addBranch = useMutation({
+    mutationFn: async () => {
+      if (!canManage) {
+        throw new Error(
+          "No tienes permiso para administrar sucursales del usuario.",
+        );
+      }
 
-          if (!userId) {
-            throw new Error(
-              "No se indicó el usuario.",
-            );
-          }
+      if (!userId) {
+        throw new Error("No se indicó el usuario.");
+      }
 
-          if (!selectedBranchId) {
-            throw new Error(
-              "Selecciona una sucursal.",
-            );
-          }
+      if (!selectedBranchId) {
+        throw new Error("Selecciona una sucursal.");
+      }
 
-          if (
-            selectedBranchId ===
-            primaryBranchId
-          ) {
-            throw new Error(
-              "La sucursal principal ya está asignada.",
-            );
-          }
+      if (selectedBranchId === primaryBranchId) {
+        throw new Error(
+          "La sucursal principal ya está asignada.",
+        );
+      }
 
-          const {
-            error,
-          } = await (
-            supabase as any
-          ).rpc(
-            "admin_add_user_branch_access",
-            {
-              _user_id:
-                userId,
-              _branch_id:
-                selectedBranchId,
-            },
-          );
+      const { error } = await (
+        supabase as any
+      ).rpc("admin_add_user_branch_access", {
+        _user_id: userId,
+        _branch_id: selectedBranchId,
+      });
 
-          if (error) {
-            throw error;
-          }
+      if (error) {
+        throw error;
+      }
+    },
+
+    onSuccess: async () => {
+      toast.success("Sucursal adicional asignada.");
+      setSelectedBranchId("");
+
+      await qc.invalidateQueries({
+        queryKey: ["user-branch-access", userId],
+      });
+
+      await qc.invalidateQueries({
+        queryKey: ["profiles"],
+      });
+    },
+
+    onError: (error: unknown) => {
+      const diagnostic =
+        error as SupabaseDiagnosticError;
+
+      const parts = [
+        diagnostic.code
+          ? `Código: ${diagnostic.code}`
+          : "",
+        diagnostic.message
+          ? `Mensaje: ${diagnostic.message}`
+          : "",
+        diagnostic.details
+          ? `Detalles: ${diagnostic.details}`
+          : "",
+        diagnostic.hint
+          ? `Sugerencia: ${diagnostic.hint}`
+          : "",
+      ].filter(Boolean);
+
+      const message =
+        parts.length > 0
+          ? parts.join(" | ")
+          : error instanceof Error
+            ? error.message
+            : String(error);
+
+      console.error(
+        "[Diagnóstico de sucursales adicionales]",
+        {
+          userId,
+          selectedBranchId,
+          error,
         },
+      );
 
-      onSuccess:
-        async () => {
-          toast.success(
-            "Sucursal adicional asignada.",
-          );
-
-          setSelectedBranchId("");
-
-          await qc.invalidateQueries({
-            queryKey: [
-              "user-branch-access",
-              userId,
-            ],
-          });
-
-          await qc.invalidateQueries({
-            queryKey: [
-              "profiles",
-            ],
-          });
+      toast.error(
+        message || "Error desconocido al asignar la sucursal.",
+        {
+          duration: 12000,
         },
+      );
+    },
+  });
 
-      onError:
-        (error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "No se pudo asignar la sucursal.",
-          );
+  const removeBranch = useMutation({
+    mutationFn: async (branchId: string) => {
+      if (!canManage) {
+        throw new Error(
+          "No tienes permiso para administrar sucursales del usuario.",
+        );
+      }
+
+      const { error } = await (
+        supabase as any
+      ).rpc("admin_remove_user_branch_access", {
+        _user_id: userId,
+        _branch_id: branchId,
+      });
+
+      if (error) {
+        throw error;
+      }
+    },
+
+    onSuccess: async () => {
+      toast.success("Sucursal adicional retirada.");
+
+      await qc.invalidateQueries({
+        queryKey: ["user-branch-access", userId],
+      });
+
+      await qc.invalidateQueries({
+        queryKey: ["profiles"],
+      });
+    },
+
+    onError: (error: unknown) => {
+      const diagnostic =
+        error as SupabaseDiagnosticError;
+
+      const message =
+        diagnostic.message ||
+        (error instanceof Error
+          ? error.message
+          : "No se pudo retirar la sucursal.");
+
+      toast.error(
+        diagnostic.code
+          ? `Código: ${diagnostic.code} | ${message}`
+          : message,
+        {
+          duration: 12000,
         },
-    });
-
-  const removeBranch =
-    useMutation({
-      mutationFn:
-        async (
-          branchId: string,
-        ) => {
-          if (!canManage) {
-            throw new Error(
-              "No tienes permiso para administrar sucursales del usuario.",
-            );
-          }
-
-          const {
-            error,
-          } = await (
-            supabase as any
-          ).rpc(
-            "admin_remove_user_branch_access",
-            {
-              _user_id:
-                userId,
-              _branch_id:
-                branchId,
-            },
-          );
-
-          if (error) {
-            throw error;
-          }
-        },
-
-      onSuccess:
-        async () => {
-          toast.success(
-            "Sucursal adicional retirada.",
-          );
-
-          await qc.invalidateQueries({
-            queryKey: [
-              "user-branch-access",
-              userId,
-            ],
-          });
-
-          await qc.invalidateQueries({
-            queryKey: [
-              "profiles",
-            ],
-          });
-        },
-
-      onError:
-        (error) => {
-          toast.error(
-            error instanceof Error
-              ? error.message
-              : "No se pudo retirar la sucursal.",
-          );
-        },
-    });
+      );
+    },
+  });
 
   if (!canManage) {
     return null;
   }
 
-  const accessibleBranchIds =
-    new Set(
-      accessRows.map(
-        (row) =>
-          row.branch_id,
-      ),
-    );
+  const accessibleBranchIds = new Set(
+    accessRows.map((row) => row.branch_id),
+  );
 
-  const availableBranches =
-    branches.filter(
-      (branch) =>
-        branch.id !==
-          primaryBranchId &&
-        !accessibleBranchIds.has(
-          branch.id,
-        ),
-    );
+  const availableBranches = branches.filter(
+    (branch) =>
+      branch.id !== primaryBranchId &&
+      !accessibleBranchIds.has(branch.id),
+  );
 
   return (
     <Card className="mt-4 border-[#e0e0e0] shadow-sm">
@@ -311,10 +288,8 @@ export function UserBranchAccessManager({
               {primaryBranchId
                 ? branches.find(
                     (branch) =>
-                      branch.id ===
-                      primaryBranchId,
-                  )?.name ??
-                  "Sucursal no disponible"
+                      branch.id === primaryBranchId,
+                  )?.name ?? "Sucursal no disponible"
                 : "Sin sucursal principal"}
             </span>
           </div>
@@ -327,22 +302,15 @@ export function UserBranchAccessManager({
         ) : (
           <>
             <div className="space-y-2">
-              <Label>
-                Agregar otra sucursal
-              </Label>
+              <Label>Agregar otra sucursal</Label>
 
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Select
-                  value={
-                    selectedBranchId
-                  }
-                  onValueChange={
-                    setSelectedBranchId
-                  }
+                  value={selectedBranchId}
+                  onValueChange={setSelectedBranchId}
                   disabled={
                     addBranch.isPending ||
-                    availableBranches.length ===
-                      0
+                    availableBranches.length === 0
                   }
                 >
                   <SelectTrigger className="h-11 flex-1">
@@ -350,20 +318,14 @@ export function UserBranchAccessManager({
                   </SelectTrigger>
 
                   <SelectContent>
-                    {availableBranches.map(
-                      (branch) => (
-                        <SelectItem
-                          key={
-                            branch.id
-                          }
-                          value={
-                            branch.id
-                          }
-                        >
-                          {branch.name}
-                        </SelectItem>
-                      ),
-                    )}
+                    {availableBranches.map((branch) => (
+                      <SelectItem
+                        key={branch.id}
+                        value={branch.id}
+                      >
+                        {branch.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
 
@@ -373,12 +335,9 @@ export function UserBranchAccessManager({
                   disabled={
                     !selectedBranchId ||
                     addBranch.isPending ||
-                    availableBranches.length ===
-                      0
+                    availableBranches.length === 0
                   }
-                  onClick={() =>
-                    addBranch.mutate()
-                  }
+                  onClick={() => addBranch.mutate()}
                 >
                   <Plus className="mr-1.5 h-4 w-4" />
 
@@ -388,23 +347,18 @@ export function UserBranchAccessManager({
                 </Button>
               </div>
 
-              {availableBranches.length ===
-                0 && (
+              {availableBranches.length === 0 && (
                 <p className="text-xs text-muted-foreground">
-                  No hay otra sucursal disponible
-                  para asignar.
+                  No hay otra sucursal disponible para asignar.
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label>
-                Sucursales adicionales
-              </Label>
+              <Label>Sucursales adicionales</Label>
 
               {accessRows.filter(
-                (row) =>
-                  !row.is_primary,
+                (row) => !row.is_primary,
               ).length === 0 ? (
                 <div className="rounded-xl border border-dashed p-4 text-sm text-muted-foreground">
                   No tiene sucursales adicionales.
@@ -412,59 +366,45 @@ export function UserBranchAccessManager({
               ) : (
                 <div className="grid gap-2">
                   {accessRows
-                    .filter(
-                      (row) =>
-                        !row.is_primary,
-                    )
-                    .map(
-                      (row) => (
-                        <div
-                          key={
-                            row.branch_id
-                          }
-                          className="flex items-center justify-between gap-3 rounded-xl border bg-white p-3"
-                        >
-                          <div className="min-w-0">
-                            <p className="font-semibold">
-                              {row.branch_name ??
-                                branches.find(
-                                  (
-                                    branch,
-                                  ) =>
-                                    branch.id ===
-                                    row.branch_id,
-                                )?.name ??
-                                "Sucursal"}
-                            </p>
+                    .filter((row) => !row.is_primary)
+                    .map((row) => (
+                      <div
+                        key={row.branch_id}
+                        className="flex items-center justify-between gap-3 rounded-xl border bg-white p-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="font-semibold">
+                            {row.branch_name ??
+                              branches.find(
+                                (branch) =>
+                                  branch.id === row.branch_id,
+                              )?.name ??
+                              "Sucursal"}
+                          </p>
 
-                            <Badge
-                              variant="secondary"
-                              className="mt-1 rounded-full"
-                            >
-                              Acceso adicional
-                            </Badge>
-                          </div>
-
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            className="shrink-0 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700"
-                            disabled={
-                              removeBranch.isPending
-                            }
-                            onClick={() =>
-                              removeBranch.mutate(
-                                row.branch_id,
-                              )
-                            }
+                          <Badge
+                            variant="secondary"
+                            className="mt-1 rounded-full"
                           >
-                            <Trash2 className="mr-1.5 h-4 w-4" />
-                            Quitar
-                          </Button>
+                            Acceso adicional
+                          </Badge>
                         </div>
-                      ),
-                    )}
+
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0 rounded-lg text-red-600 hover:bg-red-50 hover:text-red-700"
+                          disabled={removeBranch.isPending}
+                          onClick={() =>
+                            removeBranch.mutate(row.branch_id)
+                          }
+                        >
+                          <Trash2 className="mr-1.5 h-4 w-4" />
+                          Quitar
+                        </Button>
+                      </div>
+                    ))}
                 </div>
               )}
             </div>
