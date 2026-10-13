@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import {
   createFileRoute,
@@ -49,10 +50,8 @@ import {
   ShoppingCart,
   Menu,
   BarChart3,
-  CalendarDays,
   Crown,
   ChevronLeft,
-  ChevronRight,
   LayoutGrid,
   Store,
 } from "lucide-react";
@@ -115,7 +114,8 @@ function ShellLayout() {
    * Rutas y permisos (navKey) sin cambios.
    */
 
-  const { user, roles, signOut } = useAuth();
+  // CAMBIO 1: incluir los permisos del usuario autenticado.
+  const { user, roles, permissions, signOut } = useAuth();
 
   const {
     branchId,
@@ -262,10 +262,16 @@ function ShellLayout() {
     },
   ];
 
-  const navItems = filterNavByRoles(allNavItems, roles);
+  // CAMBIO 2: filtrar usando los permisos granulares cargados.
+  const navItems = filterNavByRoles(
+    allNavItems,
+    roles,
+    permissions ?? undefined,
+  );
 
   const [moreOpen, setMoreOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
   /* Colapso del sidebar (tablet/escritorio). Vive en el shell
      para no resetearse al cambiar de sección. */
   const [sidebarCollapsed, setSidebarCollapsed] =
@@ -330,17 +336,7 @@ function ShellLayout() {
 
   return (
     <div className="flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
-      {/* =====================================================
-          SIDEBAR
-          Se conserva para pantallas grandes.
-          Celular/tablet utilizan navegación táctil.
-          ===================================================== */}
-      {/*
-        Breakpoints de layout:
-        - Celular (< md): top bar + bottom nav + sheet
-        - Tablet (md–lg): sidebar fija, sin bottom nav
-        - Escritorio (lg+): sidebar fija ancha
-      */}
+      {/* SIDEBAR */}
       <aside
         className={`hidden shrink-0 select-none flex-col justify-between border-r bg-card transition-[width] duration-200 ease-out md:flex ${
           sidebarCollapsed
@@ -426,7 +422,7 @@ function ShellLayout() {
             </div>
           )}
 
-          {/* Vender — siempre visible */}
+          {/* Vender — siempre visible si tiene permiso */}
           {navItems.some((item) => item.key === "caja") && (
             <div className={sidebarCollapsed ? "px-0" : "px-2"}>
               <button
@@ -550,11 +546,9 @@ function ShellLayout() {
         </div>
       </aside>
 
-      {/* =====================================================
-          CONTENIDO PRINCIPAL
-          ===================================================== */}
+      {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* ===== MOBILE / TABLET TOP BAR ===== */}
+        {/* MOBILE TOP BAR */}
         <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 md:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
@@ -605,9 +599,7 @@ function ShellLayout() {
         </main>
       </div>
 
-      {/* =====================================================
-          MOBILE / TABLET BOTTOM NAV
-          ===================================================== */}
+      {/* MOBILE BOTTOM NAV */}
       <nav
         className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white md:hidden"
         style={{
@@ -659,9 +651,7 @@ function ShellLayout() {
         )}
       </nav>
 
-      {/* =====================================================
-          MOBILE / TABLET SIDE MENU
-          ===================================================== */}
+      {/* MOBILE SIDE MENU */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
@@ -784,9 +774,7 @@ function ShellLayout() {
         </SheetContent>
       </Sheet>
 
-      {/* =====================================================
-          MÁS
-          ===================================================== */}
+      {/* MÁS */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
