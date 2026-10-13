@@ -4,18 +4,27 @@
  *
  * Control de caja por sucursal:
  * - Una sola sesión abierta por sucursal.
- * - Apertura con efectivo inicial.
+ * - Apertura con fondo (inicio del día).
+ * - Apertura por relevo (continúa con el efectivo del turno anterior).
  * - Entradas y salidas manuales.
- * - Ventas en efectivo.
+ * - Ventas en efectivo (asignadas al colaborador de la sesión abierta).
  * - Pagos mixtos.
  * - Devoluciones y reembolsos en efectivo.
  * - Gastos pagados en efectivo.
- * - Cierre con efectivo contado.
+ * - Cierre de turno / corte con efectivo contado.
  * - Diferencia contra efectivo esperado.
+ *
+ * Flujo de relevo (sin mezclar sucursales):
+ * 1) Colaborador A abre con fondo.
+ * 2) A cierra turno (corte) → sesión cerrada.
+ * 3) Colaborador B abre por relevo con el monto contado por A.
+ * 4) B cierra turno; A puede volver a abrir por relevo.
+ * 5) Al final del día, el historial de sesiones cerradas es el corte general.
  *
  * IMPORTANTE:
  * El inventario sigue siendo compartido entre sucursales.
  * Caja sí permanece separada por sucursal.
+ * No se modifican RPCs ni tablas: se reutiliza open + close_cash_session.
  */
 
 import { useState } from "react";
@@ -487,6 +496,10 @@ export function CashDrawerPanel({
     void qc.invalidateQueries({
       queryKey: ["closed-sessions"],
     });
+
+    void qc.invalidateQueries({
+      queryKey: ["last-closed-session-today"],
+    });
   };
 
   const openTicketPreview = (opts: ArqueoPrintOpts, title = "Corte de caja") => {
@@ -583,6 +596,31 @@ export function CashDrawerPanel({
         throw error;
       }
 
+      return data;
+    },
+  });
+
+  // Última sesión cerrada HOY en esta sucursal (para apertura por relevo)
+  const { data: lastClosedToday } = useQuery({
+    queryKey: ["last-closed-session-today", branchId],
+    enabled: !!branchId && !session,
+    queryFn: async () => {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+
+      const { data, error } = await supabase
+        .from("cash_sessions")
+        .select(
+          "id, closed_at, closing_amount, opened_by, opening_amount, expected_amount, difference",
+        )
+        .eq("branch_id", branchId!)
+        .eq("status", "closed")
+        .gte("closed_at", start.toISOString())
+        .order("closed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (error) throw error;
       return data;
     },
   });
@@ -760,7 +798,7 @@ export function CashDrawerPanel({
    */
 
   const openBox = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (overrideAmount?: number) => {
       if (!branchId) {
         throw new Error(
           "No hay una sucursal activa.",
@@ -774,9 +812,14 @@ export function CashDrawerPanel({
       }
 
       // Fondo fijo de operación: $400 (se puede ajustar si hace falta)
+      // overrideAmount se usa en apertura por relevo para no depender del state async
+      const raw =
+        overrideAmount != null
+          ? overrideAmount
+          : Number(opening);
       const amount =
-        Number(opening) >= 0 && Number.isFinite(Number(opening))
-          ? Number(opening)
+        Number(raw) >= 0 && Number.isFinite(Number(raw))
+          ? Number(raw)
           : DEFAULT_FONDO;
 
       const { error } = await supabase
@@ -1094,7 +1137,7 @@ export function CashDrawerPanel({
                 }
               >
                 <Lock className="mr-2 h-4 w-4" />
-                Cerrar caja
+                Cerrar turno / Corte
               </Button>
             </div>
           )}
@@ -1103,53 +1146,105 @@ export function CashDrawerPanel({
 
       {!session ? (
         /* ======================================================
-         * ABRIR CAJA
+         * ABRIR CAJA — fondo o relevo
          * ====================================================== */
-        <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4 sm:p-5">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26] sm:text-base">
-            <Wallet className="h-4 w-4 shrink-0 text-[#4169e2]" />
-            Abrir caja
-          </h2>
+        <div className="space-y-4">
+          {/* —— Apertura con fondo (inicio del día) —— */}
+          <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4 sm:p-5">
+            <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26] sm:text-base">
+              <Wallet className="h-4 w-4 shrink-0 text-[#4169e2]" />
+              Abrir caja con fondo
+            </h2>
 
-          <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
-            El fondo de caja es fijo:{" "}
-            <strong className="text-[#1a1d26]">
-              {money(DEFAULT_FONDO)}
-            </strong>
-            . Solo cambia el monto si ese día
-            el fondo es distinto.
-          </p>
+            <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
+              Solo al inicio del día. Fondo fijo:{" "}
+              <strong className="text-[#1a1d26]">
+                {money(DEFAULT_FONDO)}
+              </strong>
+              . Solo cambia el monto si ese día el fondo es distinto.
+            </p>
 
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <Input
-              type="number"
-              min="0"
-              step="0.01"
-              value={opening}
-              onChange={(event) =>
-                setOpening(
-                  event.target.value,
-                )
-              }
-              placeholder={String(DEFAULT_FONDO)}
-              className="h-11 w-full rounded-xl border-[#e2e8f0] sm:w-40"
-            />
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={opening}
+                onChange={(event) =>
+                  setOpening(event.target.value)
+                }
+                placeholder={String(DEFAULT_FONDO)}
+                className="h-11 w-full rounded-xl border-[#e2e8f0] sm:w-40"
+              />
 
-            <Button
-              className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
-              disabled={
-                openBox.isPending ||
-                sessionLoading
-              }
-              onClick={() =>
-                openBox.mutate()
-              }
-            >
-              {openBox.isPending
-                ? "Abriendo…"
-                : "Abrir caja"}
-            </Button>
+              <Button
+                className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
+                disabled={
+                  openBox.isPending ||
+                  sessionLoading
+                }
+                onClick={() => openBox.mutate()}
+              >
+                {openBox.isPending
+                  ? "Abriendo…"
+                  : "Abrir con fondo"}
+              </Button>
+            </div>
           </div>
+
+          {/* —— Apertura por relevo (después de corte / cierre de turno) —— */}
+          {lastClosedToday?.closing_amount != null && (
+            <div className="rounded-2xl border border-[#4169e2]/30 bg-[#4169e2]/5 p-4 sm:p-5">
+              <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26] sm:text-base">
+                <Unlock className="h-4 w-4 shrink-0 text-[#4169e2]" />
+                Abrir por relevo
+              </h2>
+
+              <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
+                Continúa con el efectivo que dejó el turno anterior en esta
+                sucursal.
+              </p>
+
+              <div className="mt-3 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[#9aa3b8]">Monto dejado</span>
+                  <span className="font-bold text-[#1a1d26]">
+                    {money(Number(lastClosedToday.closing_amount))}
+                  </span>
+                </div>
+                {lastClosedToday.closed_at && (
+                  <div className="mt-1 flex items-center justify-between gap-2 text-xs text-[#9aa3b8]">
+                    <span>Cerrada</span>
+                    <span>
+                      {new Date(
+                        lastClosedToday.closed_at,
+                      ).toLocaleString("es-MX")}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <Button
+                className="mt-4 min-h-11 w-full touch-manipulation rounded-xl border border-[#4169e2] bg-white text-[#4169e2] hover:bg-[#4169e2]/10 sm:w-auto"
+                variant="outline"
+                disabled={
+                  openBox.isPending ||
+                  sessionLoading
+                }
+                onClick={() => {
+                  const monto = Number(
+                    lastClosedToday.closing_amount,
+                  );
+                  setOpening(String(monto));
+                  openBox.mutate(monto);
+                }}
+              >
+                {openBox.isPending
+                  ? "Abriendo…"
+                  : `Abrir por relevo (${money(Number(lastClosedToday.closing_amount))})`}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <>
