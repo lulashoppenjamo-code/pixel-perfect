@@ -46,11 +46,11 @@ const ROLES: AppRole[] = [
 ];
 
 const ROLE_LABELS: Record<AppRole, string> = {
-  owner: "Dueño (máster)",
+  owner: "Propietario (máster)",
   admin: "Administrador",
-  manager: "Gerente",
+  manager: "Encargado",
   cashier: "Cajero",
-  staff: "Personal",
+  staff: "Ayudante general",
 };
 
 const MODULE_LABELS: Record<string, string> = {
