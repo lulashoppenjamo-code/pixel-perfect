@@ -1183,7 +1183,7 @@ export function CashDrawerPanel({
                   openBox.isPending ||
                   sessionLoading
                 }
-                onClick={() => openBox.mutate()}
+                onClick={() => openBox.mutate(undefined as never)}
               >
                 {openBox.isPending
                   ? "Abriendo…"
