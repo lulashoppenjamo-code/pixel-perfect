@@ -1,298 +1,378 @@
 
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { Loader2, LockKeyhole, UserRound } from "lucide-react";
-import { toast } from "sonner";
+/**
+ * Edge Function: collaborator-pin-login
+ *
+ * Flujo:
+ * Tablet autorizada -> device_secret + user_id + PIN
+ * -> verify_collaborator_pin() -> usuario Auth real
+ * -> (si hace falta) normalizar email Auth
+ * -> generateLink(magiclink) -> token_hash
+ * -> cliente verifyOtp(magiclink) -> sesión real
+ *
+ * No crea JWT manualmente ni modifica ventas, inventario,
+ * cashier_id o permisos.
+ */
 
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-
-type CollaboratorPinLoginProps = {
-  userId: string;
-  fullName: string;
-  deviceSecret: string;
-  onSuccess?: () => void;
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-/** Traduce errores técnicos de la edge function a mensajes claros. */
-function mapPinLoginError(raw: string | undefined | null): string {
-  const msg = (raw ?? "").toLowerCase();
-
-  if (!msg) {
-    return "No se pudo crear la sesión.";
-  }
-
-  if (
-    msg.includes("invalid credentials") ||
-    msg.includes("pin") && msg.includes("incorrect")
-  ) {
-    return "PIN incorrecto o acceso no autorizado.";
-  }
-
-  if (msg.includes("pin not configured")) {
-    return "Este colaborador no tiene PIN configurado.";
-  }
-
-  if (msg.includes("temporarily locked") || msg.includes("locked")) {
-    return "PIN bloqueado temporalmente. Espera unos minutos.";
-  }
-
-  if (msg.includes("device") || msg.includes("secret")) {
-    return "Esta tablet no está autorizada.";
-  }
-
-  if (msg.includes("collaborator not found")) {
-    return "Colaborador no encontrado en Auth.";
-  }
-
-  if (
-    msg.includes("authentication is not configured") ||
-    msg.includes("no auth email") ||
-    msg.includes("has no auth email")
-  ) {
-    return "La cuenta del colaborador no tiene correo de Auth. Vuelve a crearla.";
-  }
-
-  if (
-    msg.includes("unable to create session") ||
-    msg.includes("generateLink") ||
-    msg.includes("token")
-  ) {
-    return "No se pudo generar el token de sesión. Revisa logs de la edge function.";
-  }
-
-  if (msg.includes("collaborator unavailable") || msg.includes("banned")) {
-    return "Colaborador no disponible.";
-  }
-
-  if (msg.includes("owner")) {
-    return "El owner debe entrar con el login de administrador.";
-  }
-
-  if (msg.includes("server misconfigured")) {
-    return "Servidor mal configurado (faltan variables de Supabase).";
-  }
-
-  // Mensaje original si no hay traducción conocida
-  return raw!.trim() || "No se pudo iniciar sesión.";
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "application/json",
+    },
+  });
 }
 
-export function CollaboratorPinLogin({
-  userId,
-  fullName,
-  deviceSecret,
-  onSuccess,
-}: CollaboratorPinLoginProps) {
-  const navigate = useNavigate();
+/** Emails @*.local suelen fallar en generateLink de Supabase Auth. */
+function needsEmailNormalization(email: string): boolean {
+  const e = email.trim().toLowerCase();
+  return (
+    e.endsWith(".local") ||
+    e.endsWith(".localhost") ||
+    e.includes("@auth.lulashop.local")
+  );
+}
 
-  const [pin, setPin] = useState("");
-  const [busy, setBusy] = useState(false);
+function normalizedCollaboratorEmail(userId: string): string {
+  // Dominio sintético pero con TLD válido para Auth (no se envía correo).
+  const id = userId.replace(/-/g, "");
+  return `collaborator.${id}@pin.lulashop.app`;
+}
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
+function extractHashedToken(linkData: unknown): string | null {
+  if (!linkData || typeof linkData !== "object") return null;
 
-    const cleanPin = pin.trim();
+  const root = linkData as Record<string, unknown>;
+  const props = (root.properties ?? null) as Record<
+    string,
+    unknown
+  > | null;
 
-    if (!/^\d{4}$/.test(cleanPin)) {
-      toast.error("El PIN debe tener exactamente 4 dígitos.");
-      return;
+  const candidates = [
+    props?.hashed_token,
+    root.hashed_token,
+    props?.email_otp,
+  ];
+
+  for (const c of candidates) {
+    if (typeof c === "string" && c.trim().length > 0) {
+      return c.trim();
+    }
+  }
+
+  // Último recurso: token en action_link
+  const actionLink =
+    typeof props?.action_link === "string"
+      ? props.action_link
+      : typeof root.action_link === "string"
+        ? root.action_link
+        : null;
+
+  if (actionLink) {
+    try {
+      const url = new URL(actionLink);
+      const token =
+        url.searchParams.get("token") ||
+        url.searchParams.get("token_hash");
+      if (token && token.trim()) return token.trim();
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return json({ error: "method not allowed" }, 405);
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceRoleKey = Deno.env.get(
+      "SUPABASE_SERVICE_ROLE_KEY",
+    );
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      console.error("Missing Supabase environment variables");
+      return json({ error: "server misconfigured" }, 500);
     }
 
+    let body: Record<string, unknown>;
+
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid json" }, 400);
+    }
+
+    const deviceSecret = String(
+      body.device_secret ?? "",
+    ).trim();
+
+    const userId = String(body.user_id ?? "").trim();
+    const pin = String(body.pin ?? "").trim();
+
     if (!deviceSecret) {
-      toast.error("Esta tablet todavía no está autorizada.");
-      return;
+      return json({ error: "device secret required" }, 400);
     }
 
     if (!userId) {
-      toast.error("No se encontró el colaborador.");
-      return;
+      return json({ error: "user id required" }, 400);
     }
 
-    setBusy(true);
+    if (!/^\d{4}$/.test(pin)) {
+      return json(
+        { error: "PIN must contain exactly 4 digits" },
+        400,
+      );
+    }
 
-    try {
-      // 1. Verificar dispositivo autorizado y PIN.
-      const { data, error } = await supabase.functions.invoke(
-        "collaborator-pin-login",
-        {
-          body: {
-            device_secret: deviceSecret,
-            user_id: userId,
-            pin: cleanPin,
+    const admin = createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    });
+
+    // 1. Verificar dispositivo autorizado y PIN.
+    const {
+      data: verifiedUserId,
+      error: verifyError,
+    } = await admin.rpc("verify_collaborator_pin", {
+      _device_secret: deviceSecret,
+      _user_id: userId,
+      _pin: pin,
+    });
+
+    if (verifyError) {
+      console.error(
+        "verify_collaborator_pin:",
+        verifyError.message,
+      );
+
+      const m = (verifyError.message || "").toLowerCase();
+      if (m.includes("locked")) {
+        return json({ error: "PIN temporarily locked" }, 401);
+      }
+      if (m.includes("not configured")) {
+        return json({ error: "PIN not configured" }, 401);
+      }
+      if (m.includes("owner")) {
+        return json(
+          { error: "owner must use administrator login" },
+          403,
+        );
+      }
+
+      return json({ error: "invalid credentials" }, 401);
+    }
+
+    if (!verifiedUserId || verifiedUserId !== userId) {
+      return json({ error: "invalid credentials" }, 401);
+    }
+
+    // 2. Obtener el usuario real de Supabase Auth.
+    const {
+      data: userData,
+      error: userError,
+    } = await admin.auth.admin.getUserById(userId);
+
+    if (userError || !userData?.user) {
+      console.error("getUserById:", userError?.message);
+      return json({ error: "collaborator not found" }, 401);
+    }
+
+    let user = userData.user;
+
+    // 3. Cuenta bloqueada
+    const bannedUntil = (
+      user as typeof user & {
+        banned_until?: string | null;
+      }
+    ).banned_until;
+
+    if (bannedUntil && bannedUntil !== "none") {
+      return json(
+        { error: "collaborator unavailable" },
+        403,
+      );
+    }
+
+    // 4. Asegurar email usable para generateLink
+    let email = (user.email ?? "").trim();
+
+    if (!email) {
+      const newEmail = normalizedCollaboratorEmail(userId);
+      const { data: updated, error: updateErr } =
+        await admin.auth.admin.updateUserById(userId, {
+          email: newEmail,
+          email_confirm: true,
+        });
+
+      if (updateErr || !updated?.user?.email) {
+        console.error(
+          "updateUserById (assign email):",
+          updateErr?.message,
+        );
+        return json(
+          {
+            error:
+              "collaborator authentication is not configured",
+            detail: updateErr?.message ?? "no email",
           },
-        },
+          500,
+        );
+      }
+
+      user = updated.user;
+      email = updated.user.email!;
+    } else if (needsEmailNormalization(email)) {
+      // Emails @*.local suelen romper generateLink
+      const newEmail = normalizedCollaboratorEmail(userId);
+      console.log(
+        "Normalizing collaborator auth email",
+        { from: email, to: newEmail, userId },
       );
 
-      // La edge function puede devolver error HTTP con body { error: "..." }
-      // o success con { ok, token_hash, type }.
-      const bodyError =
-        data &&
-        typeof data === "object" &&
-        "error" in data &&
-        typeof (data as { error?: unknown }).error === "string"
-          ? String((data as { error: string }).error)
-          : null;
-
-      if (error || bodyError) {
-        const detail =
-          bodyError ||
-          (error instanceof Error ? error.message : null) ||
-          (typeof error === "object" &&
-          error !== null &&
-          "message" in error
-            ? String((error as { message?: string }).message ?? "")
-            : null);
-
-        console.error("[COLLABORATOR PIN LOGIN] invoke failed", {
-          error,
-          data,
-          detail,
+      const { data: updated, error: updateErr } =
+        await admin.auth.admin.updateUserById(userId, {
+          email: newEmail,
+          email_confirm: true,
         });
 
-        throw new Error(mapPinLoginError(detail));
-      }
-
-      const tokenHash =
-        data && typeof data === "object"
-          ? (data as { token_hash?: string }).token_hash
-          : undefined;
-
-      const ok =
-        data && typeof data === "object"
-          ? (data as { ok?: boolean }).ok
-          : false;
-
-      const type =
-        data && typeof data === "object"
-          ? (data as { type?: string }).type
-          : undefined;
-
-      if (!ok || type !== "magiclink" || !tokenHash) {
-        console.error("[COLLABORATOR PIN LOGIN] respuesta incompleta", data);
-        throw new Error(
-          mapPinLoginError(
-            (data as { error?: string } | null)?.error ??
-              "unable to create session",
-          ),
+      if (updateErr || !updated?.user?.email) {
+        console.error(
+          "updateUserById (normalize email):",
+          updateErr?.message,
         );
+        // Seguimos intentando con el email original
+      } else {
+        user = updated.user;
+        email = updated.user.email!;
       }
-
-      // 2. Intercambiar el token por una sesión real de Supabase.
-      const { data: sessionData, error: otpError } =
-        await supabase.auth.verifyOtp({
-          token_hash: tokenHash,
-          type: "magiclink",
-        });
-
-      if (otpError || !sessionData.session) {
-        console.error("[COLLABORATOR PIN LOGIN] verifyOtp", otpError);
-        throw new Error(
-          otpError?.message
-            ? `No se pudo establecer la sesión: ${otpError.message}`
-            : "No se pudo establecer la sesión del colaborador.",
-        );
-      }
-
-      // 3. Confirmar que la sesión corresponde al colaborador.
-      if (sessionData.session.user.id !== userId) {
-        await supabase.auth.signOut();
-
-        throw new Error(
-          "La identidad autenticada no coincide con el colaborador.",
-        );
-      }
-
-      toast.success(`Bienvenido, ${fullName || "colaborador"}.`);
-
-      setPin("");
-      onSuccess?.();
-
-      await navigate({
-        to: "/ventas",
-        replace: true,
-      });
-    } catch (error) {
-      console.error("[COLLABORATOR PIN LOGIN]", error);
-
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No se pudo iniciar sesión.",
-      );
-    } finally {
-      setBusy(false);
     }
-  };
 
-  return (
-    <Card className="w-full max-w-sm">
-      <CardHeader className="text-center">
-        <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
-          <UserRound className="h-7 w-7 text-primary" />
-        </div>
+    // Confirmar email por si quedó sin confirmar
+    if (user.email_confirmed_at == null) {
+      const { error: confirmErr } =
+        await admin.auth.admin.updateUserById(userId, {
+          email_confirm: true,
+        });
+      if (confirmErr) {
+        console.error(
+          "email_confirm:",
+          confirmErr.message,
+        );
+      }
+    }
 
-        <CardTitle>{fullName}</CardTitle>
+    // 5. Generar magic link (sin enviar correo)
+    let linkData: unknown = null;
+    let linkErrorMessage: string | null = null;
 
-        <CardDescription>
-          Introduce tu PIN de 4 dígitos
-        </CardDescription>
-      </CardHeader>
+    {
+      const result = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+      });
 
-      <CardContent>
-        <form onSubmit={submit} className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="collaborator-pin">PIN</Label>
+      if (result.error) {
+        linkErrorMessage = result.error.message;
+        console.error("generateLink magiclink:", result.error.message);
+      } else {
+        linkData = result.data;
+      }
+    }
 
-            <Input
-              id="collaborator-pin"
-              type="password"
-              inputMode="numeric"
-              pattern="[0-9]{4}"
-              maxLength={4}
-              autoComplete="off"
-              autoFocus
-              value={pin}
-              disabled={busy}
-              onChange={(event) => {
-                const value = event.target.value
-                  .replace(/\D/g, "")
-                  .slice(0, 4);
+    // Reintento con redirectTo si el primero falló
+    if (!extractHashedToken(linkData)) {
+      const result = await admin.auth.admin.generateLink({
+        type: "magiclink",
+        email,
+        options: {
+          redirectTo: supabaseUrl,
+        },
+      });
 
-                setPin(value);
-              }}
-              className="h-14 text-center text-2xl tracking-[0.5em]"
-            />
-          </div>
+      if (result.error) {
+        linkErrorMessage =
+          result.error.message || linkErrorMessage;
+        console.error(
+          "generateLink magiclink+redirect:",
+          result.error.message,
+        );
+      } else {
+        linkData = result.data;
+      }
+    }
 
-          <Button
-            type="submit"
-            className="h-12 w-full"
-            disabled={busy || pin.length !== 4}
-          >
-            {busy ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Verificando…
-              </>
-            ) : (
-              <>
-                <LockKeyhole className="mr-2 h-4 w-4" />
-                Entrar
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
-  );
-}
+    const tokenHash = extractHashedToken(linkData);
+
+    if (!tokenHash) {
+      console.error("generateLink failed completely", {
+        email,
+        userId,
+        linkErrorMessage,
+        linkDataKeys:
+          linkData && typeof linkData === "object"
+            ? Object.keys(linkData as object)
+            : [],
+        properties:
+          linkData &&
+          typeof linkData === "object" &&
+          (linkData as { properties?: unknown }).properties
+            ? Object.keys(
+                (
+                  linkData as {
+                    properties: Record<string, unknown>;
+                  }
+                ).properties,
+              )
+            : [],
+      });
+
+      return json(
+        {
+          error: "unable to create session",
+          detail:
+            linkErrorMessage ??
+            "missing hashed_token from generateLink",
+        },
+        500,
+      );
+    }
+
+    // 6. Devolver el token
+    return json(
+      {
+        ok: true,
+        user_id: user.id,
+        token_hash: tokenHash,
+        type: "magiclink",
+      },
+      200,
+    );
+  } catch (error) {
+    console.error("collaborator-pin-login:", error);
+
+    return json(
+      { error: "internal server error" },
+      500,
+    );
+  }
+});
