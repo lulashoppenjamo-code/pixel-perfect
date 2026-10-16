@@ -231,21 +231,17 @@ export function POSPanel({
   const [lastSaleTotal, setLastSaleTotal] = useState(0);
   const [lastSaleFolio, setLastSaleFolio] = useState<string | number>("");
 
-  /*
+     /*
    * Flujo secuencial (solo productos → caja completa):
-   * - Teléfonos y tablets táctiles en cualquier orientación.
-   * - No depende solo del ancho: en landscape muchas tablets
-   *   superan 1280px y antes caían al layout de escritorio.
+   * - Menos de 1024px: flujo secuencial de productos y carrito.
+   * - 1024px o más: distribución de escritorio.
+   * - Se mantiene sincronizado al cambiar el tamaño u orientación.
    */
   const [sequential, setSequential] = useState(true);
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
-      const coarse =
-        window.matchMedia("(pointer: coarse)").matches ||
-        window.matchMedia("(hover: none)").matches;
-      const narrow = window.innerWidth < 1400;
-      setSequential(coarse || narrow);
+      setSequential(window.innerWidth < 1024);
     };
     update();
     window.addEventListener("resize", update);
