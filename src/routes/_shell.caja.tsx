@@ -191,7 +191,7 @@ function CajaPage() {
      MÓVIL — Pantalla de entrada estilo Zobaze
      ========================================================= */
   const mobileHome = (
-    <div className="mx-auto flex w-full max-w-lg flex-col gap-3 px-0.5 pt-1">
+    <div className="mx-auto flex w-full max-w-none flex-col gap-3 px-0.5 pt-1">
       {/* Tarjeta principal NUEVA VENTA — idéntica a referencia Zobaze */}
       <button
         type="button"
