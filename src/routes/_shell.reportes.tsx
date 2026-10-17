@@ -70,7 +70,7 @@ export const Route = createFileRoute("/_shell/reportes")({
   head: () => ({
     meta: [
       {
-        title: "Reportes — Lula OS",
+        title: "Informes — Lula OS",
       },
       {
         name: "description",
@@ -1065,7 +1065,7 @@ function ReportesPage() {
       <PageShell>
         <PageHeader
           icon={BarChart3}
-          title="Reportes"
+          title="Informes"
           description="Ventas, utilidad, costos históricos e inventario central."
         />
 
