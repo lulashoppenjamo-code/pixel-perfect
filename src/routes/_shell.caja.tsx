@@ -18,7 +18,7 @@
  * No se toca el motor del POS ni de caja.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { consumeOpenPosFlag } from "@/lib/globalBarcode";
 import {
   createFileRoute,
@@ -99,16 +99,23 @@ function CajaPage() {
       window.removeEventListener("lula-barcode-scan", onScan);
   }, []);
 
-  // Tablet (cualquier orientación) y teléfono: flujo secuencial con home
+  /**
+   * Compact: home NUEVA VENTA + UI estrecha.
+   * Mismo breakpoint 1024 que sequential en POSPanel.tsx (mantener alineados).
+   * Inicial true = hidratación SSR segura; ancho real solo en useEffect.
+   * Sin pointer/hover. No resetear mobileView ni estado de venta.
+   */
+  const SIDE_BY_SIDE_MIN = 1024;
   const [isCompact, setIsCompact] = useState(true);
+  const isCompactRef = useRef(true);
+
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
-      const coarse =
-        window.matchMedia("(pointer: coarse)").matches ||
-        window.matchMedia("(hover: none)").matches;
-      const narrow = window.innerWidth < 1400;
-      setIsCompact(coarse || narrow);
+      const next = window.innerWidth < SIDE_BY_SIDE_MIN;
+      if (isCompactRef.current === next) return;
+      isCompactRef.current = next;
+      setIsCompact(next);
     };
     update();
     window.addEventListener("resize", update);
