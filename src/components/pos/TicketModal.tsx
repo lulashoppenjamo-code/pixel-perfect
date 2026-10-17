@@ -865,31 +865,74 @@ export function TicketModal({
     );
   }
 
+  /* Dialog POS post-venta / recibo — más ancho y acciones tipo Zobaze */
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+        <DialogHeader className="shrink-0 space-y-1 border-b border-[#e0e0e0] px-4 py-3 text-left">
+          <DialogTitle className="text-base font-bold text-[#212121]">
             Ticket — Folio {ticket.folio}
           </DialogTitle>
+          <p className="text-sm font-semibold text-[#1a73e8]">
+            {money(ticket.total)} · {payLabel}
+          </p>
         </DialogHeader>
 
-        {ticketBody}
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+          {ticketBody}
+        </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        {/* Acciones rápidas estilo Zobaze */}
+        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-[#e0e0e0] bg-[#f8f9fa] px-3 py-2">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[#1a73e8] hover:bg-[#e8f0fe]"
+            title="Compartir"
+          >
+            <Share2 className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={handleWhatsApp}
+            className="flex h-11 w-11 items-center justify-center rounded-full bg-[#25D366] text-white"
+            title="WhatsApp"
+          >
+            <span className="text-[10px] font-bold">WA</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleDownload}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[#1a73e8] hover:bg-[#e8f0fe]"
+            title="Descargar"
+          >
+            <Download className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={handlePrint}
+            className="flex h-11 w-11 items-center justify-center rounded-full text-[#1a73e8] hover:bg-[#e8f0fe]"
+            title="Imprimir"
+          >
+            <Printer className="h-5 w-5" />
+          </button>
+        </div>
+
+        <DialogFooter className="shrink-0 gap-2 border-t border-[#e0e0e0] bg-white px-3 py-3 sm:gap-2">
           <Button
             variant="outline"
+            className="min-h-11 flex-1"
             onClick={() => onOpenChange(false)}
           >
             Cerrar
           </Button>
-
-          <Button variant="outline" onClick={handleShare}>
-            <Share2 className="mr-1.5 h-4 w-4" />
-            Compartir
+          <Button
+            className="min-h-11 flex-1 bg-[#1a73e8] hover:bg-[#1557b0]"
+            onClick={handlePrint}
+          >
+            <Printer className="mr-1.5 h-4 w-4" />
+            Imprimir
           </Button>
-
-          <Button onClick={handlePrint}>Imprimir</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
