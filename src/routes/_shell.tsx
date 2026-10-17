@@ -591,7 +591,7 @@ function ShellLayout() {
         <main
           className={
             location.pathname.startsWith("/caja")
-              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:overflow-y-auto md:p-3 md:pb-3 lg:p-4 lg:pb-4"
+              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:overflow-hidden md:p-0 md:pb-0"
               : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:p-4 md:p-4 md:pb-4 lg:p-6 lg:pb-6"
           }
         >
