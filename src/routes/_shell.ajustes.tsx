@@ -1234,14 +1234,14 @@ return (
 <PageHeader  
 icon={Settings}  
 title="Ajustes"  
-description="Sucursales, usuarios, roles y configuración general del negocio."  
+description="Sucursales, personal, impresora y permisos."  
 />
 
 <Tabs  
     defaultValue="sucursales"  
     className="space-y-4"  
   >  
-    <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">  
+    <TabsList className="flex h-auto w-full flex-wrap justify-start gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm [&>button]:min-h-10 [&>button]:touch-manipulation">  
       <TabsTrigger  
         value="sucursales"  
         className="min-h-10 rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"  
