@@ -432,6 +432,9 @@ export function POSPanel({
     queryKey: ["pos-products-shared"],
 
     enabled: !!branchId,
+    /** Catálogo estable unos segundos; el stock se refresca al cobrar (invalidate). */
+    staleTime: 20_000,
+    refetchOnWindowFocus: true,
 
     queryFn: async () => {
       const [
@@ -584,6 +587,7 @@ export function POSPanel({
     data: allVariants = [],
   } = useQuery({
     queryKey: ["pos-all-variants"],
+    staleTime: 30_000,
 
     queryFn: async () => {
       const { data, error } =
@@ -625,6 +629,7 @@ export function POSPanel({
     data: categories = [],
   } = useQuery({
     queryKey: ["pos-categories"],
+    staleTime: 60_000,
 
     queryFn: async () => {
       const { data, error } =
