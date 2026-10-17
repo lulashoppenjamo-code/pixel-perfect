@@ -151,6 +151,7 @@ function PedidosPage() {
   } = useQuery({
     queryKey: ["online-orders", branchId],
     enabled: !!branchId,
+    staleTime: 10_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("online_orders")
@@ -677,7 +678,7 @@ function PedidosPage() {
       <PageHeader
         icon={Store}
         title="Pedidos online"
-        description="Pedidos conectados al catálogo e inventario central de Lula OS."
+        description="Pedidos online con reserva de stock compartido."
         action={
           <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Button
