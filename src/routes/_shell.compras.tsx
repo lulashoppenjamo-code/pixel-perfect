@@ -179,6 +179,7 @@ function ComprasPage() {
 
   const { data: suppliers = [] } = useQuery({
     queryKey: ["suppliers"],
+    staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("suppliers")
@@ -225,6 +226,7 @@ function ComprasPage() {
   const { data: purchases = [] } = useQuery({
     queryKey: ["purchases", branchId],
     enabled: !!branchId,
+    staleTime: 15_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("purchases")
@@ -657,7 +659,7 @@ function ComprasPage() {
       <PageHeader
         icon={Truck}
         title="Compras"
-        description="Órdenes de compra y proveedores. Las recepciones entran al inventario central compartido."
+        description="Órdenes, proveedores y recepción al inventario compartido."
       />
 
       <Tabs
