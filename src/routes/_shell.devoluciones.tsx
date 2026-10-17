@@ -170,6 +170,7 @@ function DevolucionesPage() {
     ],
 
     enabled: !!branchId,
+    staleTime: 15_000,
 
     queryFn: async () => {
       const { data, error } = await supabase
@@ -542,7 +543,7 @@ function DevolucionesPage() {
       <PageHeader
         icon={RotateCcw}
         title="Devoluciones"
-        description="Busca una venta por folio y devuelve productos al inventario central compartido."
+        description="Busca por folio y devuelve artículos al inventario compartido."
       />
 
       {!isManager && (
@@ -593,7 +594,7 @@ function DevolucionesPage() {
                     event.target.value,
                   )
                 }
-                placeholder="Buscar folio..."
+                placeholder="Buscar folio…"
                 className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
               />
             </div>
@@ -668,7 +669,7 @@ function DevolucionesPage() {
                   onClick={() => openRefund(sale.id)}
                 >
                   <RotateCcw className="mr-1.5 size-3.5" />
-                  {canRefund ? "Devolver" : "Sin permiso"}
+                  {canRefund ? "DEVOLVER" : "Sin permiso"}
                 </Button>
               </div>
             ))}
