@@ -3361,7 +3361,8 @@ export function POSPanel({
                 if (sequential) {
                   setMobileStep("pay");
                 } else {
-                  checkout.mutate(undefined as never);
+                  // Pasar método explícito: evita carrera con setMethod del state
+                  checkout.mutate(method);
                 }
               }}
               className="flex h-16 min-h-16 min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#34a853] text-[20px] font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-50"
@@ -4025,7 +4026,7 @@ export function POSPanel({
             <button
               type="button"
               disabled={!canSell || checkout.isPending}
-              onClick={() => checkout.mutate(undefined as never)}
+              onClick={() => checkout.mutate("cash")}
               className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
