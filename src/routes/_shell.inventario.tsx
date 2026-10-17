@@ -207,6 +207,7 @@ function InventarioPage() {
     error: inventoryError,
   } = useQuery({
     queryKey: ["shared-inventory"],
+    staleTime: 15_000,
     queryFn: getSharedInventory,
   });
 
