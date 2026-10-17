@@ -339,6 +339,7 @@ function ReposicionPage() {
 
     enabled:
       Boolean(branchId),
+    staleTime: 15_000,
 
     queryFn: async () => {
       if (!branchId) {
@@ -1004,7 +1005,7 @@ function ReposicionPage() {
     <PageShell>
       <PageHeader
         title="Reposición"
-        description="Lista de productos que hacen falta comprar. No modifica el inventario real."
+        description="Solicitudes de reposición (no altera el stock real)."
         icon={ShoppingCart}
       />
 
