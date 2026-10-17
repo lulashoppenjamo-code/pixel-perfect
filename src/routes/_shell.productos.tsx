@@ -601,6 +601,7 @@ function ProductosPage() {
     isLoading: productsLoading,
   } = useQuery<ProductRow[]>({
     queryKey: ["products"],
+    staleTime: 20_000,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
@@ -1218,8 +1219,8 @@ function ProductosPage() {
     <PageShell>
       <PageHeader
         icon={Package}
-        title="La gestión del inventario"
-        description="Artículos, categorías, precios y existencias."
+        title="Artículos"
+        description="Catálogo, precios y existencias (inventario compartido)."
       />
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
@@ -1299,7 +1300,7 @@ function ProductosPage() {
 
         <TabsContent value="lista" className="mt-3 space-y-3 sm:mt-4 sm:space-y-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="relative w-full sm:max-w-sm">
+            <div className="relative w-full sm:max-w-md md:max-w-lg">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
@@ -1389,7 +1390,7 @@ function ProductosPage() {
           )}
 
           {!loading && filtered.length > 0 && (
-            <div className="space-y-2 pb-20">
+            <div className="grid grid-cols-1 gap-2 pb-20 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((p) => {
                 const stock = stockMap.get(p.id);
                 const available = Number(stock?.availableStock ?? 0);
