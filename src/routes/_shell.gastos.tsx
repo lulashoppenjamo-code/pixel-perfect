@@ -197,6 +197,7 @@ function GastosPage() {
     useQuery<ExpenseRow[]>({
       queryKey: ["expenses", branchId],
       enabled: !!branchId,
+      staleTime: 15_000,
       queryFn: async () => {
         const { data, error } = await supabase
           .from("expenses")
@@ -584,7 +585,7 @@ function GastosPage() {
       <PageHeader
         icon={Receipt}
         title="Gastos"
-        description="Control de egresos por sucursal, integrado con caja y reportes."
+        description="Registra egresos por sucursal (efectivo requiere caja abierta)."
         action={
           editingId ? (
             <Button
@@ -654,7 +655,7 @@ function GastosPage() {
             <CardTitle className="text-base font-bold text-[#212121]">
               {editingId
                 ? "Editar gasto"
-                : "Nuevo gasto"}
+                : "Agregar nuevo gasto"}
             </CardTitle>
           </CardHeader>
 
