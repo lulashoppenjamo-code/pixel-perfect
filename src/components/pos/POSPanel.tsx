@@ -231,21 +231,38 @@ export function POSPanel({
   const [lastSaleTotal, setLastSaleTotal] = useState(0);
   const [lastSaleFolio, setLastSaleFolio] = useState<string | number>("");
 
-  /*
-   * Flujo secuencial (solo productos → caja completa):
-   * - Teléfonos y tablets táctiles en cualquier orientación.
-   * - No depende solo del ancho: en landscape muchas tablets
-   *   superan 1280px y antes caían al layout de escritorio.
+  /**
+   * sequential: pasos shop/cart/pay/cash/mixed/success.
+   * Mismo breakpoint 1024 que isCompact en _shell.caja.tsx.
+   * Inicial true (SSR). Sin pointer/hover.
+   * No modifica cart, method, importes ni dispara checkout.
    */
+  const SIDE_BY_SIDE_MIN = 1024;
   const [sequential, setSequential] = useState(true);
+  const sequentialRef = useRef(true);
+  const cartLengthRef = useRef(0);
+  const checkoutPendingRef = useRef(false);
+  cartLengthRef.current = cart.length;
+
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
-      const coarse =
-        window.matchMedia("(pointer: coarse)").matches ||
-        window.matchMedia("(hover: none)").matches;
-      const narrow = window.innerWidth < 1400;
-      setSequential(coarse || narrow);
+      const next = window.innerWidth < SIDE_BY_SIDE_MIN;
+      const prev = sequentialRef.current;
+      if (prev === next) return;
+      sequentialRef.current = next;
+      setSequential(next);
+
+      // No mover de paso mientras el cobro está en vuelo
+      if (checkoutPendingRef.current) return;
+
+      if (prev && !next) {
+        // sequential → side-by-side: solo cerrar pantalla de éxito
+        setMobileStep((step) => (step === "success" ? "shop" : step));
+      } else if (!prev && next) {
+        // side-by-side → sequential: con ítems → cart; vacío → shop
+        setMobileStep(cartLengthRef.current > 0 ? "cart" : "shop");
+      }
     };
     update();
     window.addEventListener("resize", update);
@@ -2250,6 +2267,8 @@ export function POSPanel({
         );
       },
   });
+
+  checkoutPendingRef.current = checkout.isPending;
 
   /*
    * =========================================================
