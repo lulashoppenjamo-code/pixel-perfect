@@ -2172,10 +2172,19 @@ export function POSPanel({
 
         setLastSaleTotal(total);
         setLastSaleFolio(sale.folio ?? "");
-        setMobileStep("success");
-        setTicketOpen(
-          false,
-        );
+        /*
+         * Post-venta:
+         * - sequential (teléfono): pantalla éxito + "OBTENER RECIBO"
+         * - side-by-side (tablet/desktop): el overlay success está oculto;
+         *   abrir ticket modal para no dejar la venta sin feedback visual.
+         */
+        if (sequentialRef.current) {
+          setMobileStep("success");
+          setTicketOpen(false);
+        } else {
+          setMobileStep("shop");
+          setTicketOpen(true);
+        }
 
         setCart([]);
 
