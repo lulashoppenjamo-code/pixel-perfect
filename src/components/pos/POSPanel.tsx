@@ -242,6 +242,8 @@ export function POSPanel({
   const sequentialRef = useRef(true);
   const cartLengthRef = useRef(0);
   const checkoutPendingRef = useRef(false);
+  /** Bloqueo síncrono anti doble-clic antes de que isPending sea true */
+  const submittingRef = useRef(false);
   cartLengthRef.current = cart.length;
 
   useEffect(() => {
@@ -2280,7 +2282,15 @@ export function POSPanel({
             "Error al cobrar",
         );
       },
-  });
+  
+    onMutate: () => {
+      submittingRef.current = true;
+    },
+    onSettled: () => {
+      submittingRef.current = false;
+      checkoutPendingRef.current = false;
+    },
+});
 
   checkoutPendingRef.current = checkout.isPending;
 
@@ -3375,6 +3385,7 @@ export function POSPanel({
                 if (sequential) {
                   setMobileStep("pay");
                 } else {
+                  if (submittingRef.current || checkout.isPending) return;
                   // Pasar método explícito: evita carrera con setMethod del state
                   checkout.mutate(method);
                 }
@@ -3906,6 +3917,7 @@ export function POSPanel({
                       setMixedCard("");
                       setMobileStep("mixed");
                     } else {
+                      if (submittingRef.current || checkout.isPending) return;
                       checkout.mutate(item.id);
                     }
                   }}
@@ -4040,7 +4052,10 @@ export function POSPanel({
             <button
               type="button"
               disabled={!canSell || checkout.isPending}
-              onClick={() => checkout.mutate("cash")}
+              onClick={() => {
+              if (submittingRef.current || checkout.isPending) return;
+              checkout.mutate("cash");
+            }}
               className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
@@ -4174,7 +4189,10 @@ export function POSPanel({
                   (Number(mixedCard) || 0) <
                   total - 0.01
               }
-              onClick={() => checkout.mutate("mixed")}
+              onClick={() => {
+                if (submittingRef.current || checkout.isPending) return;
+                checkout.mutate("mixed");
+              }}
               className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
             >
               {checkout.isPending
