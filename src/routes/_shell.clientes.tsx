@@ -176,6 +176,7 @@ function ClientesPage() {
     isError: customersError,
   } = useQuery<CustomerRow[]>({
     queryKey: ["customers"],
+    staleTime: 30_000,
 
     queryFn: async () => {
       const { data, error } = await supabase
@@ -647,7 +648,7 @@ function ClientesPage() {
       <PageHeader
         icon={Users}
         title="Clientes"
-        description="Contactos, historial de compras, crédito y abonos."
+        description="Directorio, crédito y abonos."
       />
 
       {hasDataError && (
