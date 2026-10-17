@@ -227,6 +227,7 @@ function CeoPage() {
 
     enabled:
       !!branchId,
+    staleTime: 30_000,
 
     queryFn:
       async () => {
@@ -1411,7 +1412,7 @@ function CeoPage() {
       <PageHeader
         icon={Bot}
         title="CEO IA"
-        description={`Centro de inteligencia de LULA OS — ${branchName}`}
+        description={`Ventas, stock y utilidad — ${branchName}`}
         className="mb-4"
       />
 
