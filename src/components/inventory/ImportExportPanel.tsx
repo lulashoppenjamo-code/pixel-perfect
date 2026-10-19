@@ -45,7 +45,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 
 import {
-  parseProductFile,
+  analyzeProductFile,
   downloadTemplate,
   downloadWorkbook,
   downloadCsv,
@@ -54,6 +54,8 @@ import {
   type ProductImportRow,
   type ImportAction,
 } from "@/lib/excel";
+
+import { buildImportPayload } from "@/lib/productImport";
 
 const BATCH_SIZE = 500;
 
@@ -122,6 +124,8 @@ export function ImportExportPanel() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [rows, setRows] = useState<ProductImportRow[]>([]);
+  const [detected, setDetected] = useState<string[]>([]);
+  const [unsupported, setUnsupported] = useState<string[]>([]);
   const [action, setAction] = useState<ImportAction>("update_all");
   const [parsing, setParsing] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
@@ -135,12 +139,12 @@ export function ImportExportPanel() {
     profile?.branch_id ??
     (isAdmin || isManager ? branches[0]?.id ?? null : null);
 
-  const { data: existingProducts = [] } = useQuery({
+  const { data: existingProducts = [], isPending: loadingExisting, isError: existingError } = useQuery({
     queryKey: ["import-existing-products-shared"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("products")
-        .select("id, name, sku, barcode");
+        .select("id, name, sku, barcode, has_variants");
 
       if (error) throw error;
 
@@ -149,6 +153,7 @@ export function ImportExportPanel() {
         name: string;
         sku: string | null;
         barcode: string | null;
+        has_variants: boolean;
       }[];
     },
   });
@@ -157,13 +162,18 @@ export function ImportExportPanel() {
     setParsing(true);
 
     try {
-      const parsed = await parseProductFile(file, existingProducts);
-      setRows(parsed);
+      const parsed = await analyzeProductFile(file, existingProducts);
+      setRows(parsed.rows);
+      setDetected(parsed.detected);
+      setUnsupported(parsed.unsupported);
       setLastFailures([]);
       setProgress({ current: 0, total: 0 });
       setPhase("");
-      toast.success(`${parsed.length} filas analizadas`);
+      toast.success(`${parsed.rows.length} filas analizadas`);
     } catch (error) {
+      setRows([]);
+      setDetected([]);
+      setUnsupported([]);
       toast.error(
         error instanceof Error ? error.message : "Error al leer archivo",
       );
@@ -205,17 +215,17 @@ export function ImportExportPanel() {
         throw new Error("No hay filas válidas para importar");
       }
 
-      // Sanear TODOS los registros antes del primer envío.
-      // Así, un carácter inválido en una fila posterior no provoca
-      // que se descubra el problema después de importar lotes anteriores.
-      const sanitizedRows = workable.map((row) => ({
-        ...row,
-        nombre: sanitizeJsonText(row.nombre),
-        sku: sanitizeJsonText(row.sku),
-        codigo_barras: sanitizeJsonText(row.codigo_barras),
-        categoria: sanitizeJsonText(row.categoria),
-        descripcion: sanitizeJsonText(row.descripcion),
-      }));
+      // The existing deployed RPC ignores actions and zeros omitted fields.
+      // An empty preflight does not mutate data; require the reviewed import contract.
+      const { data: contract, error: contractError } = await supabase.rpc("bulk_import_products", { _items: [] });
+      if (contractError || !contract || typeof contract !== "object" || Array.isArray(contract) || contract["import_contract"] !== "selective-v1") {
+        throw new Error("Importación bloqueada: falta habilitar el contrato seguro selective-v1 y shared_inventory. No se enviaron productos ni se escribió stock. Requiere autorización de la actualización SQL pendiente.");
+      }
+      const sanitizedRows = workable.map((row) => {
+        const payload = buildImportPayload(row, action);
+        if (!payload) throw new Error(`Fila ${row.row}: acción inválida`);
+        return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, typeof value === "string" ? sanitizeJsonText(value) : value]));
+      });
 
       const batches = chunkArray(sanitizedRows, BATCH_SIZE);
 
@@ -239,48 +249,10 @@ export function ImportExportPanel() {
           `Importando lote ${i + 1}/${batches.length} (${batch.length} productos)...`,
         );
 
-        const payload = batch.map((row) => {
-          // Se conserva el comportamiento original de cada acción.
-          const includePrice =
-            action === "update_all" ||
-            action === "update_price_cost" ||
-            row.status === "valid";
-
-          const includeStock =
-            action === "update_all" ||
-            action === "update_stock" ||
-            row.status === "valid";
-
-          const includeData =
-            action === "update_all" ||
-            action === "update_data" ||
-            row.status === "valid";
-
-          return {
-            nombre: includeData ? row.nombre : row.nombre,
-            sku: includeData ? row.sku : row.sku,
-            codigo_barras: includeData
-              ? row.codigo_barras
-              : row.codigo_barras,
-            categoria: includeData ? row.categoria : row.categoria,
-            precio_venta: includePrice
-              ? row.precio_venta
-              : row.precio_venta,
-            costo: includePrice ? row.costo : row.costo,
-            stock: includeStock ? row.stock : row.stock,
-            minimo: row.minimo,
-            maximo: row.maximo,
-            descripcion: row.descripcion,
-          };
+        const { data, error } = await supabase.rpc("bulk_import_products", {
+          _items: batch,
+          _branch_id: branchId,
         });
-
-        const { data, error } = await (supabase as any).rpc(
-          "bulk_import_products",
-          {
-            _items: payload,
-            _branch_id: branchId,
-          },
-        );
 
         if (error) {
           if (
@@ -292,6 +264,8 @@ export function ImportExportPanel() {
             );
           }
 
+          failures.push(...batches.slice(i).flat().map((row) => ({ row: Number(row["row"]), nombre: String(row["nombre"] ?? ""), message: `Lote no confirmado: ${error.message}` })));
+          setLastFailures(failures);
           throw new Error(
             `Error al importar el lote ${i + 1}/${batches.length}: ${error.message ?? "Error desconocido"}`,
           );
@@ -301,7 +275,7 @@ export function ImportExportPanel() {
           created?: number;
           updated?: number;
           stock_set?: number;
-          errors?: { nombre?: string; error?: string }[];
+          errors?: { row?: number; nombre?: string; error?: string }[];
         };
 
         created += Number(result.created ?? 0);
@@ -310,7 +284,7 @@ export function ImportExportPanel() {
 
         for (const err of result.errors ?? []) {
           failures.push({
-            row: 0,
+            row: Number(err.row ?? 0),
             nombre: err.nombre ?? "?",
             message: err.error ?? "error",
           });
@@ -334,9 +308,10 @@ export function ImportExportPanel() {
     },
 
     onSuccess: (result) => {
-      toast.success(
-        `Listo: ${result.created} nuevos, ${result.updated} actualizados, stock en ${result.stockSet}` +
-          (result.failures ? ` · ${result.failures} con error` : ""),
+      const notify = result.failures || stats.error ? toast.warning : toast.success;
+      notify(
+        `Resultado: ${result.created} nuevos, ${result.updated} actualizados, stock en ${result.stockSet}` +
+          (result.failures || stats.error ? ` · ${result.failures + stats.error} con error; no fue una importación completa` : ""),
       );
 
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
@@ -351,6 +326,11 @@ export function ImportExportPanel() {
     onError: (error: Error) => {
       setPhase("");
       toast.error(error.message);
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["categories"] });
+      void qc.invalidateQueries({ queryKey: ["import-existing-products-shared"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
     },
   });
 
@@ -398,11 +378,11 @@ export function ImportExportPanel() {
             type="button"
             variant="outline"
             className="min-h-11 rounded-xl"
-            disabled={parsing}
+            disabled={parsing || loadingExisting || existingError || doImport.isPending}
             onClick={() => fileRef.current?.click()}
           >
             <Upload className="mr-2 h-4 w-4" />
-            {parsing ? "Leyendo…" : "Elegir Excel"}
+            {parsing ? "Leyendo…" : "Elegir Excel / CSV"}
           </Button>
 
           <input
@@ -418,6 +398,7 @@ export function ImportExportPanel() {
           />
         </div>
 
+        {existingError && <p className="text-sm text-destructive">No se pudo consultar el catálogo. Vuelve a cargar la página antes de elegir un archivo.</p>}
         {rows.length > 0 && (
           <>
             <div className="flex flex-wrap gap-2">
@@ -436,6 +417,18 @@ export function ImportExportPanel() {
                   Errores {stats.error}
                 </Badge>
               )}
+            </div>
+
+            <div className="space-y-2 text-sm">
+              <p><strong>Campos detectados:</strong> {detected.join(", ") || "Ninguno"}</p>
+              {unsupported.length > 0 && <p className="text-destructive"><strong>No se importarán:</strong> {unsupported.join(", ")}. No existe equivalencia en este flujo; las filas con variantes se rechazan.</p>}
+              <p className="text-muted-foreground">Stock = existencia final. Campos vacíos se conservan en productos existentes. Unidad e imagen requieren el contrato SQL pendiente.</p>
+              <div className="max-h-64 overflow-auto border border-border rounded-lg">
+                <table className="w-full text-left text-xs"><thead><tr><th className="p-2">Fila</th><th className="p-2">Producto</th><th className="p-2">Estado / error</th></tr></thead><tbody>
+                  {rows.slice(0, 100).map((row) => <tr key={row.row} className="border-t border-border"><td className="p-2">{row.row}</td><td className="p-2 break-words">{row.nombre || row.sku || row.codigo_barras}</td><td className="p-2 break-words">{row.error ?? (row.status === "existing" ? "Existente" : "Nuevo")}</td></tr>)}
+                </tbody></table>
+              </div>
+              {rows.length > 100 && <p>Vista previa: primeras 100 de {rows.length} filas. El reporte contiene todas las filas con error.</p>}
             </div>
 
             <div className="space-y-1.5">
@@ -488,7 +481,7 @@ export function ImportExportPanel() {
             <Button
               type="button"
               className="min-h-12 w-full rounded-xl bg-[#34a853] text-[15px] font-bold text-white hover:bg-[#2d8f47]"
-              disabled={doImport.isPending || !branchId}
+              disabled={doImport.isPending || !branchId || stats.valid + (action === "skip_existing" ? 0 : stats.existing) === 0}
               onClick={() => doImport.mutate()}
             >
               {doImport.isPending
