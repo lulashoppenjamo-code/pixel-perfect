@@ -30,7 +30,7 @@ export function ProductImageUploader({
   const [uploading, setUploading] = useState(false);
 
   async function handleFile(file?: File) {
-    if (!file || uploading) return;
+    if (!file || uploading || disabled) return;
 
     const extension = MIME_EXTENSIONS[file.type];
 
@@ -53,11 +53,17 @@ export function ProductImageUploader({
       if (sessionError) throw sessionError;
 
       if (!sessionData.session) {
-        throw new Error("Inicia sesión nuevamente para subir imágenes.");
+        throw new Error(
+          "Inicia sesión nuevamente para subir imágenes.",
+        );
       }
 
-      // La política más reciente del repositorio usa el ID del
-      // producto como primera carpeta del objeto.
+      if (!productId.trim()) {
+        throw new Error("Guarda primero el producto.");
+      }
+
+      // La carpeta debe coincidir con el ID del producto,
+      // según la política de Storage definida en el repositorio.
       const path = `${productId}/${crypto.randomUUID()}.${extension}`;
 
       const { error: uploadError } = await supabase.storage
@@ -76,8 +82,8 @@ export function ProductImageUploader({
           message.includes("bucket does not exist")
         ) {
           throw new Error(
-            "No existe el bucket product-images en este proyecto " +
-            "de Supabase. Debe crearse en Storage antes de subir fotos."
+            "No existe el bucket product-images en Supabase. " +
+              "Hay que comprobar su configuración.",
           );
         }
 
@@ -85,12 +91,12 @@ export function ProductImageUploader({
           message.includes("row-level security") ||
           message.includes("violates row-level security") ||
           message.includes("unauthorized") ||
-          message.includes("not allowed")
+          message.includes("not allowed") ||
+          message.includes("permission denied")
         ) {
           throw new Error(
             "Supabase rechazó la carga por permisos de Storage. " +
-            "Hay que verificar las políticas existentes y el permiso " +
-            "productos.create o productos.edit."
+              "Hay que revisar las políticas y tus permisos de productos.",
           );
         }
 
@@ -107,21 +113,18 @@ export function ProductImageUploader({
         throw new Error("Supabase no devolvió una URL válida.");
       }
 
-      // Solo actualiza image_url del producto existente.
-      const { error: saveError } = await supabase
-        .from("products")
-        .update({ image_url: imageUrl })
-        .eq("id", productId);
-
-      if (saveError) throw saveError;
-
+      // El formulario padre conserva la URL y la guarda
+      // al pulsar Guardar. No modificar products aquí.
       onUploaded(imageUrl);
-      toast.success("Imagen subida y guardada correctamente.");
+
+      toast.success(
+        "Imagen cargada. Pulsa Guardar para conservarla en el producto.",
+      );
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "No se pudo subir la imagen."
+          : "No se pudo subir la imagen.",
       );
     } finally {
       setUploading(false);
@@ -157,7 +160,10 @@ export function ProductImageUploader({
         ) : (
           <ImagePlus className="mr-2 h-4 w-4" />
         )}
-        {uploading ? "Subiendo imagen..." : "Elegir foto del dispositivo"}
+
+        {uploading
+          ? "Subiendo imagen..."
+          : "Elegir foto del dispositivo"}
       </Button>
 
       <p className="text-xs text-muted-foreground">
