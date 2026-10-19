@@ -47,6 +47,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useBranch } from "@/lib/branch";
 import { useAuth } from "@/lib/auth";
 import { money } from "@/lib/format";
+import { ProductImage } from "@/components/ProductImage";
 import { getSharedInventory } from "@/lib/sharedInventory";
 import {
   createParkedSale,
@@ -2797,22 +2798,7 @@ export function POSPanel({
                           +{cartQty}
                         </span>
                       )}
-                      {product.image_url ? (
-                        <img
-                          src={product.image_url}
-                          alt=""
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      ) : product.emoji ? (
-                        <span className="text-3xl sm:text-4xl">
-                          {product.emoji}
-                        </span>
-                      ) : (
-                        <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-2xl font-bold text-[#1a73e8]">
-                          {initial}
-                        </span>
-                      )}
+                      <ProductImage src={product.image_url} emoji={product.emoji} name={product.name} />
                     </div>
 
                     <div className="flex flex-1 flex-col px-2 pb-2 pt-1.5">

@@ -67,10 +67,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
+import { ProductImage } from "@/components/ProductImage";
+import { validImageUrl } from "@/lib/productImport";
 
 export const Route = createFileRoute("/_shell/productos")({
   head: () => ({
-    meta: [{ title: "Productos — Lula OS" }],
+    meta: [
+      { title: "Productos — Lula Shop OS" },
+      { name: "description", content: "Catálogo de productos, imágenes, precios y existencias de Lula Shop OS." },
+      { property: "og:title", content: "Productos — Lula Shop OS" },
+      { property: "og:description", content: "Catálogo de productos, imágenes, precios y existencias de Lula Shop OS." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
   }),
   component: () => (
     <RequireNavAccess navKey="productos">
@@ -793,6 +802,9 @@ function ProductosPage() {
         return;
       }
 
+      if (form.image_url.trim() && !validImageUrl(form.image_url.trim())) {
+        throw new Error("URL de imagen inválida. Usa una dirección completa http/https.");
+      }
       const payload = {
         sku: form.sku.trim() || null,
         barcode: form.barcode.trim() || null,
@@ -828,6 +840,7 @@ function ProductosPage() {
 
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
       void qc.invalidateQueries({ queryKey: ["inv-products"] });
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({
@@ -977,6 +990,9 @@ function ProductosPage() {
         return;
       }
 
+      if (variantForm.image_url.trim() && !validImageUrl(variantForm.image_url.trim())) {
+        throw new Error("URL de imagen de variante inválida. Usa http/https.");
+      }
       const payload = {
         product_id: form.id,
         name,
@@ -1447,18 +1463,7 @@ function ProductosPage() {
                     <div className="flex gap-3">
                       {/* Imagen */}
                       <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] sm:h-[72px] sm:w-[72px]">
-                        {p.image_url ? (
-                          <img
-                            src={p.image_url}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <span className="text-2xl">
-                            {p.emoji ?? "📦"}
-                          </span>
-                        )}
+                        <ProductImage src={p.image_url} emoji={p.emoji} name={p.name} />
                       </div>
 
                       {/* Contenido principal */}
@@ -1653,102 +1658,22 @@ function ProductosPage() {
 
                 <div className="flex items-center gap-3">
                   <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] text-2xl">
-                    {form.image_url ? (
-                      <img
-                        src={form.image_url}
-                        alt=""
-                        className="h-full w-full object-cover"
-                      />
-                    ) : (
-                      <span>{form.emoji || "📦"}</span>
-                    )}
+                    <ProductImage src={form.image_url} emoji={form.emoji} name={form.name} />
                   </div>
 
                   <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="product-image-url">URL de imagen</Label>
                     <Input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className="h-11 cursor-pointer rounded-xl border-[#e0e0e0] text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-[#e8f0fe] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#1a73e8]"
-                      disabled={
-                        priceOnly ||
-                        !(canCreateProduct || canEditProduct) ||
-                        saveProduct.isPending
-                      }
-                      onChange={async (event) => {
-                        const file = event.target.files?.[0];
-                        if (!file) return;
-
-                        if (
-                          priceOnly ||
-                          !(canCreateProduct || canEditProduct)
-                        ) {
-                          toast.error(
-                            "No tienes permiso para cambiar imágenes.",
-                          );
-                          event.target.value = "";
-                          return;
-                        }
-
-                        if (file.size > 5 * 1024 * 1024) {
-                          toast.error("La imagen no debe superar 5 MB");
-                          event.target.value = "";
-                          return;
-                        }
-
-                        try {
-                          const ext =
-                            file.name.split(".").pop()?.toLowerCase() ||
-                            "jpg";
-
-                          const {
-                            data: { user: upUser },
-                          } = await supabase.auth.getUser();
-
-                          if (!upUser?.id) {
-                            throw new Error(
-                              "Sesión requerida para subir imagen",
-                            );
-                          }
-
-                          if (!form.id) {
-                            throw new Error(
-                              "Primero guarda el producto y después agrega la imagen.",
-                            );
-                          }
-
-                          const path = `${form.id}/${crypto.randomUUID()}.${ext}`;
-
-                          const { error: upErr } = await supabase.storage
-                            .from("product-images")
-                            .upload(path, file, {
-                              upsert: false,
-                              contentType: file.type || "image/jpeg",
-                            });
-
-                          if (upErr) throw upErr;
-
-                          const { data: pub } = supabase.storage
-                            .from("product-images")
-                            .getPublicUrl(path);
-
-                          setForm((f) => ({
-                            ...f,
-                            image_url: pub.publicUrl,
-                          }));
-
-                          toast.success("Imagen cargada");
-                        } catch (err) {
-                          toast.error(
-                            err instanceof Error
-                              ? err.message
-                              : "No se pudo subir la imagen",
-                          );
-                        } finally {
-                          event.target.value = "";
-                        }
-                      }}
+                      id="product-image-url"
+                      type="url"
+                      value={form.image_url}
+                      placeholder="https://…"
+                      disabled={priceOnly || !(canCreateProduct || canEditProduct) || saveProduct.isPending}
+                      aria-invalid={Boolean(form.image_url.trim() && !validImageUrl(form.image_url.trim()))}
+                      onChange={(event) => setForm((f) => ({ ...f, image_url: event.target.value }))}
                     />
+                    {form.image_url.trim() && !validImageUrl(form.image_url.trim()) && <p className="text-xs text-destructive">URL inválida: usa http/https.</p>}
+                    <p className="text-xs text-muted-foreground">Carga desde dispositivo no disponible: falta almacenamiento de imágenes autorizado. La URL se conserva al guardar el producto.</p>
 
                     {form.image_url && (
                       <Button
@@ -2219,15 +2144,7 @@ function ProductosPage() {
                           >
                             <div className="flex items-center gap-3">
                               <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] text-xl">
-                                {form.image_url ? (
-                                  <img
-                                    src={form.image_url}
-                                    alt=""
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <span>{form.emoji || "📦"}</span>
-                                )}
+                                <ProductImage src={v.image_url || form.image_url} emoji={form.emoji} name={v.name} />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate font-semibold text-[#212121]">
@@ -2493,21 +2410,7 @@ function ProductosPage() {
             <div className="space-y-4 p-4">
               <div className="flex gap-3">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[#f5f5f5] text-2xl">
-                  {variantForm.image_url ? (
-                    <img
-                      src={variantForm.image_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : form.image_url ? (
-                    <img
-                      src={form.image_url}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <span>{form.emoji || "📦"}</span>
-                  )}
+                  <ProductImage src={variantForm.image_url || form.image_url} emoji={form.emoji} name={variantForm.name} />
                 </div>
                 <div className="min-w-0 flex-1 space-y-1.5">
                   <Label className="text-xs text-[#757575]">
@@ -2533,69 +2436,15 @@ function ProductosPage() {
                   Imagen de la variante
                 </Label>
                 <Input
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  className="h-11 cursor-pointer rounded-xl border-[#e0e0e0] text-xs file:mr-2 file:rounded-lg file:border-0 file:bg-[#e8f0fe] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[#1a73e8]"
-                  disabled={
-                    priceOnly ||
-                    !(canEditProduct || isManager) ||
-                    saveVariant.isPending
-                  }
-                  onChange={async (event) => {
-                    const file = event.target.files?.[0];
-                    if (!file) return;
-                    if (priceOnly || !(canEditProduct || isManager)) {
-                      toast.error("No tienes permiso para cambiar imágenes.");
-                      event.target.value = "";
-                      return;
-                    }
-                    if (file.size > 5 * 1024 * 1024) {
-                      toast.error("La imagen no debe superar 5 MB");
-                      event.target.value = "";
-                      return;
-                    }
-                    try {
-                      const ext =
-                        file.name.split(".").pop()?.toLowerCase() || "jpg";
-                      const {
-                        data: { user: upUser },
-                      } = await supabase.auth.getUser();
-                      if (!upUser?.id) {
-                        throw new Error("Sesión requerida para subir imagen");
-                      }
-                      if (!form.id) {
-                        throw new Error(
-                          "Guarda el producto antes de subir imagen de variante.",
-                        );
-                      }
-                      const path = `${form.id}/variants/${crypto.randomUUID()}.${ext}`;
-                      const { error: upErr } = await supabase.storage
-                        .from("product-images")
-                        .upload(path, file, {
-                          upsert: false,
-                          contentType: file.type || "image/jpeg",
-                        });
-                      if (upErr) throw upErr;
-                      const { data: pub } = supabase.storage
-                        .from("product-images")
-                        .getPublicUrl(path);
-                      setVariantForm((f) => ({
-                        ...f,
-                        image_url: pub.publicUrl,
-                      }));
-                      toast.success("Imagen de variante cargada");
-                    } catch (err) {
-                      toast.error(
-                        err instanceof Error
-                          ? err.message
-                          : "No se pudo subir la imagen",
-                      );
-                    } finally {
-                      event.target.value = "";
-                    }
-                  }}
+                  aria-label="URL de imagen de variante"
+                  type="url"
+                  value={variantForm.image_url}
+                  placeholder="https://…"
+                  disabled={priceOnly || !(canEditProduct || isManager) || saveVariant.isPending}
+                  onChange={(event) => setVariantForm((f) => ({ ...f, image_url: event.target.value }))}
                 />
+                <p className="text-xs text-muted-foreground">Carga desde dispositivo pendiente de almacenamiento autorizado.</p>
+
                 {variantForm.image_url && (
                   <Button
                     type="button"
