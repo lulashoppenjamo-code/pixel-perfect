@@ -68,6 +68,7 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { ProductImage } from "@/components/ProductImage";
+import { ProductImageUploader } from "@/components/products/ProductImageUploader";
 import { validImageUrl } from "@/lib/productImport";
 
 export const Route = createFileRoute("/_shell/productos")({
@@ -1673,7 +1674,26 @@ function ProductosPage() {
                       onChange={(event) => setForm((f) => ({ ...f, image_url: event.target.value }))}
                     />
                     {form.image_url.trim() && !validImageUrl(form.image_url.trim()) && <p className="text-xs text-destructive">URL inválida: usa http/https.</p>}
-                    <p className="text-xs text-muted-foreground">Carga desde dispositivo no disponible: falta almacenamiento de imágenes autorizado. La URL se conserva al guardar el producto.</p>
+                    {form.id ? (
+                      <ProductImageUploader
+                        productId={form.id}
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct) ||
+                          saveProduct.isPending
+                        }
+                        onUploaded={(url) =>
+                          setForm((current) => ({
+                            ...current,
+                            image_url: url,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Guarda primero el producto. Después podrás subir su fotografía.
+                      </p>
+                    )}
 
                     {form.image_url && (
                       <Button
