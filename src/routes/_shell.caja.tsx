@@ -1,3 +1,4 @@
+
 /**
  * Caja — LULA OS
  * Ruta: src/routes/_shell.caja.tsx
@@ -80,6 +81,7 @@ type MobileView = "home" | "pos" | "arqueo";
 function CajaPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("pos");
+
   // Solo afecta la UI móvil/tablet: home estilo Zobaze vs POS/Arqueo
   const [mobileView, setMobileView] =
     useState<MobileView>("home");
@@ -90,11 +92,15 @@ function CajaPage() {
       setTab("pos");
       setMobileView("pos");
     };
+
     if (consumeOpenPosFlag()) {
       openPos();
     }
+
     const onScan = () => openPos();
+
     window.addEventListener("lula-barcode-scan", onScan);
+
     return () =>
       window.removeEventListener("lula-barcode-scan", onScan);
   }, []);
@@ -112,14 +118,20 @@ function CajaPage() {
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
+
       const next = window.innerWidth < SIDE_BY_SIDE_MIN;
+
       if (isCompactRef.current === next) return;
+
       isCompactRef.current = next;
       setIsCompact(next);
     };
+
     update();
+
     window.addEventListener("resize", update);
     window.addEventListener("orientationchange", update);
+
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("orientationchange", update);
@@ -176,13 +188,16 @@ function CajaPage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#f1f3f9]">
             <ShoppingBag className="h-6 w-6 text-[#9aa3b8]" />
           </div>
+
           <h2 className="text-base font-bold text-[#212121]">
             No hay una sucursal activa
           </h2>
+
           <p className="mt-2 text-sm text-[#757575]">
             No se puede abrir Caja hasta que exista una sucursal
             disponible para este usuario.
           </p>
+
           {branches.length === 0 && (
             <p className="mt-3 rounded-xl bg-[#fff7ed] p-3 text-xs text-[#9a3412]">
               Verifica que la sucursal esté activa y que tu
@@ -211,6 +226,7 @@ function CajaPage() {
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#34a853] text-white shadow-md">
           <Plus className="h-8 w-8" strokeWidth={2.75} />
         </div>
+
         <span className="text-[15px] font-bold tracking-wide text-[#212121]">
           NUEVA VENTA
         </span>
@@ -242,6 +258,7 @@ function CajaPage() {
               ? `: ${parkedSales.length}`
               : ":"}
           </p>
+
           <ChevronRight className="h-5 w-5 shrink-0 text-[#1a73e8]" />
         </button>
 
@@ -266,7 +283,9 @@ function CajaPage() {
                   Number(line.discount ?? 0),
                 0,
               );
+
               const lines = (sale.cart ?? []).length;
+
               return (
                 <button
                   key={sale.id}
@@ -284,11 +303,13 @@ function CajaPage() {
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#fff4df] text-[#a86d00]">
                     <PauseCircle className="h-4 w-4" />
                   </div>
+
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium text-[#212121]">
                       {sale.label?.trim() ||
                         `Venta en espera · ${lines} art.`}
                     </p>
+
                     <p className="text-xs text-[#757575]">
                       {new Date(sale.created_at).toLocaleString(
                         "es-MX",
@@ -301,12 +322,14 @@ function CajaPage() {
                       )}
                     </p>
                   </div>
+
                   <p className="shrink-0 text-sm font-semibold text-[#1a73e8]">
                     {money(cartTotal - Number(sale.ticket_discount ?? 0))}
                   </p>
                 </button>
               );
             })}
+
             {parkedSales.length > 5 && (
               <button
                 type="button"
@@ -342,7 +365,7 @@ function CajaPage() {
      CONTENIDO PRINCIPAL (desktop siempre, móvil según vista)
      ========================================================= */
   const mainContent = (
-    <div className="flex h-[calc(100dvh-3rem)] flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
       {/* Header sucursal — desktop / cuando ya está en POS o Arqueo */}
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
