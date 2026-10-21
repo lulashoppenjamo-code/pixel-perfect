@@ -2496,7 +2496,7 @@ export function POSPanel({
     <div
       className={cn(
         "flex flex-col bg-[#f5f5f5]",
-        !sequential && "md:flex-row",
+        !sequential && "flex-row",
         className,
       )}
     >
