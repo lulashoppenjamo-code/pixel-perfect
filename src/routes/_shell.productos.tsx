@@ -591,7 +591,7 @@ function ProductosPage() {
   const canEditProduct = canEdit || isManager;
   const canAdjustStock = isManager;
 
-  const { branchId } = useBranch();
+  const { branchId, branches } = useBranch();
   const qc = useQueryClient();
 
   const [form, setForm] = useState<ProductForm>(emptyProduct);
@@ -610,6 +610,9 @@ function ProductosPage() {
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustDir, setAdjustDir] = useState<"in" | "out">("in");
   const [adjustNotes, setAdjustNotes] = useState("");
+  const [movementFilter, setMovementFilter] = useState<
+    "all" | "sales" | "in" | "out" | "adjust"
+  >("all");
 
   const {
     data: categories = [],
@@ -708,6 +711,46 @@ function ProductosPage() {
       return (data ?? []) as ProductMovementRow[];
     },
   });
+
+  const filteredProductMovements = useMemo(() => {
+    if (movementFilter === "all") return productMovements;
+    return productMovements.filter((m) => {
+      if (movementFilter === "sales") {
+        return m.type === "sale" || m.type === "return";
+      }
+      if (movementFilter === "in") {
+        return (
+          m.type === "purchase" ||
+          m.type === "transfer_in" ||
+          m.type === "adjustment_in" ||
+          Number(m.quantity) > 0
+        );
+      }
+      if (movementFilter === "out") {
+        return (
+          m.type === "sale" ||
+          m.type === "transfer_out" ||
+          m.type === "adjustment_out" ||
+          Number(m.quantity) < 0
+        );
+      }
+      if (movementFilter === "adjust") {
+        return (
+          m.type === "adjustment_in" ||
+          m.type === "adjustment_out"
+        );
+      }
+      return true;
+    });
+  }, [productMovements, movementFilter]);
+
+  const branchNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of branches) {
+      map.set(b.id, b.name);
+    }
+    return map;
+  }, [branches]);
 
 
   const stockMap = useMemo(() => {
@@ -2306,8 +2349,34 @@ function ProductosPage() {
                   </p>
                   <p className="mb-3 text-[11px] leading-4 text-[#9e9e9e]">
                     Ventas, compras, devoluciones, entradas y salidas de este
-                    producto. Incluye las notas de cada movimiento.
+                    producto. Incluye sucursal y notas de cada movimiento.
                   </p>
+
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        ["all", "Todos"],
+                        ["sales", "Ventas"],
+                        ["in", "Entradas"],
+                        ["out", "Salidas"],
+                        ["adjust", "Ajustes"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setMovementFilter(key)}
+                        className={
+                          movementFilter === key
+                            ? "rounded-full bg-[#1a73e8] px-3 py-1 text-[11px] font-semibold text-white"
+                            : "rounded-full bg-white px-3 py-1 text-[11px] font-medium text-[#616161] ring-1 ring-[#e0e0e0]"
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
                   {movementsLoading ? (
                     <p className="text-sm text-muted-foreground">
                       Cargando historial…
@@ -2316,9 +2385,13 @@ function ProductosPage() {
                     <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-6 text-center text-sm text-muted-foreground">
                       Sin movimientos registrados todavía.
                     </p>
+                  ) : filteredProductMovements.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-6 text-center text-sm text-muted-foreground">
+                      No hay movimientos con este filtro.
+                    </p>
                   ) : (
                     <div className="max-h-72 space-y-2 overflow-y-auto">
-                      {productMovements.map((m) => {
+                      {filteredProductMovements.map((m) => {
                         const qty = Number(m.quantity) || 0;
                         const label =
                           PRODUCT_MOVEMENT_LABELS[m.type] ?? m.type;
@@ -2329,6 +2402,8 @@ function ProductosPage() {
                               dateStyle: "short",
                               timeStyle: "short",
                             });
+                        const branchName =
+                          branchNameById.get(m.branch_id) ?? null;
                         return (
                           <div
                             key={m.id}
@@ -2341,6 +2416,7 @@ function ProductosPage() {
                                 </p>
                                 <p className="text-[11px] text-[#9e9e9e]">
                                   {dateLabel}
+                                  {branchName ? ` · ${branchName}` : ""}
                                   {m.reference_type
                                     ? ` · ${m.reference_type}`
                                     : ""}
