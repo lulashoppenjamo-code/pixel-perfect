@@ -234,11 +234,11 @@ export function POSPanel({
 
   /**
    * sequential: pasos shop/cart/pay/cash/mixed/success.
-   * Mismo breakpoint 1024 que isCompact en _shell.caja.tsx.
+   * Mismo breakpoint 768 que isCompact en _shell.caja.tsx.
    * Inicial true (SSR). Sin pointer/hover.
    * No modifica cart, method, importes ni dispara checkout.
    */
-  const SIDE_BY_SIDE_MIN = 1024;
+  const SIDE_BY_SIDE_MIN = 768;
   const [sequential, setSequential] = useState(true);
   const sequentialRef = useRef(true);
   const cartLengthRef = useRef(0);
@@ -250,15 +250,7 @@ export function POSPanel({
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
-
-      const tabletLandscape = window.matchMedia(
-        "(orientation: landscape) and (max-height: 900px) and (min-width: 768px)"
-      ).matches;
-
-      const next =
-        window.innerWidth < SIDE_BY_SIDE_MIN ||
-        tabletLandscape;
-
+      const next = window.innerWidth < SIDE_BY_SIDE_MIN; 
       const prev = sequentialRef.current;
       if (prev === next) return;
       sequentialRef.current = next;
@@ -298,8 +290,6 @@ export function POSPanel({
     enabled: !!branchId,
 
     queryFn: async () => {
-      // Prioridad: sucursal actual > global (branch_id null) > default.
-      // Nunca tomar filas de otra sucursal.
       const { data, error } = await supabase
         .from("settings")
         .select("key, value, branch_id")
@@ -425,14 +415,6 @@ export function POSPanel({
   /*
    * =========================================================
    * PRODUCTOS + INVENTARIO COMPARTIDO
-   *
-   * IMPORTANTE:
-   * NO usar:
-   *
-   * .from("inventory")
-   * .eq("branch_id", branchId!)
-   *
-   * El POS utiliza shared_inventory.
    * =========================================================
    */
 
@@ -443,7 +425,6 @@ export function POSPanel({
     queryKey: ["pos-products-shared"],
 
     enabled: !!branchId,
-    /** Catálogo estable unos segundos; el stock se refresca al cobrar (invalidate). */
     staleTime: 20_000,
     refetchOnWindowFocus: true,
 
@@ -469,19 +450,11 @@ export function POSPanel({
 
       const rows = sharedInventory ?? [];
 
-      /*
-       * Producto simple:
-       * stock de la fila sin variant_id.
-       */
       const simpleStock = new Map<
         string,
         number
       >();
 
-      /*
-       * Producto con variantes:
-       * suma del stock disponible de sus variantes.
-       */
       const variantStockByProduct = new Map<
         string,
         number
@@ -547,8 +520,6 @@ export function POSPanel({
   /*
    * =========================================================
    * INVENTARIO DE VARIANTES
-   *
-   * También sale de shared_inventory.
    * =========================================================
    */
 
@@ -1148,7 +1119,6 @@ export function POSPanel({
     return false;
   };
 
-  // Escaneo global (pistola): agregar al carrito aunque se haya pistoleado en otra pantalla
   useEffect(() => {
     const tryAdd = (code: string) => {
       const ok = resolveAndAddByCode(code);
@@ -1172,7 +1142,6 @@ export function POSPanel({
       const code = detail?.code?.trim();
       if (!code) return;
       if (products.length === 0) {
-        // Guardar de nuevo hasta que carguen productos
         try {
           sessionStorage.setItem("lula-pending-barcode", code);
         } catch {
@@ -1393,7 +1362,6 @@ export function POSPanel({
       streamRef.current =
         null;
     };
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scannerOpen]);
 
@@ -1839,12 +1807,6 @@ export function POSPanel({
       "Venta apartada recuperada",
     );
 
-    /*
-     * La apartada se elimina SOLO después de
-     * haber restaurado correctamente el carrito.
-     *
-     * Esto NO modifica inventario ni crea una venta.
-     */
     void deleteParkedSale(
       supabase,
       parkedSale.id,
@@ -1872,13 +1834,6 @@ export function POSPanel({
   /*
    * =========================================================
    * COBRO
-   * =========================================================
-   *
-   * IMPORTANTE:
-   * create_sale() permanece como RPC central.
-   *
-   * El RPC ya fue puenteado para descontar
-   * shared_inventory.
    * =========================================================
    */
 
@@ -2188,12 +2143,7 @@ export function POSPanel({
 
         setLastSaleTotal(total);
         setLastSaleFolio(sale.folio ?? "");
-        /*
-         * Post-venta:
-         * - sequential (teléfono): pantalla éxito + "OBTENER RECIBO"
-         * - side-by-side (tablet/desktop): el overlay success está oculto;
-         *   abrir ticket modal para no dejar la venta sin feedback visual.
-         */
+
         if (sequentialRef.current) {
           setMobileStep("success");
           setTicketOpen(false);
@@ -2203,39 +2153,13 @@ export function POSPanel({
         }
 
         setCart([]);
-
-        setCashReceived(
-          "",
-        );
-
-        setMixedCash(
-          "",
-        );
-
-        setMixedCard(
-          "",
-        );
-
-        setTicketDiscount(
-          "0",
-        );
-
-        setSaleNotes(
-          "",
-        );
-
-        setCustomerId(
-          "none",
-        );
-
-        setMethod(
-          "cash",
-        );
-
-        /*
-         * INVALIDACIONES NUEVAS:
-         * El POS ya no refresca inventory por sucursal.
-         */
+        setCashReceived("");
+        setMixedCash("");
+        setMixedCard("");
+        setTicketDiscount("0");
+        setSaleNotes("");
+        setCustomerId("none");
+        setMethod("cash");
 
         void qc.invalidateQueries(
           {
@@ -2291,7 +2215,7 @@ export function POSPanel({
             "Error al cobrar",
         );
       },
-  
+
     onMutate: () => {
       submittingRef.current = true;
     },
@@ -2509,9 +2433,7 @@ export function POSPanel({
 
   /*
    * =========================================================
-   * CANCELACIÓN DE VENTA (mismo turno)
-   * Usa la RPC real cancel_sale(uuid, text) definida en
-   * las migrations (shared stock).
+   * CANCELACIÓN DE VENTA
    * =========================================================
    */
 
@@ -2562,12 +2484,6 @@ export function POSPanel({
     },
   });
 
-  /*
-   * =========================================================
-   * AUTOFOCUS
-   * =========================================================
-   */
-
   useEffect(() => {
     searchRef.current?.focus();
   }, []);
@@ -2575,12 +2491,6 @@ export function POSPanel({
   const canSell =
     !settings?.requireOpenCash ||
     !!openSession;
-
-  /*
-   * =========================================================
-   * RENDER
-   * =========================================================
-   */
 
   return (
     <div
@@ -2590,19 +2500,13 @@ export function POSPanel({
         className,
       )}
     >
-      {/* =====================================================
-          IZQUIERDA — PRODUCTOS
-          ===================================================== */}
-
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col overflow-hidden",
           mobileStep !== "shop" && sequential && "hidden",
         )}
       >
-        {/* Header azul estilo Zobaze */}
         <div className="bg-[#1a73e8] px-3 pb-2.5 pt-2 sm:px-4">
-          {/* Título + acciones (móvil/tablet sequential) */}
           {sequential ? (
             <div className="mb-2.5 flex items-center gap-1 text-white">
               <span className="flex-1 text-lg font-bold">Artículos</span>
@@ -2677,7 +2581,6 @@ export function POSPanel({
             </div>
           )}
 
-          {/* Buscador + barcode + rayo (Zobaze) */}
           <div className="flex items-center gap-2">
             <div className="relative min-w-0 flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
@@ -2718,7 +2621,6 @@ export function POSPanel({
           )}
         </div>
 
-        {/* Categorías: ocultas en sequential (Zobaze no las muestra aquí); visibles en desktop */}
         <div
           className={cn(
             "gap-2 overflow-x-auto border-b border-[#e0e0e0] bg-white px-3 py-2 scrollbar-none sm:px-4",
@@ -2754,7 +2656,6 @@ export function POSPanel({
           ))}
         </div>
 
-        {/* Productos — grilla estilo Zobaze */}
         <ScrollArea className="flex-1 bg-[#f0f0f0] p-2 sm:p-3">
           {loadingProducts ? (
             <div className="py-16 text-center text-sm text-[#757575]">
@@ -2781,7 +2682,6 @@ export function POSPanel({
                 const cartQty = cart
                   .filter((line) => line.product_id === product.id)
                   .reduce((sum, line) => sum + line.quantity, 0);
-                const initial = (product.name || "?").trim().charAt(0).toUpperCase();
 
                 return (
                   <button
@@ -2794,7 +2694,6 @@ export function POSPanel({
                     onClick={() => addProduct(product)}
                     className="group relative flex flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
                   >
-                    {/* Imagen / emoji / inicial */}
                     <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-[#fafafa]">
                       {outOfStock && (
                         <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
@@ -2829,7 +2728,6 @@ export function POSPanel({
           )}
         </ScrollArea>
 
-        {/* Barra Ir al mostrador (solo sequential con carrito) */}
         {sequential && cart.length > 0 && (
           <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[calc(0.75rem+3.75rem+env(safe-area-inset-bottom))] shadow-[0_-2px_8px_rgba(0,0,0,0.06)]">
             <button
@@ -2843,20 +2741,13 @@ export function POSPanel({
         )}
       </div>
 
-      {/* =====================================================
-          DERECHA — CARRITO
-          ===================================================== */}
-
       <div
         className={cn(
           "flex min-w-0 flex-col border-t border-[#e0e0e0] bg-white",
-          // Escritorio: columna fija a la derecha
           !sequential &&
             "w-full md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
-          // Móvil/tablet sequential: ancho completo
           sequential && "w-full",
           sequential && mobileStep === "shop" && "hidden",
-          // Pantalla completa del carrito sin quedar a 300px en tablet
           sequential &&
             mobileStep === "cart" &&
             "fixed inset-0 z-50 w-full max-w-none",
@@ -2870,7 +2761,6 @@ export function POSPanel({
           !sequential && mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
         )}
       >
-        {/* ===== HEADER: sequential = azul Zobaze; desktop = blanco ===== */}
         {sequential ? (
           <div className="flex shrink-0 items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
             <button
@@ -2916,7 +2806,6 @@ export function POSPanel({
           </div>
         )}
 
-        {/* ===== LISTA DE ARTÍCULOS ===== */}
         <div className="min-h-0 flex-1 overflow-y-auto bg-[#f5f5f5] px-3 py-2">
           {cart.length === 0 ? (
             <div className="flex h-36 flex-col items-center justify-center gap-2 text-[#757575]">
@@ -2924,7 +2813,6 @@ export function POSPanel({
               <p className="text-sm">Añade artículos para vender</p>
             </div>
           ) : sequential ? (
-            /* --- Estilo Zobaze: nombre, 1 x precio, lápiz, total --- */
             <div className="space-y-2">
               {cart.map((line) => (
                 <div
@@ -2961,7 +2849,6 @@ export function POSPanel({
               ))}
             </div>
           ) : (
-            /* --- Desktop: con controles +/- --- */
             <div className="space-y-2">
               {cart.map((line) => (
                 <div
@@ -3035,7 +2922,6 @@ export function POSPanel({
           )}
         </div>
 
-        {/* ===== FOOTER TOTALES + ACCIONES ===== */}
         <div
           className={cn(
             "shrink-0 space-y-2 border-t border-[#e0e0e0] bg-white p-3",
@@ -3045,7 +2931,6 @@ export function POSPanel({
         >
           {sequential && cart.length > 0 && (
             <>
-              {/* Añadir artículo nuevo + escáner (icono código de barras como Zobaze) */}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -3064,7 +2949,6 @@ export function POSPanel({
                 </button>
               </div>
 
-              {/* Tarjeta totales estilo Zobaze */}
               <div className="rounded-lg border border-[#e0e0e0] bg-white px-3 py-2.5">
                 <div className="flex justify-between text-sm text-[#212121]">
                   <span>Subtotal</span>
@@ -3087,16 +2971,9 @@ export function POSPanel({
                     type="button"
                     className="text-[#1a73e8] underline"
                     onClick={() => {
-                      const v = window.prompt(
-                        "Impuesto adicional ($)",
-                        "0",
+                      toast.message(
+                        "El impuesto se calcula por producto. Ajusta el precio o el descuento del ticket.",
                       );
-                      // Solo informativo: el impuesto de línea ya se calcula del producto
-                      if (v != null) {
-                        toast.message(
-                          "El impuesto se calcula por producto. Ajusta el precio o el descuento del ticket.",
-                        );
-                      }
                     }}
                   >
                     Agregar impuesto
@@ -3142,7 +3019,6 @@ export function POSPanel({
                 )}
               </div>
 
-              {/* Borrar | Guardar para más */}
               <div className="flex gap-2">
                 <button
                   type="button"
@@ -3164,7 +3040,6 @@ export function POSPanel({
             </>
           )}
 
-          {/* Desktop: descuento, nota, totales clásicos, métodos */}
           {!sequential && (
             <>
               {cart.length > 0 && (
@@ -3358,7 +3233,6 @@ export function POSPanel({
             </>
           )}
 
-          {/* Apartar (desktop) + Cobrar principal */}
           <div className={cn("flex gap-2", sequential && "flex-col")}>
             {!sequential && (
               <Button
@@ -3380,7 +3254,6 @@ export function POSPanel({
                   setMobileStep("pay");
                 } else {
                   if (submittingRef.current || checkout.isPending) return;
-                  // Pasar método explícito: evita carrera con setMethod del state
                   checkout.mutate(method);
                 }
               }}
@@ -3394,25 +3267,12 @@ export function POSPanel({
         </div>
       </div>
 
-      {/* =====================================================
-          ESCÁNER
-          ===================================================== */}
-
       <Dialog
-        open={
-          scannerOpen
-        }
-        onOpenChange={(
-          open,
-        ) => {
-          setScannerOpen(
-            open,
-          );
-
+        open={scannerOpen}
+        onOpenChange={(open) => {
+          setScannerOpen(open);
           if (!open) {
-            setScannerError(
-              null,
-            );
+            setScannerError(null);
           }
         }}
       >
@@ -3426,19 +3286,12 @@ export function POSPanel({
           {scannerError ? (
             <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
               <CameraOff className="h-8 w-8 opacity-50" />
-
-              <p>
-                {
-                  scannerError
-                }
-              </p>
+              <p>{scannerError}</p>
             </div>
           ) : (
             <div className="overflow-hidden rounded-xl bg-black">
               <video
-                ref={
-                  videoRef
-                }
+                ref={videoRef}
                 muted
                 playsInline
                 className="aspect-square w-full object-cover"
@@ -3453,11 +3306,7 @@ export function POSPanel({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() =>
-                setScannerOpen(
-                  false,
-                )
-              }
+              onClick={() => setScannerOpen(false)}
             >
               Cerrar
             </Button>
@@ -3465,121 +3314,75 @@ export function POSPanel({
         </DialogContent>
       </Dialog>
 
-      {/* =====================================================
-          SELECTOR DE VARIANTES
-          ===================================================== */}
-
       <Dialog
-        open={
-          !!variantPickerProduct
-        }
-        onOpenChange={(
-          open,
-        ) => {
+        open={!!variantPickerProduct}
+        onOpenChange={(open) => {
           if (!open) {
-            setVariantPickerProduct(
-              null,
-            );
+            setVariantPickerProduct(null);
           }
         }}
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {
-                variantPickerProduct?.name ??
-                "Variantes"
-              }
+              {variantPickerProduct?.name ?? "Variantes"}
             </DialogTitle>
           </DialogHeader>
 
           <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
-            {productVariants.length ===
-            0 ? (
+            {productVariants.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 Este producto no tiene variantes configuradas.
               </p>
             ) : (
-              productVariants.map(
-                (variant) => {
-                  const stock =
-                    variantStockMap.get(
-                      variant.id,
-                    ) ?? 0;
+              productVariants.map((variant) => {
+                const stock =
+                  variantStockMap.get(variant.id) ?? 0;
+                const outOfStock = stock <= 0;
+                const price =
+                  variant.price_override != null
+                    ? Number(variant.price_override)
+                    : variantPickerProduct?.price ?? 0;
 
-                  const outOfStock =
-                    stock <=
-                    0;
-
-                  const price =
-                    variant.price_override !=
-                    null
-                      ? Number(
-                          variant.price_override,
-                        )
-                      : variantPickerProduct?.price ??
-                        0;
-
-                  return (
-                    <button
-                      key={
-                        variant.id
-                      }
-                      type="button"
-                      disabled={
-                        settings?.blockWithoutStock &&
-                        outOfStock
-                      }
-                      onClick={() =>
-                        variantPickerProduct &&
-                        addVariant(
-                          variantPickerProduct,
-                          variant,
-                        )
-                      }
-                      className="flex w-full items-center justify-between rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-3 text-left disabled:cursor-not-allowed disabled:opacity-45"
-                    >
-                      <div>
-                        <p className="text-sm font-semibold text-[#212121]">
-                          {
-                            variant.name
-                          }
-                        </p>
-
-                        <p
-                          className={cn(
-                            "text-xs",
-                            outOfStock
-                              ? "font-semibold text-[#e5484d]"
-                              : "text-[#757575]",
-                          )}
-                        >
-                          {outOfStock
-                            ? "Agotado"
-                            : `Disponible: ${stock}`}
-                        </p>
-                      </div>
-
-                      <span className="text-sm font-bold text-[#1a73e8]">
-                        {money(
-                          price,
+                return (
+                  <button
+                    key={variant.id}
+                    type="button"
+                    disabled={settings?.blockWithoutStock && outOfStock}
+                    onClick={() =>
+                      variantPickerProduct &&
+                      addVariant(variantPickerProduct, variant)
+                    }
+                    className="flex w-full items-center justify-between rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-3 text-left disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    <div>
+                      <p className="text-sm font-semibold text-[#212121]">
+                        {variant.name}
+                      </p>
+                      <p
+                        className={cn(
+                          "text-xs",
+                          outOfStock
+                            ? "font-semibold text-[#e5484d]"
+                            : "text-[#757575]",
                         )}
-                      </span>
-                    </button>
-                  );
-                },
-              )
+                      >
+                        {outOfStock ? "Agotado" : `Disponible: ${stock}`}
+                      </p>
+                    </div>
+                    <span className="text-sm font-bold text-[#1a73e8]">
+                      {money(price)}
+                    </span>
+                  </button>
+                );
+              })
             )}
           </div>
 
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() =>
-                setVariantPickerProduct(
-                  null,
-                )
-              }
+              onClick={() => setVariantPickerProduct(null)}
             >
               Cancelar
             </Button>
@@ -3587,60 +3390,33 @@ export function POSPanel({
         </DialogContent>
       </Dialog>
 
-      {/* =====================================================
-          EDITAR LÍNEA
-          ===================================================== */}
-
       <Dialog
-        open={
-          !!editLineKey
-        }
-        onOpenChange={(
-          open,
-        ) => {
+        open={!!editLineKey}
+        onOpenChange={(open) => {
           if (!open) {
-            setEditLineKey(
-              null,
-            );
+            setEditLineKey(null);
           }
         }}
       >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>
-              Editar línea
-            </DialogTitle>
+            <DialogTitle>Editar línea</DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3 py-2">
             <div>
               <label className="text-sm text-muted-foreground">
-                Precio unitario{" "}
-                {!isManager &&
-                  "(solo lectura)"}
+                Precio unitario {!isManager && "(solo lectura)"}
               </label>
-
               <Input
                 type="number"
                 min="0"
                 step="0.01"
-                value={
-                  editPrice
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setEditPrice(
-                    event.target
-                      .value,
-                  )
-                }
-                disabled={
-                  !isManager
-                }
+                value={editPrice}
+                onChange={(event) => setEditPrice(event.target.value)}
+                disabled={!isManager}
                 className="mt-1"
               />
-
               {!isManager && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   Solo managers pueden modificar el precio.
@@ -3652,22 +3428,12 @@ export function POSPanel({
               <label className="text-sm text-muted-foreground">
                 Descuento de línea $
               </label>
-
               <Input
                 type="number"
                 min="0"
                 step="0.01"
-                value={
-                  editDiscount
-                }
-                onChange={(
-                  event,
-                ) =>
-                  setEditDiscount(
-                    event.target
-                      .value,
-                  )
-                }
+                value={editDiscount}
+                onChange={(event) => setEditDiscount(event.target.value)}
                 className="mt-1"
               />
             </div>
@@ -3676,130 +3442,486 @@ export function POSPanel({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() =>
-                setEditLineKey(
-                  null,
-                )
-              }
+              onClick={() => setEditLineKey(null)}
             >
               Cancelar
             </Button>
-
-            <Button
-              onClick={
-                applyEditLine
-              }
-            >
-              Aplicar
-            </Button>
+            <Button onClick={applyEditLine}>Aplicar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* =====================================================
-          HISTORIAL
-          ===================================================== */}
-
-      <Dialog
-        open={
-          historyOpen
-        }
-        onOpenChange={
-          setHistoryOpen
-        }
-      >
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>
-              Ventas recientes
-            </DialogTitle>
+            <DialogTitle>Ventas recientes</DialogTitle>
           </DialogHeader>
 
           <ScrollArea className="max-h-[50vh]">
             <div className="space-y-2 pr-2">
-              {recentSales.length ===
-              0 ? (
+              {recentSales.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">
                   Sin ventas recientes
                 </p>
               ) : (
-                recentSales.map(
-                  (sale) => (
-                    <div
-                      key={
-                        sale.id
-                      }
-                      className="flex items-center justify-between rounded-lg border p-3"
-                    >
-                      <div>
-                        <p className="font-medium">
-                          Folio #
-                          {
-                            sale.folio
-                          }{" "}
-                          <Badge
-                            variant="outline"
-                            className="ml-1 text-xs"
-                          >
-                            {
-                              sale.status
-                            }
-                          </Badge>
-                        </p>
+                recentSales.map((sale) => (
+                  <div
+                    key={sale.id}
+                    className="flex items-center justify-between rounded-lg border p-3"
+                  >
+                    <div>
+                      <p className="font-medium">
+                        Folio #{sale.folio}{" "}
+                        <Badge variant="outline" className="ml-1 text-xs">
+                          {sale.status}
+                        </Badge>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(sale.created_at).toLocaleString("es-MX")} ·{" "}
+                        {sale.payment_method} · {money(Number(sale.total))}
+                      </p>
+                    </div>
 
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(
-                            sale.created_at,
-                          ).toLocaleString(
-                            "es-MX",
-                          )}{" "}
-                          ·{" "}
-                          {
-                            sale.payment_method
-                          }{" "}
-                          ·{" "}
-                          {money(
-                            Number(
-                              sale.total,
-                            ),
-                          )}
-                        </p>
-                      </div>
+                    <div className="flex flex-col gap-1.5 sm:flex-row">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={reprintSale.isPending}
+                        onClick={() => reprintSale.mutate(sale.id)}
+                      >
+                        <Printer className="mr-1 h-3.5 w-3.5" />
+                        Ticket
+                      </Button>
 
-                      <div className="flex flex-col gap-1.5 sm:flex-row">
+                      {sale.status === "completed" && (
                         <Button
                           size="sm"
-                          variant="outline"
-                          disabled={
-                            reprintSale.isPending
-                          }
-                          onClick={() =>
-                            reprintSale.mutate(
-                              sale.id,
-                            )
-                          }
-                        >
-                          <Printer className="mr-1 h-3.5 w-3.5" />
-                          Ticket
-                        </Button>
-
-                        {sale.status ===
-                          "completed" && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            disabled={
-                              cancelSale.isPending
+                          variant="destructive"
+                          disabled={cancelSale.isPending}
+                          onClick={() => {
+                            const reason = window.prompt(
+                              `Motivo de cancelación del folio #${sale.folio} (opcional):`,
+                              "Error de cobro",
+                            );
+                            if (reason === null) return;
+                            if (
+                              !window.confirm(
+                                `¿Cancelar la venta #${sale.folio}? Se restaurará el stock.`,
+                              )
+                            ) {
+                              return;
                             }
-                            onClick={() => {
-                              const reason =
-                                window.prompt(
-                                  `Motivo de cancelación del folio #${sale.folio} (opcional):`,
-                                  "Error de cobro",
-                                );
+                            cancelSale.mutate({
+                              saleId: sale.id,
+                              reason: reason.trim() || undefined,
+                            });
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
 
-                              // null = usuario canceló el prompt
-                              if (
-                                reason === null
-                              ) {
-          
+      {mobileStep === "pay" && (
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
+          <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileStep("cart")}
+              className="mb-2 flex items-center gap-1 text-sm font-medium text-white/90"
+            >
+              ← Volver
+            </button>
+            <p className="text-center text-sm font-bold uppercase tracking-wide">
+              DETALLES DEL CLIENTE (OPCIONAL)
+            </p>
+          </div>
+
+          <div className="space-y-3 overflow-y-auto p-3 pb-8">
+            <div className="rounded-xl border border-[#e0e0e0] bg-white p-4 shadow-sm">
+              <Select value={customerId} onValueChange={setCustomerId}>
+                <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
+                  <SelectValue placeholder="Cliente (opcional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Público general</SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <p className="px-1 text-center text-sm font-semibold text-[#1a73e8]">
+              Seleccione el método de pago
+            </p>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {(
+                [
+                  { id: "cash" as const, label: "Efectivo", emoji: "💵" },
+                  { id: "card" as const, label: "Tarjeta de débito", emoji: "💳" },
+                  { id: "card" as const, label: "Tarjeta de crédito", emoji: "💳", key: "card2" },
+                  { id: "credit" as const, label: "Crédito", emoji: "📅" },
+                  { id: "transfer" as const, label: "Transferencia", emoji: "T" },
+                  { id: "mixed" as const, label: "Mixto", emoji: "🔀" },
+                ] as const
+              ).map((item, i) => (
+                <button
+                  key={`${item.id}-${i}`}
+                  type="button"
+                  onClick={() => {
+                    setMethod(item.id);
+                    if (item.id === "cash") {
+                      setCashReceived(total > 0 ? String(total.toFixed(2)) : "");
+                      setMobileStep("cash");
+                    } else if (item.id === "mixed") {
+                      setMixedCash("");
+                      setMixedCard("");
+                      setMobileStep("mixed");
+                    } else {
+                      if (submittingRef.current || checkout.isPending) return;
+                      checkout.mutate(item.id);
+                    }
+                  }}
+                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[#e0e0e0] bg-[#eeeeee] px-3 py-7 text-center shadow-sm active:scale-[0.97]"
+                >
+                  {item.id === "transfer" || item.id === "mixed" ? (
+                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#1a73e8] text-lg font-bold text-white">
+                      {item.emoji}
+                    </span>
+                  ) : (
+                    <span className="text-3xl">{item.emoji}</span>
+                  )}
+                  <span className="text-sm font-semibold text-[#212121]">
+                    {item.label}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mobileStep === "cash" && (
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
+          <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileStep("pay")}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
+            >
+              ←
+            </button>
+            <h1 className="flex-1 text-lg font-bold">Efectivo</h1>
+          </div>
+
+          <div className="flex-1 space-y-0 overflow-y-auto p-3">
+            <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
+                <span className="text-sm text-[#757575]">Gran total</span>
+                <span className="text-sm font-semibold text-[#212121]">
+                  {money(total)}
+                </span>
+              </div>
+
+              <div className="px-4 py-5 text-center">
+                <p className="text-sm text-[#9e9e9e]">
+                  Efectivo recibido (opcional)
+                </p>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                  className="mx-auto mt-2 h-14 max-w-[200px] border-0 bg-transparent text-center text-4xl font-bold text-[#212121] shadow-none focus-visible:ring-0"
+                  placeholder={String(total.toFixed(0))}
+                />
+              </div>
+
+              <div
+                className={cn(
+                  "px-4 py-4 text-center",
+                  cashNum > 0 && cashNum >= total
+                    ? "bg-[#e8f5e9]"
+                    : "bg-[#e3f2fd]",
+                )}
+              >
+                <p
+                  className={cn(
+                    "text-sm",
+                    cashNum > 0 && cashNum >= total
+                      ? "text-[#2e7d32]"
+                      : "text-[#64b5f6]",
+                  )}
+                >
+                  {cashNum > 0 && cashNum >= total ? "Cambio a Dar" : "Cambio"}
+                </p>
+                <p
+                  className={cn(
+                    "mt-1 text-3xl font-bold",
+                    cashNum > 0 && cashNum >= total
+                      ? "text-[#2e7d32]"
+                      : "text-[#90caf9]",
+                  )}
+                >
+                  {money(cashNum > 0 && cashNum >= total ? cashNum - total : 0)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-3 gap-3 px-2">
+              {[20, 50, 100, 200, 500, 1000].map((amount) => (
+                <button
+                  key={amount}
+                  type="button"
+                  onClick={() => {
+                    const current = Number(cashReceived) || 0;
+                    const prefilled =
+                      total > 0 && Math.abs(current - total) < 0.001;
+                    if (current === 0 || prefilled) {
+                      setCashReceived(String(amount));
+                    } else {
+                      setCashReceived(String(current + amount));
+                    }
+                  }}
+                  className="rounded-full border border-[#bdbdbd] bg-white py-2.5 text-sm font-medium text-[#424242] shadow-sm active:bg-[#f5f5f5]"
+                >
+                  +${amount}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              disabled={!canSell || checkout.isPending}
+              onClick={() => {
+                if (submittingRef.current || checkout.isPending) return;
+                checkout.mutate("cash");
+              }}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
+            >
+              {checkout.isPending ? "Procesando…" : "Recibido por Efectivo"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mobileStep === "mixed" && (
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
+          <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
+            <button
+              type="button"
+              onClick={() => setMobileStep("pay")}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
+            >
+              ←
+            </button>
+            <h1 className="flex-1 text-lg font-bold">Pago mixto</h1>
+          </div>
+
+          <div className="flex-1 space-y-3 overflow-y-auto p-3">
+            <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
+                <span className="text-sm text-[#757575]">Gran total</span>
+                <span className="text-sm font-semibold text-[#212121]">
+                  {money(total)}
+                </span>
+              </div>
+
+              <div className="space-y-4 px-4 py-4">
+                <div>
+                  <label className="text-sm text-[#757575]">Efectivo</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={mixedCash}
+                    onChange={(e) => setMixedCash(e.target.value)}
+                    className="mt-1 h-12 rounded-xl border-[#e0e0e0] text-lg font-semibold"
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm text-[#757575]">Tarjeta</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    inputMode="decimal"
+                    value={mixedCard}
+                    onChange={(e) => setMixedCard(e.target.value)}
+                    className="mt-1 h-12 rounded-xl border-[#e0e0e0] text-lg font-semibold"
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-[#f0f0f0] px-4 py-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-[#757575]">Total aplicado</span>
+                  <span className="font-semibold text-[#212121]">
+                    {money(
+                      (Number(mixedCash) || 0) + (Number(mixedCard) || 0),
+                    )}
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <span className="text-[#757575]">
+                    {(Number(mixedCash) || 0) + (Number(mixedCard) || 0) >=
+                    total - 0.01
+                      ? "Cubierto"
+                      : "Falta"}
+                  </span>
+                  <span
+                    className={
+                      (Number(mixedCash) || 0) + (Number(mixedCard) || 0) >=
+                      total - 0.01
+                        ? "font-semibold text-[#2e7d32]"
+                        : "font-semibold text-[#c62828]"
+                    }
+                  >
+                    {money(
+                      Math.max(
+                        0,
+                        total -
+                          ((Number(mixedCash) || 0) +
+                            (Number(mixedCard) || 0)),
+                      ),
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <p className="px-1 text-center text-xs text-[#9e9e9e]">
+              La suma de efectivo y tarjeta debe cubrir el total de la venta.
+            </p>
+          </div>
+
+          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              disabled={
+                !canSell ||
+                checkout.isPending ||
+                (Number(mixedCash) || 0) + (Number(mixedCard) || 0) <
+                  total - 0.01
+              }
+              onClick={() => {
+                if (submittingRef.current || checkout.isPending) return;
+                checkout.mutate("mixed");
+              }}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
+            >
+              {checkout.isPending ? "Procesando…" : "Confirmar cobro mixto"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mobileStep === "success" && (
+        <div className={cn("fixed inset-0 z-50 flex flex-col bg-white", !sequential && "hidden")}>
+          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
+            <div
+              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
+              style={{
+                animation: "lulaCheckPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both",
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="h-10 w-10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="3"
+                style={{
+                  strokeDasharray: 30,
+                  strokeDashoffset: 30,
+                  animation: "lulaCheckDraw 0.35s ease-out 0.15s forwards",
+                }}
+              >
+                <path
+                  d="M5 13l4 4L19 7"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </div>
+            <p
+              className="text-4xl font-bold text-[#1a73e8]"
+              style={{
+                animation: "lulaFadeUp 0.4s ease-out 0.2s both",
+              }}
+            >
+              {money(lastSaleTotal)}
+            </p>
+            <style>{`
+              @keyframes lulaCheckPop {
+                0% { transform: scale(0.3); opacity: 0; }
+                100% { transform: scale(1); opacity: 1; }
+              }
+              @keyframes lulaCheckDraw {
+                to { stroke-dashoffset: 0; }
+              }
+              @keyframes lulaFadeUp {
+                0% { opacity: 0; transform: translateY(8px); }
+                100% { opacity: 1; transform: translateY(0); }
+              }
+            `}</style>
+          </div>
+
+          <div className="space-y-2 border-t border-[#eee] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+            <p className="mb-2 text-center text-xs text-[#9e9e9e]">
+              ID DE RECIBO: LULA-{lastSaleFolio} · ARTÍCULOS cobrados
+            </p>
+            <button
+              type="button"
+              onClick={() => setTicketOpen(true)}
+              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold uppercase tracking-wide text-white"
+            >
+              OBTENER RECIBO
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setMobileStep("shop");
+                setTicketOpen(false);
+              }}
+              className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-base font-bold uppercase tracking-wide text-white shadow-sm active:scale-[0.98]"
+            >
+              NUEVA VENTA
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ParkedSalesDialog
+        open={parkedSalesOpen}
+        onOpenChange={setParkedSalesOpen}
+        branchId={branchId}
+        onRecover={recoverParkedSale}
+      />
+
+      <TicketModal
+        open={ticketOpen}
+        onOpenChange={setTicketOpen}
+        ticket={ticket}
+      />
+    </div>
+  );
+}
