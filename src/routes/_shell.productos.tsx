@@ -556,6 +556,27 @@ const emptyVariantForm: VariantForm = {
   image_url: "",
 };
 
+type ProductMovementRow = {
+  id: string;
+  type: string;
+  quantity: number;
+  notes: string | null;
+  created_at: string;
+  reference_type: string | null;
+  branch_id: string;
+};
+
+const PRODUCT_MOVEMENT_LABELS: Record<string, string> = {
+  sale: "Venta",
+  return: "Devolución",
+  purchase: "Compra",
+  adjustment_in: "Entrada (ajuste)",
+  adjustment_out: "Salida (ajuste)",
+  transfer_in: "Entrada",
+  transfer_out: "Salida",
+};
+
+
 function ProductosPage() {
   const { isManager, can } = useAuth();
 
@@ -663,6 +684,28 @@ function ProductosPage() {
 
       if (error) throw error;
       return (data ?? []) as ProductVariantRow[];
+    },
+  });
+
+  const {
+    data: productMovements = [],
+    isLoading: movementsLoading,
+  } = useQuery<ProductMovementRow[]>({
+    queryKey: ["product-movements", form.id ?? "none"],
+    enabled: Boolean(form.id),
+    staleTime: 15_000,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inventory_movements")
+        .select(
+          "id, type, quantity, notes, created_at, reference_type, branch_id",
+        )
+        .eq("product_id", form.id!)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      return (data ?? []) as ProductMovementRow[];
     },
   });
 
@@ -1134,6 +1177,7 @@ function ProductosPage() {
         queryKey: ["shared-inventory", "products"],
       });
       void qc.invalidateQueries({ queryKey: ["inventory-movements"] });
+      void qc.invalidateQueries({ queryKey: ["product-movements"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -2252,6 +2296,83 @@ function ProductosPage() {
                   Guarda el producto primero para poder agregar variantes
                   ilimitadas.
                 </p>
+              )}
+
+              {/* Historial de movimientos del producto */}
+              {form.id && (
+                <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                    Historial de movimientos
+                  </p>
+                  <p className="mb-3 text-[11px] leading-4 text-[#9e9e9e]">
+                    Ventas, compras, devoluciones, entradas y salidas de este
+                    producto. Incluye las notas de cada movimiento.
+                  </p>
+                  {movementsLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Cargando historial…
+                    </p>
+                  ) : productMovements.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-6 text-center text-sm text-muted-foreground">
+                      Sin movimientos registrados todavía.
+                    </p>
+                  ) : (
+                    <div className="max-h-72 space-y-2 overflow-y-auto">
+                      {productMovements.map((m) => {
+                        const qty = Number(m.quantity) || 0;
+                        const label =
+                          PRODUCT_MOVEMENT_LABELS[m.type] ?? m.type;
+                        const when = new Date(m.created_at);
+                        const dateLabel = Number.isNaN(when.getTime())
+                          ? m.created_at
+                          : when.toLocaleString("es-MX", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            });
+                        return (
+                          <div
+                            key={m.id}
+                            className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-[#212121]">
+                                  {label}
+                                </p>
+                                <p className="text-[11px] text-[#9e9e9e]">
+                                  {dateLabel}
+                                  {m.reference_type
+                                    ? ` · ${m.reference_type}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <span
+                                className={
+                                  qty > 0
+                                    ? "shrink-0 text-sm font-bold text-[#34a853]"
+                                    : qty < 0
+                                      ? "shrink-0 text-sm font-bold text-[#e53935]"
+                                      : "shrink-0 text-sm font-bold text-[#212121]"
+                                }
+                              >
+                                {qty > 0 ? `+${qty}` : qty}
+                              </span>
+                            </div>
+                            {m.notes ? (
+                              <p className="mt-1.5 break-words text-xs text-[#616161]">
+                                {m.notes}
+                              </p>
+                            ) : (
+                              <p className="mt-1.5 text-xs text-[#bdbdbd]">
+                                Sin comentario
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               )}
 
               <div className="flex flex-col gap-2 pt-1 sm:flex-row">
