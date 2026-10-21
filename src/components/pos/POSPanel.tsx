@@ -234,11 +234,11 @@ export function POSPanel({
 
   /**
    * sequential: pasos shop/cart/pay/cash/mixed/success.
-   * Mismo breakpoint 1024 que isCompact en _shell.caja.tsx.
+   * Mismo breakpoint 768 que isCompact en _shell.caja.tsx.
    * Inicial true (SSR). Sin pointer/hover.
    * No modifica cart, method, importes ni dispara checkout.
    */
-  const SIDE_BY_SIDE_MIN =768;
+  const SIDE_BY_SIDE_MIN = 768;
   const [sequential, setSequential] = useState(true);
   const sequentialRef = useRef(true);
   const cartLengthRef = useRef(0);
@@ -2578,7 +2578,7 @@ export function POSPanel({
     <div
       className={cn(
         "flex flex-col bg-[#f5f5f5]",
-        !sequential && "md:flex-row",
+        !sequential && "flex-row",
         className,
       )}
     >
@@ -2844,7 +2844,7 @@ export function POSPanel({
           "flex min-w-0 flex-col border-t border-[#e0e0e0] bg-white",
           // Escritorio: columna fija a la derecha
           !sequential &&
-            "w-full md:w-[300px] md:border-l md:border-t-0 md:shrink-0 lg:w-[360px] xl:w-[400px]",
+            "w-[38%] min-w-[260px] max-w-[380px] border-l border-t-0 shrink-0",
           // Móvil/tablet sequential: ancho completo
           sequential && "w-full",
           sequential && mobileStep === "shop" && "hidden",
@@ -2858,8 +2858,8 @@ export function POSPanel({
               mobileStep === "mixed" ||
               mobileStep === "success") &&
             "hidden",
-          !sequential && mobileStep === "shop" && cart.length === 0 && "hidden md:flex",
-          !sequential && mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
+          !sequential && mobileStep === "shop" && cart.length === 0 && "flex",
+          !sequential && mobileStep === "shop" && cart.length > 0 && "flex",
         )}
       >
         {/* ===== HEADER: sequential = azul Zobaze; desktop = blanco ===== */}
@@ -4287,4 +4287,4 @@ export function POSPanel({
       />
     </div>
   );
-} 
+}
