@@ -338,7 +338,7 @@ function ShellLayout() {
     <div className="flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
       {/* SIDEBAR */}
       <aside
-        className={`hidden shrink-0 select-none flex-col justify-between border-r bg-card transition-[width] duration-200 ease-out md:flex ${
+        className={`hidden shrink-0 select-none flex-col justify-between border-r bg-card transition-[width] duration-200 ease-out lg:flex ${
           sidebarCollapsed
             ? "w-[4.5rem] p-2"
             : "w-56 p-3 lg:w-64 lg:p-4"
@@ -549,7 +549,7 @@ function ShellLayout() {
       {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* MOBILE TOP BAR */}
-        <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 md:hidden">
+        <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/90 active:bg-white/10"
@@ -591,8 +591,8 @@ function ShellLayout() {
         <main
           className={
             location.pathname.startsWith("/caja")
-              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(3.75rem+env(safe-area-inset-bottom))] md:overflow-hidden md:p-0 md:pb-0"
-              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:p-4 md:p-4 md:pb-4 lg:p-6 lg:pb-6"
+              ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:overflow-hidden lg:p-0 lg:pb-0"
+              : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:p-4 lg:p-6 lg:pb-6"
           }
         >
           <Outlet />
@@ -601,7 +601,7 @@ function ShellLayout() {
 
       {/* MOBILE BOTTOM NAV */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white md:hidden"
+        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white lg:hidden"
         style={{
           paddingBottom:
             "env(safe-area-inset-bottom, 0px)",
@@ -655,7 +655,7 @@ function ShellLayout() {
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0 md:hidden"
+          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0 lg:hidden"
         >
           <div className="flex min-h-full flex-col">
             <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white sm:px-5">
@@ -778,7 +778,7 @@ function ShellLayout() {
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0 md:hidden"
+          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0 lg:hidden"
         >
           <div className="flex justify-center pt-3">
             <div className="h-1 w-10 rounded-full bg-[#e0e0e0]" />
