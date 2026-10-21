@@ -1,4 +1,3 @@
-
 /**
  * Caja — LULA OS
  * Ruta: src/routes/_shell.caja.tsx
@@ -82,11 +81,9 @@ function CajaPage() {
   const navigate = useNavigate();
   const [tab, setTab] = useState<Tab>("pos");
 
-  // Solo afecta la UI móvil/tablet: home estilo Zobaze vs POS/Arqueo
   const [mobileView, setMobileView] =
     useState<MobileView>("home");
 
-  // Si se pistoleó un código, abrir el POS de inmediato
   useEffect(() => {
     const openPos = () => {
       setTab("pos");
@@ -105,12 +102,6 @@ function CajaPage() {
       window.removeEventListener("lula-barcode-scan", onScan);
   }, []);
 
-  /**
-   * Compact: home NUEVA VENTA + UI estrecha.
-   * Mismo breakpoint 1024 que sequential en POSPanel.tsx (mantener alineados).
-   * Inicial true = hidratación SSR segura; ancho real solo en useEffect.
-   * Sin pointer/hover. No resetear mobileView ni estado de venta.
-   */
   const SIDE_BY_SIDE_MIN = 768;
   const [isCompact, setIsCompact] = useState(true);
   const isCompactRef = useRef(true);
@@ -119,7 +110,7 @@ function CajaPage() {
     const update = () => {
       if (typeof window === "undefined") return;
 
-      const next = window.innerWidth < SIDE_BY_SIDE_MIN;
+      const isTabletLandscape = window.matchMedia("(orientation: landscape)").matches && window.innerHeight >= 500; const next = window.innerWidth < SIDE_BY_SIDE_MIN && !isTabletLandscape;
 
       if (isCompactRef.current === next) return;
 
@@ -144,7 +135,6 @@ function CajaPage() {
     (branch) => branch.id === branchId,
   );
 
-  // Ventas pendientes = parked_sales existentes (misma lógica del POS)
   const { data: parkedSales = [] } = useQuery({
     queryKey: ["parked-sales-home", branchId],
     enabled: !!branchId && isCompact && mobileView === "home",
@@ -209,12 +199,8 @@ function CajaPage() {
     );
   }
 
-  /* =========================================================
-     MÓVIL — Pantalla de entrada estilo Zobaze
-     ========================================================= */
   const mobileHome = (
     <div className="mx-auto flex w-full max-w-none flex-col gap-3 px-0.5 pt-1">
-      {/* Tarjeta principal NUEVA VENTA — idéntica a referencia Zobaze */}
       <button
         type="button"
         onClick={() => {
@@ -232,7 +218,6 @@ function CajaPage() {
         </span>
       </button>
 
-      {/* AGREGAR NUEVO GASTO — navega a módulo Gastos existente */}
       <button
         type="button"
         onClick={() => navigate({ to: "/gastos" })}
@@ -242,7 +227,6 @@ function CajaPage() {
         <span>AGREGAR NUEVO GASTO</span>
       </button>
 
-      {/* Ventas pendientes (en espera) — parked_sales existente */}
       <div className="mt-1">
         <button
           type="button"
@@ -346,7 +330,6 @@ function CajaPage() {
         )}
       </div>
 
-      {/* Acceso secundario a Arqueo (conserva funcionalidad) */}
       <button
         type="button"
         onClick={() => {
@@ -361,15 +344,10 @@ function CajaPage() {
     </div>
   );
 
-  /* =========================================================
-     CONTENIDO PRINCIPAL (desktop siempre, móvil según vista)
-     ========================================================= */
   const mainContent = (
     <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
-      {/* Header sucursal — desktop / cuando ya está en POS o Arqueo */}
       <div className="flex shrink-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          {/* Botón volver solo en móvil cuando no está en home */}
           <button
             type="button"
             onClick={() => setMobileView("home")}
@@ -397,7 +375,6 @@ function CajaPage() {
         </div>
       </div>
 
-      {/* Tabs — visibles en desktop siempre; en móvil solo cuando ya entró a POS/Arqueo */}
       <div
         className={cn(
           "flex shrink-0 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm",
@@ -441,7 +418,6 @@ function CajaPage() {
 
   return (
     <>
-      {/* Teléfono y tablet (cualquier orientación): home o flujo secuencial */}
       {isCompact ? (
         mobileView === "home" ? (
           mobileHome
