@@ -250,15 +250,7 @@ export function POSPanel({
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
-
-      const tabletLandscape = window.matchMedia(
-        "(orientation: landscape) and (max-height: 900px) and (min-width: 768px)"
-      ).matches;
-
-      const next =
-        window.innerWidth < SIDE_BY_SIDE_MIN ||
-        tabletLandscape;
-
+      const next = window.innerWidth < SIDE_BY_SIDE_MIN;
       const prev = sequentialRef.current;
       if (prev === next) return;
       sequentialRef.current = next;
@@ -3802,4 +3794,9 @@ export function POSPanel({
                               if (
                                 reason === null
                               ) {
-          
+                                return;
+                              }
+
+                              if (
+                                !window.confirm(
+                                  `¿Can
