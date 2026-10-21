@@ -818,7 +818,7 @@ function VentasPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-none space-y-3 pb-2 md:max-w-4xl">
+    <div className="w-full max-w-none space-y-3 pb-2">
       {/* Tabs estilo Zobaze: Recibos de TPV | Pedidos en línea */}
       <div className="flex overflow-hidden rounded-lg border border-[#e0e0e0] bg-white shadow-sm">
         <button
