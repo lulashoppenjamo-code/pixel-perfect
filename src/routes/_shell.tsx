@@ -278,9 +278,8 @@ function ShellLayout() {
     useState(true);
 
   /*
-   * Navegación inferior solo para celular (< md).
-   * Tablet y escritorio usan la sidebar fija.
-   * Misma lógica de permisos/rutas.
+   * Navegación inferior.
+   * Se conserva el filtro de permisos y las rutas existentes.
    */
   const bottomNavItems = [
     {
@@ -335,10 +334,32 @@ function ShellLayout() {
     "Lula Shop";
 
   return (
-    <div className="flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
+    <div className="pixel-shell flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
+      <style>{`
+        @media (orientation: landscape) and (min-width: 768px) {
+          .pixel-shell .pixel-sidebar {
+            display: none !important;
+          }
+
+          .pixel-shell .pixel-topbar {
+            display: flex !important;
+          }
+
+          .pixel-shell .pixel-bottom-nav {
+            display: flex !important;
+          }
+
+          .pixel-shell .pixel-main {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            padding-top: 0.5rem !important;
+          }
+        }
+      `}</style>
+
       {/* SIDEBAR */}
       <aside
-        className={`hidden shrink-0 select-none flex-col justify-between border-r bg-card transition-[width] duration-200 ease-out lg:flex ${
+        className={`pixel-sidebar hidden shrink-0 select-none flex-col justify-between border-r bg-card transition-[width] duration-200 ease-out lg:flex ${
           sidebarCollapsed
             ? "w-[4.5rem] p-2"
             : "w-56 p-3 lg:w-64 lg:p-4"
@@ -548,8 +569,8 @@ function ShellLayout() {
 
       {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* MOBILE TOP BAR */}
-        <header className="zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden">
+        {/* BARRA SUPERIOR */}
+        <header className="pixel-topbar zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden">
           <button
             onClick={() => setSidebarOpen(true)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/90 active:bg-white/10"
@@ -589,19 +610,19 @@ function ShellLayout() {
         </header>
 
         <main
-          className={
+          className={`pixel-main ${
             location.pathname.startsWith("/caja")
               ? "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] pb-[calc(3.75rem+env(safe-area-inset-bottom))] lg:overflow-hidden lg:p-0 lg:pb-0"
               : "min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto bg-[#f5f5f5] p-2.5 pb-[calc(3.75rem+env(safe-area-inset-bottom))] sm:p-4 lg:p-6 lg:pb-6"
-          }
+          }`}
         >
           <Outlet />
         </main>
       </div>
 
-      {/* MOBILE BOTTOM NAV */}
+      {/* NAVEGACIÓN INFERIOR */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white lg:hidden"
+        className="pixel-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white lg:hidden"
         style={{
           paddingBottom:
             "env(safe-area-inset-bottom, 0px)",
@@ -651,11 +672,11 @@ function ShellLayout() {
         )}
       </nav>
 
-      {/* MOBILE SIDE MENU */}
+      {/* MENÚ LATERAL SUPERPUESTO */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0 lg:hidden"
+          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0"
         >
           <div className="flex min-h-full flex-col">
             <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white sm:px-5">
@@ -774,11 +795,11 @@ function ShellLayout() {
         </SheetContent>
       </Sheet>
 
-      {/* MÁS */}
+      {/* MÁS OPCIONES */}
       <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
         <SheetContent
           side="bottom"
-          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0 lg:hidden"
+          className="max-h-[88dvh] overflow-y-auto overflow-x-hidden rounded-t-2xl border-0 p-0"
         >
           <div className="flex justify-center pt-3">
             <div className="h-1 w-10 rounded-full bg-[#e0e0e0]" />
