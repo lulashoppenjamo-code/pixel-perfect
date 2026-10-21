@@ -111,7 +111,7 @@ function CajaPage() {
    * Inicial true = hidratación SSR segura; ancho real solo en useEffect.
    * Sin pointer/hover. No resetear mobileView ni estado de venta.
    */
-  const SIDE_BY_SIDE_MIN = 1024;
+  const SIDE_BY_SIDE_MIN = 768;
   const [isCompact, setIsCompact] = useState(true);
   const isCompactRef = useRef(true);
 
