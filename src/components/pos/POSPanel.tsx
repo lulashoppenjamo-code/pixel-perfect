@@ -238,7 +238,7 @@ export function POSPanel({
    * Inicial true (SSR). Sin pointer/hover.
    * No modifica cart, method, importes ni dispara checkout.
    */
-  const SIDE_BY_SIDE_MIN = 1024;
+  const SIDE_BY_SIDE_MIN =768;
   const [sequential, setSequential] = useState(true);
   const sequentialRef = useRef(true);
   const cartLengthRef = useRef(0);
