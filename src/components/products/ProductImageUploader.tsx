@@ -103,19 +103,12 @@ export function ProductImageUploader({
         throw uploadError;
       }
 
-      const { data: publicData } = supabase.storage
-        .from(BUCKET)
-        .getPublicUrl(path);
-
-      const imageUrl = publicData.publicUrl;
-
-      if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) {
-        throw new Error("Supabase no devolvió una URL válida.");
-      }
-
-      // El formulario padre conserva la URL y la guarda
+      // El bucket es privado: se guarda la ruta del objeto en
+      // products.image_url y ProductImage genera una URL firmada
+      // temporal al mostrarla.
+      // El formulario padre conserva la ruta y la guarda
       // al pulsar Guardar. No modificar products aquí.
-      onUploaded(imageUrl);
+      onUploaded(path);
 
       toast.success(
         "Imagen cargada. Pulsa Guardar para conservarla en el producto.",

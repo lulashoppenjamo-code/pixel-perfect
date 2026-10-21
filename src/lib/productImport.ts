@@ -57,6 +57,14 @@ export function validImageUrl(value: string): boolean {
   } catch { return false; }
 }
 
+// Acepta una URL http/https o una ruta de objeto del bucket product-images
+// ("<producto>/<archivo>"), que ProductImage resuelve con URL firmada.
+export function validImageRef(value: string): boolean {
+  if (validImageUrl(value)) return true;
+  const v = value.trim();
+  return !v.startsWith("data:") && !v.startsWith("blob:") && /^[^\s/][^\s]*\/[^\s]+$/.test(v);
+}
+
 // Decimal comma/dot and grouped thousands; never strip arbitrary invalid text to zero.
 export function parseImportNumber(value: string): number {
   let text = value.trim().replace(/^(?:MXN|USD|EUR|\$|€)\s*/i, "").replace(/\s*(?:MXN|USD|EUR|\$|€)$/i, "").replace(/[\s\u00a0]/g, "");

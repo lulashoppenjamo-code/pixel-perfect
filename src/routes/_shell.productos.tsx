@@ -69,7 +69,7 @@ import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
 import { ProductImage } from "@/components/ProductImage";
 import { ProductImageUploader } from "@/components/products/ProductImageUploader";
-import { validImageUrl } from "@/lib/productImport";
+import { validImageRef } from "@/lib/productImport";
 
 export const Route = createFileRoute("/_shell/productos")({
   head: () => ({
@@ -803,8 +803,8 @@ function ProductosPage() {
         return;
       }
 
-      if (form.image_url.trim() && !validImageUrl(form.image_url.trim())) {
-        throw new Error("URL de imagen inválida. Usa una dirección completa http/https.");
+      if (form.image_url.trim() && !validImageRef(form.image_url.trim())) {
+        throw new Error("Imagen inválida. Usa una URL http/https o una foto subida desde el dispositivo.");
       }
       const payload = {
         sku: form.sku.trim() || null,
@@ -991,8 +991,8 @@ function ProductosPage() {
         return;
       }
 
-      if (variantForm.image_url.trim() && !validImageUrl(variantForm.image_url.trim())) {
-        throw new Error("URL de imagen de variante inválida. Usa http/https.");
+      if (variantForm.image_url.trim() && !validImageRef(variantForm.image_url.trim())) {
+        throw new Error("Imagen de variante inválida. Usa una URL http/https o una foto subida desde el dispositivo.");
       }
       const payload = {
         product_id: form.id,
@@ -1670,10 +1670,10 @@ function ProductosPage() {
                       value={form.image_url}
                       placeholder="https://…"
                       disabled={priceOnly || !(canCreateProduct || canEditProduct) || saveProduct.isPending}
-                      aria-invalid={Boolean(form.image_url.trim() && !validImageUrl(form.image_url.trim()))}
+                      aria-invalid={Boolean(form.image_url.trim() && !validImageRef(form.image_url.trim()))}
                       onChange={(event) => setForm((f) => ({ ...f, image_url: event.target.value }))}
                     />
-                    {form.image_url.trim() && !validImageUrl(form.image_url.trim()) && <p className="text-xs text-destructive">URL inválida: usa http/https.</p>}
+                    {form.image_url.trim() && !validImageRef(form.image_url.trim()) && <p className="text-xs text-destructive">Imagen inválida: usa una URL http/https o sube una foto.</p>}
                     {form.id ? (
                       <ProductImageUploader
                         productId={form.id}
