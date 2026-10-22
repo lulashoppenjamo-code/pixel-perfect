@@ -16,6 +16,9 @@
  * - AGREGAR NUEVO GASTO (navega a /gastos, lógica existente)
  * - Ventas pendientes vía listParkedSales (sin lógica nueva)
  * No se toca el motor del POS ni de caja.
+ *
+ * Tablet y celular usan el mismo flujo compacto (home → POS).
+ * Solo escritorio grande (>= 1280) usa layout expandido.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -102,7 +105,9 @@ function CajaPage() {
       window.removeEventListener("lula-barcode-scan", onScan);
   }, []);
 
-  const SIDE_BY_SIDE_MIN = 768;
+  /** Celular + tablet (portrait y landscape) = flujo compacto.
+   *  Solo escritorio grande usa layout expandido. */
+  const SIDE_BY_SIDE_MIN = 1280;
   const [isCompact, setIsCompact] = useState(true);
   const isCompactRef = useRef(true);
 
@@ -110,7 +115,7 @@ function CajaPage() {
     const update = () => {
       if (typeof window === "undefined") return;
 
-      const isTabletLandscape = window.matchMedia("(orientation: landscape)").matches && window.innerHeight >= 500; const next = window.innerWidth < SIDE_BY_SIDE_MIN && !isTabletLandscape;
+      const next = window.innerWidth < SIDE_BY_SIDE_MIN;
 
       if (isCompactRef.current === next) return;
 
