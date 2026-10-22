@@ -2677,7 +2677,13 @@ export function POSPanel({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-2 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
+            <div
+              className="grid gap-1.5 sm:gap-2"
+              style={{
+                gridTemplateColumns:
+                  "repeat(auto-fill, minmax(min(104px, 100%), 1fr))",
+              }}
+            >
               {filtered.map((product) => {
                 const outOfStock = product.stock <= 0;
                 const cartQty = cart
@@ -2693,29 +2699,34 @@ export function POSPanel({
                       (settings?.blockWithoutStock && outOfStock)
                     }
                     onClick={() => addProduct(product)}
-                    className="group relative flex flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
+                    className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
                   >
                     <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
                       {outOfStock && (
-                        <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
+                        <span className="absolute left-1 top-1 z-10 rounded-full bg-[#fce4ec] px-1.5 py-0.5 text-[9px] font-bold text-[#c2185b] shadow-sm">
                           Agotado
                         </span>
                       )}
                       {cartQty > 0 && (
-                        <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-[#1a73e8] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                        <span className="absolute right-1 top-1 z-10 rounded-full bg-[#1a73e8] px-1.5 py-0.5 text-[9px] font-bold text-white shadow-sm">
                           +{cartQty}
                         </span>
                       )}
-                      <div className="flex h-full w-full items-center justify-center p-2 text-3xl leading-none sm:text-4xl">
-                        <ProductImage src={product.image_url} emoji={product.emoji} name={product.name} className="h-full w-full object-contain" />
+                      <div className="flex h-full w-full items-center justify-center p-1.5 text-2xl leading-none sm:p-2 sm:text-3xl">
+                        <ProductImage
+                          src={product.image_url}
+                          emoji={product.emoji}
+                          name={product.name}
+                          className="h-full w-full object-contain"
+                        />
                       </div>
                     </div>
 
-                    <div className="flex min-h-[4.25rem] flex-1 flex-col justify-between px-1.5 pb-2 pt-1.5">
-                      <p className="line-clamp-2 text-center text-[11px] font-bold leading-snug text-[#212121] sm:text-[12px]">
+                    <div className="flex min-h-[3.5rem] flex-1 flex-col justify-between px-1 pb-1.5 pt-1">
+                      <p className="line-clamp-2 text-center text-[10px] font-bold leading-snug text-[#212121] sm:text-[11px]">
                         {product.name}
                       </p>
-                      <p className="mt-1 text-center text-[13px] font-bold leading-none text-[#1a73e8] sm:text-[14px]">
+                      <p className="mt-0.5 text-center text-[12px] font-bold leading-none text-[#1a73e8] sm:text-[13px]">
                         {money(product.price)}
                       </p>
                     </div>
