@@ -18,7 +18,7 @@
  * No se toca el motor del POS ni de caja.
  *
  * Tablet y celular usan el mismo flujo compacto (home → POS).
- * Solo escritorio grande (>= 1280) usa layout expandido.
+ * Solo escritorio grande (>= 1600) usa layout expandido.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -107,7 +107,7 @@ function CajaPage() {
 
   /** Celular + tablet (portrait y landscape) = flujo compacto.
    *  Solo escritorio grande usa layout expandido. */
-  const SIDE_BY_SIDE_MIN = 1280;
+  const SIDE_BY_SIDE_MIN = 1600;
   const [isCompact, setIsCompact] = useState(true);
   const isCompactRef = useRef(true);
 
