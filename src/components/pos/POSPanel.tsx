@@ -235,11 +235,11 @@ export function POSPanel({
   /**
    * sequential: pasos shop/cart/pay/cash/mixed/success.
    * Tablet (portrait + landscape) usa flujo secuencial igual que celular (estilo Zobaze).
-   * Solo escritorio grande (>= 1100) usa side-by-side.
+   * Solo escritorio grande (>= 1280) usa side-by-side.
    * Inicial true (SSR). Sin pointer/hover.
    * No modifica cart, method, importes ni dispara checkout.
    */
-  const SIDE_BY_SIDE_MIN = 1100;
+  const SIDE_BY_SIDE_MIN = 1280;
   const [sequential, setSequential] = useState(true);
   const sequentialRef = useRef(true);
   const cartLengthRef = useRef(0);
@@ -2677,7 +2677,7 @@ export function POSPanel({
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-4 sm:gap-2 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-7 2xl:grid-cols-8">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-2 md:grid-cols-5 lg:grid-cols-5 xl:grid-cols-6">
               {filtered.map((product) => {
                 const outOfStock = product.stock <= 0;
                 const cartQty = cart
@@ -2695,7 +2695,7 @@ export function POSPanel({
                     onClick={() => addProduct(product)}
                     className="group relative flex flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
                   >
-                    <div className="relative flex aspect-[1/1] max-h-[88px] sm:max-h-[96px] md:max-h-[100px] items-center justify-center overflow-hidden bg-[#fafafa]">
+                    <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
                       {outOfStock && (
                         <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
                           Agotado
@@ -2706,19 +2706,16 @@ export function POSPanel({
                           +{cartQty}
                         </span>
                       )}
-                      <ProductImage src={product.image_url} emoji={product.emoji} name={product.name} />
+                      <div className="flex h-full w-full items-center justify-center p-2 text-3xl leading-none sm:text-4xl">
+                        <ProductImage src={product.image_url} emoji={product.emoji} name={product.name} className="h-full w-full object-contain" />
+                      </div>
                     </div>
 
-                    <div className="flex flex-1 flex-col px-1.5 pb-1.5 pt-1">
-                      <p className="line-clamp-2 min-h-[1.9rem] text-center text-[11px] font-bold leading-snug text-[#212121] sm:text-[12px]">
+                    <div className="flex min-h-[4.25rem] flex-1 flex-col justify-between px-1.5 pb-2 pt-1.5">
+                      <p className="line-clamp-2 text-center text-[11px] font-bold leading-snug text-[#212121] sm:text-[12px]">
                         {product.name}
                       </p>
-                      {product.sku ? (
-                        <p className="mt-0.5 truncate text-center text-[10px] font-medium text-[#9e9e9e]">
-                          {product.sku}
-                        </p>
-                      ) : null}
-                      <p className="mt-auto pt-0.5 text-center text-[13px] font-bold leading-none text-[#1a73e8] sm:text-[14px]">
+                      <p className="mt-1 text-center text-[13px] font-bold leading-none text-[#1a73e8] sm:text-[14px]">
                         {money(product.price)}
                       </p>
                     </div>
