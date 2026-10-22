@@ -366,21 +366,32 @@ function CajaPage() {
 
   const mainContent = (
     <div className="flex h-full min-h-0 flex-col gap-1 overflow-hidden">
-      <div className="flex shrink-0 items-center justify-between gap-3 px-0.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setMobileView("home")}
-            className={cn(
-              "flex h-9 w-9 items-center justify-center rounded-full text-[#1a73e8]",
-              !isCompact && "hidden",
-            )}
-            aria-label="Volver"
-          >
-            <ArrowLeft className="h-5 w-5" />
-          </button>
+      <div className="flex shrink-0 items-center gap-1 px-0.5">
+        <button
+          type="button"
+          onClick={() => setMobileView("home")}
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#1a73e8]",
+            !isCompact && "hidden",
+          )}
+          aria-label="Volver"
+        >
+          <ArrowLeft className="h-5 w-5" />
+        </button>
 
-          <div className="min-w-0">
+        {/* Tocar aquí abre/cierra las pestañas (barra blanca oculta) */}
+        <button
+          type="button"
+          onClick={() => setTabsOpen((v) => !v)}
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg py-1 pr-2 text-left active:bg-[#f1f3f4]"
+          aria-expanded={tabsOpen}
+          aria-label={
+            tabsOpen
+              ? "Ocultar Punto de venta y Arqueo"
+              : "Mostrar Punto de venta y Arqueo"
+          }
+        >
+          <div className="min-w-0 flex-1">
             <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
               Sucursal activa
             </p>
@@ -388,70 +399,46 @@ function CajaPage() {
               {activeBranch.name}
             </p>
           </div>
-        </div>
+          {tabsOpen ? (
+            <ChevronUp className="h-4 w-4 shrink-0 text-[#9aa3b8]" />
+          ) : (
+            <ChevronDown className="h-4 w-4 shrink-0 text-[#9aa3b8]" />
+          )}
+        </button>
       </div>
 
-      {/* Manija: jalar para mostrar/ocultar Punto de venta · Arqueo */}
-      {mobileView !== "home" && (
-        <div className="shrink-0">
-          <button
-            type="button"
-            onClick={() => setTabsOpen((v) => !v)}
-            className="flex w-full flex-col items-center gap-0.5 py-1.5 active:bg-[#f1f3f4]"
-            aria-expanded={tabsOpen}
-            aria-label={
-              tabsOpen
-                ? "Ocultar pestañas"
-                : "Mostrar pestañas Punto de venta y Arqueo"
-            }
-          >
-            <span className="h-1 w-10 rounded-full bg-[#c5cad3]" />
-            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#9aa3b8]">
-              {tabsOpen ? (
-                <>
-                  Ocultar <ChevronUp className="h-3 w-3" />
-                </>
-              ) : (
-                <>
-                  {tab === "pos" ? "Punto de venta" : "Arqueo"}{" "}
-                  <ChevronDown className="h-3 w-3" />
-                </>
+      {/* Pestañas: totalmente ocultas hasta tocar Sucursal activa */}
+      <div
+        className={cn(
+          "shrink-0 overflow-hidden transition-all duration-200 ease-out",
+          tabsOpen
+            ? "max-h-16 opacity-100"
+            : "max-h-0 opacity-0 pointer-events-none",
+        )}
+      >
+        <div className="flex gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+          {tabs.map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => {
+                setTab(id);
+                setMobileView(id);
+                setTabsOpen(false);
+              }}
+              className={cn(
+                "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all",
+                tab === id
+                  ? "bg-[#1a73e8] text-white shadow-sm"
+                  : "text-[#5f6368] hover:bg-[#f1f3f4]",
               )}
-            </span>
-          </button>
-
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-200 ease-out",
-              tabsOpen
-                ? "max-h-16 opacity-100"
-                : "max-h-0 opacity-0 pointer-events-none",
-            )}
-          >
-            <div className="flex shrink-0 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
-              {tabs.map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => {
-                    setTab(id);
-                    setMobileView(id);
-                  }}
-                  className={cn(
-                    "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all",
-                    tab === id
-                      ? "bg-[#1a73e8] text-white shadow-sm"
-                      : "text-[#5f6368] hover:bg-[#f1f3f4]",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
+            >
+              <Icon className="h-4 w-4" />
+              {label}
+            </button>
+          ))}
         </div>
-      )}
+      </div>
 
       <div className="min-h-0 flex-1">
         {tab === "pos" ? (
