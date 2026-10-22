@@ -2485,10 +2485,6 @@ export function POSPanel({
     },
   });
 
-  useEffect(() => {
-    searchRef.current?.focus();
-  }, []);
-
   const canSell =
     !settings?.requireOpenCash ||
     !!openSession;
