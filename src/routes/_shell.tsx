@@ -115,7 +115,7 @@ function ShellLayout() {
    */
 
   // CAMBIO 1: incluir los permisos del usuario autenticado.
-  const { user, roles, permissions, signOut } = useAuth();
+  const { user, profile, roles, permissions, signOut } = useAuth();
 
   const {
     branchId,
@@ -332,6 +332,11 @@ function ShellLayout() {
   const activeBranchName =
     branches.find((b) => b.id === branchId)?.name ||
     "Lula Shop";
+
+  const sessionName =
+    profile?.full_name?.trim() ||
+    user?.email?.split("@")[0] ||
+    "";
 
   return (
     <div className="pixel-shell flex h-[100dvh] min-h-0 min-w-0 overflow-hidden bg-background">
@@ -584,7 +589,9 @@ function ShellLayout() {
               {location.pathname.startsWith("/productos")
                 ? "Artículos"
                 : location.pathname.startsWith("/caja")
-                  ? activeBranchName
+                  ? sessionName
+                    ? `${activeBranchName} · ${sessionName}`
+                    : activeBranchName
                   : location.pathname.startsWith("/reportes")
                     ? "Informes"
                     : location.pathname.startsWith("/ventas")
