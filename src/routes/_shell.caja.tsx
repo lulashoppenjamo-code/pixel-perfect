@@ -20,8 +20,9 @@
  * Tablet y celular usan el mismo flujo compacto (home → POS).
  * Solo escritorio grande (>= 1600) usa layout expandido.
  *
- * Pestañas Punto de venta / Arqueo colapsables (jalando la pestaña).
- * Nombre de quien tiene la sesión junto a la sucursal.
+ * Pestañas Punto de venta / Arqueo: barra blanca oculta por defecto;
+ * se abre jalando la manija hacia abajo.
+ * El nombre de sesión va en el banner azul del shell (_shell.tsx).
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -41,6 +42,8 @@ import {
   Receipt,
   ChevronRight,
   PauseCircle,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { POSPanel } from "@/components/pos/POSPanel";
 import { CashDrawerPanel } from "@/components/cash/CashDrawerPanel";
@@ -90,10 +93,14 @@ function CajaPage() {
   const [mobileView, setMobileView] =
     useState<MobileView>("home");
 
+  /** Barra blanca de pestañas oculta; se abre jalando la manija. */
+  const [tabsOpen, setTabsOpen] = useState(false);
+
   useEffect(() => {
     const openPos = () => {
       setTab("pos");
       setMobileView("pos");
+      setTabsOpen(false);
     };
 
     if (consumeOpenPosFlag()) {
@@ -138,6 +145,7 @@ function CajaPage() {
   }, []);
 
   const { branchId, branches, loading } = useBranch();
+
   const activeBranch = branches.find(
     (branch) => branch.id === branchId,
   );
@@ -213,7 +221,8 @@ function CajaPage() {
         onClick={() => {
           setTab("pos");
           setMobileView("pos");
-            }}
+          setTabsOpen(false);
+        }}
         className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-6 py-12 shadow-sm transition active:scale-[0.985]"
       >
         <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#34a853] text-white shadow-md">
@@ -240,7 +249,8 @@ function CajaPage() {
           onClick={() => {
             setTab("pos");
             setMobileView("pos");
-                }}
+            setTabsOpen(false);
+          }}
           className="mb-2 flex w-full items-center justify-between gap-2 px-0.5"
         >
           <p className="text-sm font-semibold text-[#212121]">
@@ -284,7 +294,8 @@ function CajaPage() {
                   onClick={() => {
                     setTab("pos");
                     setMobileView("pos");
-                                }}
+                    setTabsOpen(false);
+                  }}
                   className={cn(
                     "flex w-full items-center gap-3 px-4 py-3.5 text-left active:bg-[#f8f9fa]",
                     idx < Math.min(parkedSales.length, 5) - 1 &&
@@ -327,7 +338,8 @@ function CajaPage() {
                 onClick={() => {
                   setTab("pos");
                   setMobileView("pos");
-                            }}
+                  setTabsOpen(false);
+                }}
                 className="w-full border-t border-[#f0f0f0] py-2.5 text-center text-xs font-semibold text-[#1a73e8]"
               >
                 Ver las {parkedSales.length} ventas en espera
@@ -342,6 +354,7 @@ function CajaPage() {
         onClick={() => {
           setTab("arqueo");
           setMobileView("arqueo");
+          setTabsOpen(true);
         }}
         className="mt-1 flex items-center justify-center gap-2 rounded-xl border border-transparent bg-transparent px-4 py-2.5 text-sm font-medium text-[#1a73e8] active:bg-[#e8f0fe]"
       >
@@ -376,11 +389,69 @@ function CajaPage() {
             </p>
           </div>
         </div>
-
-        <div className="hidden rounded-full bg-[#e8f0fe] px-3 py-1.5 text-xs font-semibold text-[#1a73e8] sm:block">
-          Caja
-        </div>
       </div>
+
+      {/* Manija: jalar para mostrar/ocultar Punto de venta · Arqueo */}
+      {mobileView !== "home" && (
+        <div className="shrink-0">
+          <button
+            type="button"
+            onClick={() => setTabsOpen((v) => !v)}
+            className="flex w-full flex-col items-center gap-0.5 py-1.5 active:bg-[#f1f3f4]"
+            aria-expanded={tabsOpen}
+            aria-label={
+              tabsOpen
+                ? "Ocultar pestañas"
+                : "Mostrar pestañas Punto de venta y Arqueo"
+            }
+          >
+            <span className="h-1 w-10 rounded-full bg-[#c5cad3]" />
+            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-[#9aa3b8]">
+              {tabsOpen ? (
+                <>
+                  Ocultar <ChevronUp className="h-3 w-3" />
+                </>
+              ) : (
+                <>
+                  {tab === "pos" ? "Punto de venta" : "Arqueo"}{" "}
+                  <ChevronDown className="h-3 w-3" />
+                </>
+              )}
+            </span>
+          </button>
+
+          <div
+            className={cn(
+              "overflow-hidden transition-all duration-200 ease-out",
+              tabsOpen
+                ? "max-h-16 opacity-100"
+                : "max-h-0 opacity-0 pointer-events-none",
+            )}
+          >
+            <div className="flex shrink-0 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+              {tabs.map(({ id, label, icon: Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => {
+                    setTab(id);
+                    setMobileView(id);
+                  }}
+                  className={cn(
+                    "flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-semibold transition-all",
+                    tab === id
+                      ? "bg-[#1a73e8] text-white shadow-sm"
+                      : "text-[#5f6368] hover:bg-[#f1f3f4]",
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1">
         {tab === "pos" ? (
