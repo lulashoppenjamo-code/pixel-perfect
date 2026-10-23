@@ -1,12 +1,13 @@
 
 /**
- * Import / Export Excel — Inventario compartido LULA OS (RÁPIDO)
+ * Import / Export Excel — LULA OS
  *
  * Usa RPC bulk_import_products por lotes de 500:
- * categorías, productos, precios, costos, códigos y stock central.
+ * categorías, productos, precios, costos, códigos y existencias
+ * de la sucursal seleccionada.
  *
- * Requiere migración:
- * supabase/migrations/20261007220000_bulk_import_products.sql
+ * Requiere la función SQL:
+ * bulk_import_products(jsonb, uuid)
  */
 
 import { useRef, useState } from "react";
@@ -75,13 +76,11 @@ function sanitizeJsonText(value: string | null | undefined): string {
   for (let i = 0; i < value.length; i++) {
     const code = value.charCodeAt(i);
 
-    // PostgreSQL no admite el carácter NUL en texto.
     if (code === 0) {
       output += "\uFFFD";
       continue;
     }
 
-    // Sustituto alto: debe ir seguido de un sustituto bajo.
     if (code >= 0xd800 && code <= 0xdbff) {
       const next = value.charCodeAt(i + 1);
 
@@ -95,7 +94,6 @@ function sanitizeJsonText(value: string | null | undefined): string {
       continue;
     }
 
-    // Un sustituto bajo aislado también es inválido.
     if (code >= 0xdc00 && code <= 0xdfff) {
       output += "\uFFFD";
       continue;
@@ -139,7 +137,11 @@ export function ImportExportPanel() {
     profile?.branch_id ??
     (isAdmin || isManager ? branches[0]?.id ?? null : null);
 
-  const { data: existingProducts = [], isPending: loadingExisting, isError: existingError } = useQuery({
+  const {
+    data: existingProducts = [],
+    isPending: loadingExisting,
+    isError: existingError,
+  } = useQuery({
     queryKey: ["import-existing-products-shared"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -163,17 +165,20 @@ export function ImportExportPanel() {
 
     try {
       const parsed = await analyzeProductFile(file, existingProducts);
+
       setRows(parsed.rows);
       setDetected(parsed.detected);
       setUnsupported(parsed.unsupported);
       setLastFailures([]);
       setProgress({ current: 0, total: 0 });
       setPhase("");
+
       toast.success(`${parsed.rows.length} filas analizadas`);
     } catch (error) {
       setRows([]);
       setDetected([]);
       setUnsupported([]);
+
       toast.error(
         error instanceof Error ? error.message : "Error al leer archivo",
       );
@@ -215,16 +220,35 @@ export function ImportExportPanel() {
         throw new Error("No hay filas válidas para importar");
       }
 
-      // The existing deployed RPC ignores actions and zeros omitted fields.
-      // An empty preflight does not mutate data; require the reviewed import contract.
-      const { data: contract, error: contractError } = await supabase.rpc("bulk_import_products", { _items: [] });
-      if (contractError || !contract || typeof contract !== "object" || Array.isArray(contract) || contract["import_contract"] !== "selective-v1") {
-        throw new Error("Importación bloqueada: falta habilitar el contrato seguro selective-v1 y shared_inventory. No se enviaron productos ni se escribió stock. Requiere autorización de la actualización SQL pendiente.");
+      // La comprobación vacía valida el contrato sin importar ni modificar productos.
+      const { data: contract, error: contractError } =
+        await supabase.rpc("bulk_import_products", { _items: [] });
+
+      if (
+        contractError ||
+        !contract ||
+        typeof contract !== "object" ||
+        Array.isArray(contract) ||
+        contract["import_contract"] !== "selective-v1"
+      ) {
+        throw new Error(
+          "Importación bloqueada: la función SQL no confirmó el contrato seguro selective-v1. No se enviaron productos ni se modificó el inventario.",
+        );
       }
+
       const sanitizedRows = workable.map((row) => {
         const payload = buildImportPayload(row, action);
-        if (!payload) throw new Error(`Fila ${row.row}: acción inválida`);
-        return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, typeof value === "string" ? sanitizeJsonText(value) : value]));
+
+        if (!payload) {
+          throw new Error(`Fila ${row.row}: acción inválida`);
+        }
+
+        return Object.fromEntries(
+          Object.entries(payload).map(([key, value]) => [
+            key,
+            typeof value === "string" ? sanitizeJsonText(value) : value,
+          ]),
+        );
       });
 
       const batches = chunkArray(sanitizedRows, BATCH_SIZE);
@@ -260,12 +284,23 @@ export function ImportExportPanel() {
             error.code === "PGRST202"
           ) {
             throw new Error(
-              "Falta instalar la función bulk_import_products en Supabase. Ejecuta la migración SQL que te entregamos.",
+              "Falta instalar o actualizar la función bulk_import_products en Supabase. La importación no puede continuar.",
             );
           }
 
-          failures.push(...batches.slice(i).flat().map((row) => ({ row: Number(row["row"]), nombre: String(row["nombre"] ?? ""), message: `Lote no confirmado: ${error.message}` })));
+          failures.push(
+            ...batches
+              .slice(i)
+              .flat()
+              .map((row) => ({
+                row: Number(row["row"]),
+                nombre: String(row["nombre"] ?? ""),
+                message: `Lote no confirmado: ${error.message}`,
+              })),
+          );
+
           setLastFailures(failures);
+
           throw new Error(
             `Error al importar el lote ${i + 1}/${batches.length}: ${error.message ?? "Error desconocido"}`,
           );
@@ -275,7 +310,11 @@ export function ImportExportPanel() {
           created?: number;
           updated?: number;
           stock_set?: number;
-          errors?: { row?: number; nombre?: string; error?: string }[];
+          errors?: {
+            row?: number;
+            nombre?: string;
+            error?: string;
+          }[];
         };
 
         created += Number(result.created ?? 0);
@@ -308,10 +347,14 @@ export function ImportExportPanel() {
     },
 
     onSuccess: (result) => {
-      const notify = result.failures || stats.error ? toast.warning : toast.success;
+      const notify =
+        result.failures || stats.error ? toast.warning : toast.success;
+
       notify(
         `Resultado: ${result.created} nuevos, ${result.updated} actualizados, stock en ${result.stockSet}` +
-          (result.failures || stats.error ? ` · ${result.failures + stats.error} con error; no fue una importación completa` : ""),
+          (result.failures || stats.error
+            ? ` · ${result.failures + stats.error} con error; no fue una importación completa`
+            : ""),
       );
 
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
@@ -326,10 +369,13 @@ export function ImportExportPanel() {
     onError: (error: Error) => {
       setPhase("");
       toast.error(error.message);
+
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["categories"] });
-      void qc.invalidateQueries({ queryKey: ["import-existing-products-shared"] });
+      void qc.invalidateQueries({
+        queryKey: ["import-existing-products-shared"],
+      });
       void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
     },
   });
@@ -348,7 +394,7 @@ export function ImportExportPanel() {
 
         <p className="text-xs text-[#757575]">
           Importación masiva por lotes de {BATCH_SIZE}: categorías, códigos,
-          precios, costos y stock central en segundos.
+          precios, costos y existencias de la sucursal seleccionada.
         </p>
       </CardHeader>
 
@@ -357,8 +403,8 @@ export function ImportExportPanel() {
           <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
             <p>
-              Selecciona una sucursal arriba (solo contextualiza el movimiento;
-              el stock es central).
+              Selecciona una sucursal arriba para registrar las existencias en
+              esa sucursal.
             </p>
           </div>
         )}
@@ -378,7 +424,12 @@ export function ImportExportPanel() {
             type="button"
             variant="outline"
             className="min-h-11 rounded-xl"
-            disabled={parsing || loadingExisting || existingError || doImport.isPending}
+            disabled={
+              parsing ||
+              loadingExisting ||
+              existingError ||
+              doImport.isPending
+            }
             onClick={() => fileRef.current?.click()}
           >
             <Upload className="mr-2 h-4 w-4" />
@@ -398,7 +449,13 @@ export function ImportExportPanel() {
           />
         </div>
 
-        {existingError && <p className="text-sm text-destructive">No se pudo consultar el catálogo. Vuelve a cargar la página antes de elegir un archivo.</p>}
+        {existingError && (
+          <p className="text-sm text-destructive">
+            No se pudo consultar el catálogo. Vuelve a cargar la página antes
+            de elegir un archivo.
+          </p>
+        )}
+
         {rows.length > 0 && (
           <>
             <div className="flex flex-wrap gap-2">
@@ -420,15 +477,63 @@ export function ImportExportPanel() {
             </div>
 
             <div className="space-y-2 text-sm">
-              <p><strong>Campos detectados:</strong> {detected.join(", ") || "Ninguno"}</p>
-              {unsupported.length > 0 && <p className="text-destructive"><strong>No se importarán:</strong> {unsupported.join(", ")}. No existe equivalencia en este flujo; las filas con variantes se rechazan.</p>}
-              <p className="text-muted-foreground">Stock = existencia final. Campos vacíos se conservan en productos existentes. Unidad e imagen requieren el contrato SQL pendiente.</p>
+              <p>
+                <strong>Campos detectados:</strong>{" "}
+                {detected.join(", ") || "Ninguno"}
+              </p>
+
+              {unsupported.length > 0 && (
+                <p className="text-destructive">
+                  <strong>No se importarán:</strong>{" "}
+                  {unsupported.join(", ")}. No existe equivalencia en este
+                  flujo; las filas con variantes se rechazan.
+                </p>
+              )}
+
+              <p className="text-muted-foreground">
+                Stock = existencia final de la sucursal seleccionada. Los
+                campos vacíos conservan los valores existentes cuando la
+                función SQL admite esa regla. Este flujo no importa unidad ni
+                imagen; las filas con variantes se rechazan.
+              </p>
+
               <div className="max-h-64 overflow-auto border border-border rounded-lg">
-                <table className="w-full text-left text-xs"><thead><tr><th className="p-2">Fila</th><th className="p-2">Producto</th><th className="p-2">Estado / error</th></tr></thead><tbody>
-                  {rows.slice(0, 100).map((row) => <tr key={row.row} className="border-t border-border"><td className="p-2">{row.row}</td><td className="p-2 break-words">{row.nombre || row.sku || row.codigo_barras}</td><td className="p-2 break-words">{row.error ?? (row.status === "existing" ? "Existente" : "Nuevo")}</td></tr>)}
-                </tbody></table>
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr>
+                      <th className="p-2">Fila</th>
+                      <th className="p-2">Producto</th>
+                      <th className="p-2">Estado / error</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 100).map((row) => (
+                      <tr
+                        key={row.row}
+                        className="border-t border-border"
+                      >
+                        <td className="p-2">{row.row}</td>
+                        <td className="p-2 break-words">
+                          {row.nombre || row.sku || row.codigo_barras}
+                        </td>
+                        <td className="p-2 break-words">
+                          {row.error ??
+                            (row.status === "existing"
+                              ? "Existente"
+                              : "Nuevo")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              {rows.length > 100 && <p>Vista previa: primeras 100 de {rows.length} filas. El reporte contiene todas las filas con error.</p>}
+
+              {rows.length > 100 && (
+                <p>
+                  Vista previa: primeras 100 de {rows.length} filas. El
+                  reporte contiene todas las filas con error.
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -481,7 +586,13 @@ export function ImportExportPanel() {
             <Button
               type="button"
               className="min-h-12 w-full rounded-xl bg-[#34a853] text-[15px] font-bold text-white hover:bg-[#2d8f47]"
-              disabled={doImport.isPending || !branchId || stats.valid + (action === "skip_existing" ? 0 : stats.existing) === 0}
+              disabled={
+                doImport.isPending ||
+                !branchId ||
+                stats.valid +
+                  (action === "skip_existing" ? 0 : stats.existing) ===
+                  0
+              }
               onClick={() => doImport.mutate()}
             >
               {doImport.isPending
