@@ -127,15 +127,22 @@ export function validImageRef(value: string): boolean {
 /**
  * Admite coma o punto decimal y separadores de miles.
  * No convierte texto inválido en cero.
+ * Versión segura sin símbolos especiales en las regex.
  */
 export function parseImportNumber(value: string): number {
   let text = String(value ?? "")
     .trim()
     .replace(/[\s\u00a0]/g, "");
 
-  // Quitar símbolos de moneda
-  text = text.replace(/^(MXN|USD|EUR|\$|€)\s*/i, "");
-  text = text.replace(/\s*(MXN|USD|EUR|\\( |€) \)/i, "");
+  // Quitar símbolos de moneda de forma segura
+  text = text.replace(/^(MXN|USD|EUR)\s*/i, "");
+  text = text.replace(/\s*(MXN|USD|EUR)$/i, "");
+  if (text.startsWith("$") || text.startsWith("€")) {
+    text = text.slice(1).trim();
+  }
+  if (text.endsWith("$") || text.endsWith("€")) {
+    text = text.slice(0, -1).trim();
+  }
 
   if (!/^-?\d+(?:[.,]\d+)*$/.test(text)) {
     return NaN;
@@ -153,7 +160,9 @@ export function parseImportNumber(value: string): number {
       parts.length !== 2 ||
       !parts[0] ||
       !parts[1] ||
-      !new RegExp(`^-?\\d{1,3}(?:\\\( {grouping}\\d{3})+ \)`).test(parts[0])
+      !new RegExp(
+        "^\\d{1,3}(?:" + grouping.replace(".", "\\.") + "\\d{3})+$",
+      ).test(parts[0].replace(/^-/, ""))
     ) {
       return NaN;
     }
