@@ -135,7 +135,7 @@ export function parseImportNumber(value: string): number {
   let text = value
     .trim()
     .replace(/^(?:MXN|USD|EUR|\$|€)\s*/i, "")
-    .replace(/\s*(?:MXN|USD|EUR|\$|€)$/i, "")
+    .replace(/\s*(?:MXN|USD|EUR|\\( |€) \)/i, "")
     .replace(/[\s\u00a0]/g, "");
 
   if (!/^-?\d+(?:[.,]\d+)*$/.test(text)) {
@@ -155,7 +155,7 @@ export function parseImportNumber(value: string): number {
       !parts[0] ||
       !parts[1] ||
       !new RegExp(
-        `^-?\\d{1,3}(?:\\${grouping}\\d{3})+$`,
+        `^-?\\d{1,3}(?:\\\( {grouping}\\d{3})+ \)`,
       ).test(parts[0])
     ) {
       return NaN;
@@ -280,6 +280,17 @@ export function analyzeProductGrid(
       );
     }
 
+    // === VARIANTES: se convierten en productos independientes ===
+    // Si hay VARIANT_NAME, se concatena al nombre para que cada variante
+    // sea un producto distinto con su propio barcode, precio, stock, etc.
+    let nombreFinal = (values.nombre ?? "").trim();
+    const variante = (values.variante ?? "").trim();
+    if (variante) {
+      nombreFinal = nombreFinal
+        ? `${nombreFinal} - ${variante}`
+        : variante;
+    }
+
     const skuKey = normalizeIdentifier(values.sku);
     const barcodeKey = normalizeIdentifier(values.codigo_barras);
 
@@ -308,15 +319,12 @@ export function analyzeProductGrid(
       );
     }
 
-    if (!values.nombre && !match) {
+    if (!nombreFinal && !match) {
       errors.push("Nombre vacío");
     }
 
-    if (values.variante || match?.has_variants) {
-      errors.push(
-        "Producto con variantes: este flujo no es compatible; no se convertirá en producto separado",
-      );
-    }
+    // Ya NO se rechazan las variantes ni los productos existentes con has_variants.
+    // Cada fila con variante se trata como producto independiente.
 
     if (values.image_url && !validImageUrl(values.image_url)) {
       errors.push("URL de imagen inválida (usar http/https)");
@@ -348,7 +356,9 @@ export function analyzeProductGrid(
       const value = parseImportNumber(values[field] ?? "");
       numeric[field] = value;
 
-      if (!Number.isFinite(value) || value < 0) {
+      // Solo se rechaza si NO es un número válido.
+      // Se PERMITEN valores negativos (especialmente stock).
+      if (!Number.isFinite(value)) {
         errors.push(`${field}: número inválido`);
       }
     }
@@ -386,7 +396,7 @@ export function analyzeProductGrid(
 
     rows.push({
       row: index + 2,
-      nombre: values.nombre ?? "",
+      nombre: nombreFinal,
       sku: values.sku ?? "",
       codigo_barras: values.codigo_barras ?? "",
       categoria: values.categoria ?? "",
