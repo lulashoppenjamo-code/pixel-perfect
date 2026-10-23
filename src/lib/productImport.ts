@@ -95,10 +95,6 @@ export function normalizeImportHeader(value: string): string {
     .replace(/^_|_$/g, "");
 }
 
-/**
- * Normaliza identificadores para comparar SKU y códigos de barras.
- * Los valores vacíos nunca deben usarse como claves de coincidencia.
- */
 function normalizeIdentifier(value: string | null | undefined): string {
   return (value ?? "").trim().toLowerCase();
 }
@@ -116,7 +112,6 @@ export function validImageUrl(value: string): boolean {
   }
 }
 
-// Acepta una URL HTTP/HTTPS o una ruta de objeto del bucket de imágenes.
 export function validImageRef(value: string): boolean {
   if (validImageUrl(value)) return true;
 
@@ -132,14 +127,13 @@ export function validImageRef(value: string): boolean {
 /**
  * Admite coma o punto decimal y separadores de miles.
  * No convierte texto inválido en cero.
- * Versión segura (sin problemas de escape de regex).
  */
 export function parseImportNumber(value: string): number {
   let text = String(value ?? "")
     .trim()
     .replace(/[\s\u00a0]/g, "");
 
-  // Quitar símbolos de moneda al inicio o final
+  // Quitar símbolos de moneda
   text = text.replace(/^(MXN|USD|EUR|\$|€)\s*/i, "");
   text = text.replace(/\s*(MXN|USD|EUR|\\( |€) \)/i, "");
 
@@ -230,7 +224,6 @@ export function analyzeProductGrid(
     const sku = normalizeIdentifier(product.sku);
     const barcode = normalizeIdentifier(product.barcode);
 
-    // IMPORTANTE: jamás indexar identificadores vacíos.
     if (sku) {
       bySku.set(sku, [...(bySku.get(sku) ?? []), product]);
     }
@@ -282,9 +275,7 @@ export function analyzeProductGrid(
       );
     }
 
-    // === VARIANTES: se convierten en productos independientes ===
-    // Si hay VARIANT_NAME, se concatena al nombre para que cada variante
-    // sea un producto distinto con su propio barcode, precio, stock, etc.
+    // VARIANTES → se convierten en productos independientes
     let nombreFinal = (values.nombre ?? "").trim();
     const variante = (values.variante ?? "").trim();
     if (variante) {
@@ -296,7 +287,6 @@ export function analyzeProductGrid(
     const skuKey = normalizeIdentifier(values.sku);
     const barcodeKey = normalizeIdentifier(values.codigo_barras);
 
-    // Solo buscar coincidencias cuando el identificador tiene contenido.
     const skuMatches = skuKey ? bySku.get(skuKey) ?? [] : [];
     const barcodeMatches = barcodeKey
       ? byBarcode.get(barcodeKey) ?? []
@@ -304,17 +294,12 @@ export function analyzeProductGrid(
 
     const skuMatch = skuMatches[0];
     const barcodeMatch = barcodeMatches[0];
-
     const match = skuMatch ?? barcodeMatch;
 
     if (
       skuMatches.length > 1 ||
       barcodeMatches.length > 1 ||
-      (
-        skuMatch &&
-        barcodeMatch &&
-        skuMatch.id !== barcodeMatch.id
-      )
+      (skuMatch && barcodeMatch && skuMatch.id !== barcodeMatch.id)
     ) {
       errors.push(
         "SKU/código ambiguo: coincide con productos diferentes",
@@ -325,25 +310,16 @@ export function analyzeProductGrid(
       errors.push("Nombre vacío");
     }
 
-    // Ya NO se rechazan las variantes ni los productos existentes con has_variants.
-    // Cada fila con variante se trata como producto independiente.
-
     if (values.image_url && !validImageUrl(values.image_url)) {
       errors.push("URL de imagen inválida (usar http/https)");
     }
 
-    const numeric: {
-      precio_venta: number;
-      costo: number;
-      stock: number;
-      minimo: number;
-      maximo: number | null;
-    } = {
+    const numeric = {
       precio_venta: 0,
       costo: 0,
       stock: 0,
       minimo: 0,
-      maximo: null,
+      maximo: null as number | null,
     };
 
     for (const field of [
@@ -358,8 +334,7 @@ export function analyzeProductGrid(
       const value = parseImportNumber(values[field] ?? "");
       numeric[field] = value;
 
-      // Solo se rechaza si NO es un número válido.
-      // Se PERMITEN valores negativos (especialmente stock).
+      // Solo error si no es número válido. Se permiten negativos.
       if (!Number.isFinite(value)) {
         errors.push(`${field}: número inválido`);
       }
@@ -373,7 +348,6 @@ export function analyzeProductGrid(
       errors.push("Máximo no puede ser menor que mínimo");
     }
 
-    // Detecta identificadores repetidos dentro del mismo archivo.
     if (skuKey) {
       if (seenSku.has(skuKey)) {
         errors.push("SKU repetido en el archivo");
