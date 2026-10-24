@@ -1,8 +1,8 @@
-// ============================================================
-// src/lib/sharedInventory.ts
-// LULA OS — API DEL INVENTARIO CENTRAL
-// ARCHIVO COMPLETO
-// ============================================================
+
+ // ============================================================
+ // src/lib/sharedInventory.ts
+ // LULA OS — API DEL INVENTARIO CENTRAL
+ // ============================================================
 
 import { supabase } from "@/integrations/supabase/client";
 
@@ -41,18 +41,41 @@ export type SharedProductStock = {
   available_stock: number;
 };
 
+/**
+ * Obtiene todo el inventario compartido por páginas.
+ *
+ * Evita depender de una única respuesta que puede estar
+ * limitada por el máximo de filas devuelto por la API.
+ */
 export async function getSharedInventory(): Promise<
   SharedInventoryRow[]
 > {
-  const { data, error } = await (supabase as any).rpc(
-    "get_shared_inventory",
-  );
+  const pageSize = 500;
+  const allRows: SharedInventoryRow[] = [];
+  let offset = 0;
 
-  if (error) {
-    throw error;
+  while (true) {
+    const { data, error } = await (supabase as any)
+      .rpc("get_shared_inventory")
+      .order("id", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      throw error;
+    }
+
+    const page = (data ?? []) as SharedInventoryRow[];
+
+    allRows.push(...page);
+
+    if (page.length < pageSize) {
+      break;
+    }
+
+    offset += pageSize;
   }
 
-  return (data ?? []) as SharedInventoryRow[];
+  return allRows;
 }
 
 export async function getSharedProductStock(
@@ -99,9 +122,7 @@ export async function getAvailableSharedStock(
     variantId,
   );
 
-  return Number(
-    result?.available_stock ?? 0,
-  );
+  return Number(result?.available_stock ?? 0);
 }
 
 export async function setSharedInventoryLimits(
@@ -137,10 +158,7 @@ export async function getSharedStockMap(): Promise<
       ? `${row.product_id}:${row.variant_id}`
       : row.product_id;
 
-    result.set(
-      key,
-      Number(row.available_stock ?? 0),
-    );
+    result.set(key, Number(row.available_stock ?? 0));
   }
 
   return result;
