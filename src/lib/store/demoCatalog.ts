@@ -1,7 +1,8 @@
+
 /**
- * Catálogo de DEMOSTRACIÓN para la tienda pública (FASE 2).
- * NO son productos reales de la base de datos.
- * Se reemplazará cuando exista una fuente pública segura (vista/RPC legible por anon).
+ * Tipos y catálogo de DEMOSTRACIÓN para la tienda pública.
+ * Los productos reales se obtienen de getSharedInventory().
+ * DEMO_PRODUCTS solo se mantiene por compatibilidad / pruebas locales.
  */
 
 export type StoreProduct = {
@@ -10,6 +11,8 @@ export type StoreProduct = {
   category: string;
   price: number;
   emoji: string;
+  /** URL de la fotografía real del producto (si existe). */
+  image_url?: string | null;
   available: boolean;
   description?: string;
 };
