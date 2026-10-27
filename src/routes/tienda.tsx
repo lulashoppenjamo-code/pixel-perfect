@@ -7,11 +7,7 @@ import { Star, ShieldCheck, Truck, Package, MessageCircle } from "lucide-react";
 import { StoreHeader } from "@/components/store/StoreHeader";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { StoreCartSheet } from "@/components/store/StoreCartSheet";
-import {
-  STORE_CATEGORIES,
-  type StoreCategory,
-  type StoreProduct,
-} from "@/lib/store/demoCatalog";
+import { type StoreProduct } from "@/lib/store/demoCatalog";
 import {
   addToCart,
   clearCart,
@@ -23,10 +19,6 @@ import {
   subscribeCart,
   type CartItem,
 } from "@/lib/store/cart";
-import {
-  getSharedInventory,
-  type SharedInventoryRow,
-} from "@/lib/sharedInventory";
 import {
   loadStoreConfig,
   subscribeStoreConfig,
@@ -48,58 +40,54 @@ export const Route = createFileRoute("/tienda")({
   component: TiendaPage,
 });
 
-function mapInventoryToStoreProducts(
-  rows: SharedInventoryRow[],
-): (StoreProduct & { stock: number })[] {
-  const byProduct = new Map<
-    string,
-    {
-      id: string;
-      name: string;
-      price: number;
-      emoji: string;
-      image_url: string | null;
-      available: number;
-      sku: string | null;
-    }
-  >();
+/** Fila mínima que devuelve public.v_online_catalog (vista ya otorgada a anon). */
+type OnlineCatalogRow = {
+  id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  description: string | null;
+  online_description: string | null;
+  category_id: string | null;
+  price: number;
+  image_url: string | null;
+  emoji: string | null;
+  has_variants: boolean;
+  online_order: number;
+  available_stock: number;
+};
 
-  for (const row of rows) {
-    if (!row.is_active) continue;
-    const prev = byProduct.get(row.product_id);
-    const available = Number(row.available_stock ?? 0);
-    if (prev) {
-      prev.available += available;
-      // Conservar la primera image_url no nula que encontremos
-      if (!prev.image_url && row.image_url) {
-        prev.image_url = row.image_url;
-      }
-    } else {
-      byProduct.set(row.product_id, {
-        id: row.product_id,
-        name: row.product_name,
+type CategoryRow = {
+  id: string;
+  name: string;
+};
+
+function mapCatalogToStoreProducts(
+  rows: OnlineCatalogRow[],
+  categoryById: Map<string, string>,
+): (StoreProduct & { stock: number })[] {
+  return rows
+    .map((row) => {
+      const stock = Number(row.available_stock ?? 0);
+      const categoryName =
+        (row.category_id && categoryById.get(row.category_id)) ||
+        (row.category_id ? "Sin categoría" : "General");
+
+      return {
+        id: row.id,
+        name: row.name,
+        category: categoryName,
         price: Number(row.price ?? 0),
         emoji: row.emoji || "💅",
         image_url: row.image_url ?? null,
-        available,
-        sku: row.sku,
-      });
-    }
-  }
-
-  return Array.from(byProduct.values())
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      category: "Todos",
-      price: p.price,
-      emoji: p.emoji,
-      image_url: p.image_url,
-      available: p.available > 0,
-      description: p.sku ? `SKU: ${p.sku}` : undefined,
-      stock: p.available,
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+        available: stock > 0,
+        description:
+          row.online_description?.trim() ||
+          (row.sku ? `SKU: ${row.sku}` : undefined),
+        stock,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name, "es"));
 }
 
 function Stars({ n }: { n: number }) {
@@ -115,6 +103,54 @@ function Stars({ n }: { n: number }) {
   );
 }
 
+async function fetchPublicCatalog(): Promise<OnlineCatalogRow[]> {
+  const pageSize = 500;
+  const all: OnlineCatalogRow[] = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("v_online_catalog")
+      .select(
+        "id, name, sku, barcode, description, online_description, category_id, price, image_url, emoji, has_variants, online_order, available_stock",
+      )
+      .order("online_order", { ascending: true })
+      .order("name", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    const page = (data ?? []) as OnlineCatalogRow[];
+    all.push(...page);
+
+    if (page.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return all;
+}
+
+async function fetchCategoryNames(
+  categoryIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!categoryIds.length) return map;
+
+  // categories solo tiene política de lectura para authenticated.
+  // Si falla (visitante anónimo), devolvemos mapa vacío y usamos fallback.
+  const { data, error } = await supabase
+    .from("categories")
+    .select("id, name")
+    .in("id", categoryIds);
+
+  if (error || !data) return map;
+
+  for (const row of data as CategoryRow[]) {
+    if (row.id && row.name) map.set(row.id, row.name);
+  }
+  return map;
+}
+
 function TiendaPage() {
   const qc = useQueryClient();
   const [config, setConfig] = useState<StoreConfig>(() => loadStoreConfig());
@@ -127,7 +163,7 @@ function TiendaPage() {
   const theme = config.theme;
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<StoreCategory>("Todos");
+  const [category, setCategory] = useState<string>("Todos");
   const [cartOpen, setCartOpen] = useState(false);
   const [items, setItems] = useState<CartItem[]>([]);
   const [cartCount, setCartCount] = useState(0);
@@ -150,12 +186,23 @@ function TiendaPage() {
   }, [refreshCart]);
 
   const {
-    data: inventory = [],
+    data: catalogPayload,
     isLoading: loadingInventory,
     isFetching,
   } = useQuery({
-    queryKey: ["shared-inventory", "tienda-publica"],
-    queryFn: getSharedInventory,
+    queryKey: ["online-catalog", "tienda-publica"],
+    queryFn: async () => {
+      const rows = await fetchPublicCatalog();
+      const ids = Array.from(
+        new Set(
+          rows
+            .map((r) => r.category_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+      const categoryById = await fetchCategoryNames(ids);
+      return { rows, categoryById };
+    },
     refetchInterval: 15_000,
     staleTime: 5_000,
   });
@@ -163,6 +210,7 @@ function TiendaPage() {
   const { data: onlineBranchId } = useQuery({
     queryKey: ["online-branch-id"],
     queryFn: async () => {
+      // branches no es público para anon. Si falla, el pedido mostrará error claro.
       const { data, error } = await supabase
         .from("branches")
         .select("id")
@@ -170,16 +218,32 @@ function TiendaPage() {
         .order("name")
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        console.warn("[tienda] no se pudo leer branches:", error.message);
+        return null;
+      }
       return data?.id ?? null;
     },
     staleTime: 60_000,
+    retry: false,
   });
 
-  const products = useMemo(
-    () => mapInventoryToStoreProducts(inventory),
-    [inventory],
-  );
+  const products = useMemo(() => {
+    if (!catalogPayload) return [];
+    return mapCatalogToStoreProducts(
+      catalogPayload.rows,
+      catalogPayload.categoryById,
+    );
+  }, [catalogPayload]);
+
+  const storeCategories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      if (p.category) set.add(p.category);
+    }
+    const list = Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
+    return ["Todos", ...list];
+  }, [products]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<string, number>();
@@ -219,7 +283,9 @@ function TiendaPage() {
   const placeOrder = useMutation({
     mutationFn: async () => {
       if (!onlineBranchId) {
-        throw new Error("No hay sucursal activa para el pedido online");
+        throw new Error(
+          "No hay sucursal activa para el pedido online. Contacta a la tienda.",
+        );
       }
       const cart = getCartItems();
       if (!cart.length) throw new Error("El carrito está vacío");
@@ -257,7 +323,9 @@ function TiendaPage() {
       return data;
     },
     onSuccess: () => {
-      toast.success("¡Pedido confirmado! Stock reservado del inventario compartido.");
+      toast.success(
+        "¡Pedido confirmado! Stock reservado del inventario compartido.",
+      );
       clearCart();
       refreshCart();
       setCartOpen(false);
@@ -265,7 +333,7 @@ function TiendaPage() {
       setCustomerPhone("");
       setAddress("");
       setNotes("");
-      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["online-catalog"] });
       void qc.invalidateQueries({ queryKey: ["online-orders"] });
       void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
       void qc.invalidateQueries({ queryKey: ["pos-variant-inventory-shared"] });
@@ -450,8 +518,7 @@ function TiendaPage() {
                 Productos disponibles
               </h2>
               <p className="mt-1 text-sm text-rose-500">
-                Stock del inventario compartido Pixel Perfect (consulta cada 15
-                s)
+                Stock del inventario compartido (consulta cada 15 s)
               </p>
             </div>
             {cartTotal > 0 && remainingForFreeShipping > 0 && (
@@ -471,7 +538,7 @@ function TiendaPage() {
           </div>
 
           <div className="mb-6 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {STORE_CATEGORIES.map((cat) => {
+            {storeCategories.map((cat) => {
               const active = category === cat;
               return (
                 <button
@@ -484,9 +551,7 @@ function TiendaPage() {
                       : "border border-rose-100 bg-white text-rose-700 hover:border-rose-300"
                   }`}
                   style={
-                    active
-                      ? { backgroundColor: theme.primary }
-                      : undefined
+                    active ? { backgroundColor: theme.primary } : undefined
                   }
                 >
                   {cat}
@@ -577,10 +642,7 @@ function TiendaPage() {
       </main>
 
       <footer className="border-t border-rose-100 bg-white py-10 text-center">
-        <p
-          className="text-sm font-bold"
-          style={{ color: theme.primary }}
-        >
+        <p className="text-sm font-bold" style={{ color: theme.primary }}>
           Lula Shop
         </p>
         <p className="mt-1 text-xs text-rose-400">{theme.footerText}</p>
