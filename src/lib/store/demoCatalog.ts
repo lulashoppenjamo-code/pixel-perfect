@@ -1,7 +1,6 @@
-
 /**
- * Tipos y catálogo de DEMOSTRACIÓN para la tienda pública.
- * Los productos reales se obtienen de getSharedInventory().
+ * Tipos para la tienda pública.
+ * Los productos reales se obtienen de public.v_online_catalog.
  * DEMO_PRODUCTS solo se mantiene por compatibilidad / pruebas locales.
  */
 
@@ -17,6 +16,7 @@ export type StoreProduct = {
   description?: string;
 };
 
+/** Categorías de demostración (solo fallback / pruebas locales). */
 export const STORE_CATEGORIES = [
   "Todos",
   "Uñas",
@@ -25,7 +25,7 @@ export const STORE_CATEGORIES = [
   "Kits",
 ] as const;
 
-export type StoreCategory = (typeof STORE_CATEGORIES)[number];
+export type StoreCategory = string;
 
 export const DEMO_PRODUCTS: StoreProduct[] = [
   {
