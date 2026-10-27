@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/format";
@@ -10,13 +11,30 @@ type StoreProductCardProps = {
 
 export function StoreProductCard({ product, onAdd }: StoreProductCardProps) {
   const stock = product.stock ?? (product.available ? 1 : 0);
+  const [imgError, setImgError] = useState(false);
+
+  const hasImage = Boolean(product.image_url) && !imgError;
 
   return (
     <article className="group flex flex-col overflow-hidden rounded-2xl border border-rose-100 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md">
       <div className="relative flex aspect-square items-center justify-center bg-gradient-to-b from-rose-50 to-pink-50/70">
-        <span className="text-5xl transition group-hover:scale-105 sm:text-6xl" aria-hidden>
-          {product.emoji}
-        </span>
+        {hasImage ? (
+          <img
+            src={product.image_url!}
+            alt={product.name}
+            className="h-full w-full object-contain p-3 transition group-hover:scale-[1.02]"
+            loading="lazy"
+            onError={() => setImgError(true)}
+          />
+        ) : (
+          <span
+            className="text-5xl transition group-hover:scale-105 sm:text-6xl"
+            aria-hidden
+          >
+            {product.emoji || "💅"}
+          </span>
+        )}
+
         {!product.available && (
           <span className="absolute left-2.5 top-2.5 rounded-full bg-gray-900/85 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
             Agotado
