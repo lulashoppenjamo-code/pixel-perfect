@@ -105,4 +105,4 @@ export function subscribeStoreConfig(cb: () => void) {
   const handler = () => cb();
   window.addEventListener("lula-store-config-changed", handler);
   return () => window.removeEventListener("lula-store-config-changed", handler);
-}
+} 
