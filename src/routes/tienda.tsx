@@ -58,6 +58,7 @@ function mapInventoryToStoreProducts(
       name: string;
       price: number;
       emoji: string;
+      image_url: string | null;
       available: number;
       sku: string | null;
     }
@@ -69,12 +70,17 @@ function mapInventoryToStoreProducts(
     const available = Number(row.available_stock ?? 0);
     if (prev) {
       prev.available += available;
+      // Conservar la primera image_url no nula que encontremos
+      if (!prev.image_url && row.image_url) {
+        prev.image_url = row.image_url;
+      }
     } else {
       byProduct.set(row.product_id, {
         id: row.product_id,
         name: row.product_name,
         price: Number(row.price ?? 0),
         emoji: row.emoji || "💅",
+        image_url: row.image_url ?? null,
         available,
         sku: row.sku,
       });
@@ -88,6 +94,7 @@ function mapInventoryToStoreProducts(
       category: "Todos",
       price: p.price,
       emoji: p.emoji,
+      image_url: p.image_url,
       available: p.available > 0,
       description: p.sku ? `SKU: ${p.sku}` : undefined,
       stock: p.available,
@@ -318,7 +325,7 @@ function TiendaPage() {
             </div>
             {isFetching && (
               <p className="mt-4 text-xs text-white/60">
-                Actualizando inventario en tiempo real…
+                Actualizando inventario…
               </p>
             )}
           </div>
@@ -443,7 +450,8 @@ function TiendaPage() {
                 Productos disponibles
               </h2>
               <p className="mt-1 text-sm text-rose-500">
-                Stock en tiempo real del inventario compartido Pixel Perfect
+                Stock del inventario compartido Pixel Perfect (consulta cada 15
+                s)
               </p>
             </div>
             {cartTotal > 0 && remainingForFreeShipping > 0 && (
@@ -551,7 +559,8 @@ function TiendaPage() {
               </p>
               <p className="mt-1 text-sm text-rose-500">
                 Sí. Usamos el inventario compartido de Pixel Perfect (mismas
-                existencias que las 2 sucursales físicas).
+                existencias que las 2 sucursales físicas). Se actualiza cada 15
+                segundos.
               </p>
             </div>
             <div>
