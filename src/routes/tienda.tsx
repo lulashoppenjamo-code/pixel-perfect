@@ -1,8 +1,18 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Star, ShieldCheck, Truck, Package, MessageCircle } from "lucide-react";
+import {
+  SlidersHorizontal,
+  ChevronLeft,
+  ChevronRight,
+  Package,
+  Truck,
+  ShieldCheck,
+  MessageCircle,
+  RefreshCw,
+} from "lucide-react";
 
 import { StoreHeader } from "@/components/store/StoreHeader";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
@@ -29,18 +39,17 @@ import { supabase } from "@/integrations/supabase/client";
 export const Route = createFileRoute("/tienda")({
   head: () => ({
     meta: [
-      { title: "Lula Shop — Tienda en línea profesional" },
+      { title: "Lula Shop | Tienda en línea" },
       {
         name: "description",
         content:
-          "Compra material profesional para uñas. Inventario en tiempo real, envíos a todo México.",
+          "Encuentra productos profesionales para uñas, belleza y cuidado personal en Lula Shop.",
       },
     ],
   }),
   component: TiendaPage,
 });
 
-/** Fila mínima que devuelve public.v_online_catalog (vista ya otorgada a anon). */
 type OnlineCatalogRow = {
   id: string;
   name: string;
@@ -61,6 +70,10 @@ type CategoryRow = {
   id: string;
   name: string;
 };
+
+type SortOption = "recommended" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
+
+const PAGE_SIZE = 16;
 
 function mapCatalogToStoreProducts(
   rows: OnlineCatalogRow[],
@@ -88,19 +101,6 @@ function mapCatalogToStoreProducts(
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name, "es"));
-}
-
-function Stars({ n }: { n: number }) {
-  return (
-    <span className="inline-flex gap-0.5 text-amber-400">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star
-          key={i}
-          className={`h-3.5 w-3.5 ${i < n ? "fill-amber-400" : "fill-none opacity-30"}`}
-        />
-      ))}
-    </span>
-  );
 }
 
 async function fetchPublicCatalog(): Promise<OnlineCatalogRow[]> {
@@ -136,8 +136,6 @@ async function fetchCategoryNames(
   const map = new Map<string, string>();
   if (!categoryIds.length) return map;
 
-  // categories solo tiene política de lectura para authenticated.
-  // Si falla (visitante anónimo), devolvemos mapa vacío y usamos fallback.
   const { data, error } = await supabase
     .from("categories")
     .select("id, name")
@@ -148,11 +146,13 @@ async function fetchCategoryNames(
   for (const row of data as CategoryRow[]) {
     if (row.id && row.name) map.set(row.id, row.name);
   }
+
   return map;
 }
 
 function TiendaPage() {
   const qc = useQueryClient();
+
   const [config, setConfig] = useState<StoreConfig>(() => loadStoreConfig());
 
   useEffect(() => {
@@ -163,7 +163,11 @@ function TiendaPage() {
   const theme = config.theme;
 
   const [search, setSearch] = useState("");
-  const [category, setCategory] = useState<string>("Todos");
+  const [category, setCategory] = useState("Todos");
+  const [sort, setSort] = useState<SortOption>("recommended");
+  const [page, setPage] = useState(1);
+  const [showOutOfStock, setShowOutOfStock] = useState(false);
+
   const [cartOpen, setCartOpen] = useState(false);
   const [items, setItems] = useState<CartItem[]>([]);
   const [cartCount, setCartCount] = useState(0);
@@ -189,10 +193,13 @@ function TiendaPage() {
     data: catalogPayload,
     isLoading: loadingInventory,
     isFetching,
+    isError,
+    refetch,
   } = useQuery({
     queryKey: ["online-catalog", "tienda-publica"],
     queryFn: async () => {
       const rows = await fetchPublicCatalog();
+
       const ids = Array.from(
         new Set(
           rows
@@ -200,7 +207,9 @@ function TiendaPage() {
             .filter((id): id is string => Boolean(id)),
         ),
       );
+
       const categoryById = await fetchCategoryNames(ids);
+
       return { rows, categoryById };
     },
     refetchInterval: 15_000,
@@ -210,7 +219,6 @@ function TiendaPage() {
   const { data: onlineBranchId } = useQuery({
     queryKey: ["online-branch-id"],
     queryFn: async () => {
-      // branches no es público para anon. Si falla, el pedido mostrará error claro.
       const { data, error } = await supabase
         .from("branches")
         .select("id")
@@ -218,10 +226,12 @@ function TiendaPage() {
         .order("name")
         .limit(1)
         .maybeSingle();
+
       if (error) {
-        console.warn("[tienda] no se pudo leer branches:", error.message);
+        console.warn("[tienda] No se pudo leer branches:", error.message);
         return null;
       }
+
       return data?.id ?? null;
     },
     staleTime: 60_000,
@@ -230,6 +240,7 @@ function TiendaPage() {
 
   const products = useMemo(() => {
     if (!catalogPayload) return [];
+
     return mapCatalogToStoreProducts(
       catalogPayload.rows,
       catalogPayload.categoryById,
@@ -237,44 +248,98 @@ function TiendaPage() {
   }, [catalogPayload]);
 
   const storeCategories = useMemo(() => {
-    const set = new Set<string>();
-    for (const p of products) {
-      if (p.category) set.add(p.category);
+    const categories = new Set<string>();
+
+    for (const product of products) {
+      if (product.category) categories.add(product.category);
     }
-    const list = Array.from(set).sort((a, b) => a.localeCompare(b, "es"));
-    return ["Todos", ...list];
+
+    return [
+      "Todos",
+      ...Array.from(categories).sort((a, b) =>
+        a.localeCompare(b, "es"),
+      ),
+    ];
   }, [products]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<string, number>();
-    for (const p of products) map.set(p.id, p.stock);
+
+    for (const product of products) {
+      map.set(product.id, product.stock);
+    }
+
     return map;
   }, [products]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return products.filter((p) => {
-      const matchSearch =
-        !q ||
-        p.name.toLowerCase().includes(q) ||
-        (p.description || "").toLowerCase().includes(q);
-      const matchCat = category === "Todos" || p.category === category;
-      return matchSearch && matchCat;
+    const query = search.trim().toLocaleLowerCase("es");
+
+    const result = products.filter((product) => {
+      const matchesSearch =
+        !query ||
+        product.name.toLocaleLowerCase("es").includes(query) ||
+        (product.description || "").toLocaleLowerCase("es").includes(query) ||
+        product.category.toLocaleLowerCase("es").includes(query);
+
+      const matchesCategory =
+        category === "Todos" || product.category === category;
+
+      const matchesStock =
+        showOutOfStock || product.available;
+
+      return matchesSearch && matchesCategory && matchesStock;
     });
-  }, [products, search, category]);
+
+    switch (sort) {
+      case "name-asc":
+        result.sort((a, b) => a.name.localeCompare(b.name, "es"));
+        break;
+      case "name-desc":
+        result.sort((a, b) => b.name.localeCompare(a.name, "es"));
+        break;
+      case "price-asc":
+        result.sort((a, b) => a.price - b.price);
+        break;
+      case "price-desc":
+        result.sort((a, b) => b.price - a.price);
+        break;
+      default:
+        break;
+    }
+
+    return result;
+  }, [products, search, category, sort, showOutOfStock]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+
+  const visibleProducts = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, currentPage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, category, sort, showOutOfStock]);
 
   const handleAdd = (product: StoreProduct) => {
     const stock = stockByProduct.get(product.id) ?? 0;
+
     if (stock <= 0) {
       toast.error("Producto sin existencia");
       return;
     }
+
     const inCart =
-      getCartItems().find((i) => i.productId === product.id)?.quantity ?? 0;
+      getCartItems().find((item) => item.productId === product.id)?.quantity ??
+      0;
+
     if (inCart + 1 > stock) {
       toast.error(`Solo hay ${stock} disponibles`);
       return;
     }
+
     addToCart(product, 1);
     refreshCart();
     toast.success(`${product.name} agregado al carrito`);
@@ -287,11 +352,16 @@ function TiendaPage() {
           "No hay sucursal activa para el pedido online. Contacta a la tienda.",
         );
       }
+
       const cart = getCartItems();
-      if (!cart.length) throw new Error("El carrito está vacío");
+
+      if (!cart.length) {
+        throw new Error("El carrito está vacío");
+      }
 
       for (const item of cart) {
         const available = stockByProduct.get(item.productId) ?? 0;
+
         if (item.quantity > available) {
           throw new Error(
             `Stock insuficiente para ${item.name}. Disponible: ${available}`,
@@ -320,12 +390,15 @@ function TiendaPage() {
       });
 
       if (error) throw error;
+
       return data;
     },
+
     onSuccess: () => {
       toast.success(
         "¡Pedido confirmado! Stock reservado del inventario compartido.",
       );
+
       clearCart();
       refreshCart();
       setCartOpen(false);
@@ -333,11 +406,15 @@ function TiendaPage() {
       setCustomerPhone("");
       setAddress("");
       setNotes("");
+
       void qc.invalidateQueries({ queryKey: ["online-catalog"] });
       void qc.invalidateQueries({ queryKey: ["online-orders"] });
       void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
-      void qc.invalidateQueries({ queryKey: ["pos-variant-inventory-shared"] });
+      void qc.invalidateQueries({
+        queryKey: ["pos-variant-inventory-shared"],
+      });
     },
+
     onError: (err: Error) => {
       toast.error(err.message || "No se pudo crear el pedido");
     },
@@ -350,7 +427,7 @@ function TiendaPage() {
 
   return (
     <div
-      className="min-h-screen text-rose-950"
+      className="min-h-screen text-slate-900"
       style={{ backgroundColor: theme.background }}
     >
       <StoreHeader
@@ -360,297 +437,322 @@ function TiendaPage() {
         onOpenCart={() => setCartOpen(true)}
       />
 
-      <main className="mx-auto max-w-6xl px-4 pb-20 pt-6 sm:pt-8">
-        {/* HERO */}
-        <section
-          className="relative mb-8 overflow-hidden rounded-3xl px-6 py-12 text-white sm:px-12 sm:py-16"
-          style={{
-            background: `linear-gradient(135deg, ${theme.primary} 0%, ${theme.secondary} 100%)`,
-          }}
-        >
-          <div className="relative z-10 max-w-xl">
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/80">
-              Lula Shop
-            </p>
-            <h1 className="mt-3 text-3xl font-bold leading-tight sm:text-5xl">
-              {theme.heroTitle}
-            </h1>
-            <p className="mt-4 text-sm text-white/90 sm:text-base">
-              {theme.heroSubtitle}
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a
-                href="#catalogo"
-                className="inline-flex h-12 items-center rounded-full bg-white px-6 text-sm font-bold shadow-lg"
-                style={{ color: theme.primary }}
-              >
-                {theme.heroCta}
-              </a>
-              <div className="flex items-center gap-2 rounded-full bg-white/15 px-4 py-2 text-xs font-medium backdrop-blur">
-                <Star className="h-3.5 w-3.5 fill-amber-300 text-amber-300" />
-                {theme.ratingValue}/5 · {theme.ratingCount} reseñas
-              </div>
-            </div>
-            {isFetching && (
-              <p className="mt-4 text-xs text-white/60">
-                Actualizando inventario…
+      <main className="mx-auto max-w-[1400px] px-3 pb-16 sm:px-6 lg:px-8">
+        {/* Encabezado de tienda */}
+        <section className="border-b border-rose-100 py-7 sm:py-10">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.22em] text-rose-500">
+                Lula Shop · Tienda en línea
               </p>
-            )}
+
+              <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-4xl">
+                Productos profesionales
+              </h1>
+
+              <p className="mt-2 max-w-2xl text-sm text-slate-500 sm:text-base">
+                Encuentra tus productos favoritos y compra fácilmente desde
+                cualquier lugar.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  isFetching ? "animate-pulse bg-amber-400" : "bg-emerald-500"
+                }`}
+              />
+              {isFetching ? "Actualizando catálogo" : "Catálogo actualizado"}
+            </div>
           </div>
-          <div className="pointer-events-none absolute -right-10 -top-10 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
-          <div className="pointer-events-none absolute -bottom-16 right-10 h-40 w-40 rounded-full bg-white/10 blur-2xl" />
         </section>
 
-        {/* Banners configurables */}
-        <div className="mb-8 grid gap-3 sm:grid-cols-2">
-          {config.banners
-            .filter((b) => b.active)
-            .sort((a, b) => a.order - b.order)
-            .map((b) => (
-              <a
-                key={b.id}
-                href={b.ctaLink || "#catalogo"}
-                className="block overflow-hidden rounded-2xl px-6 py-8 transition hover:opacity-95"
-                style={{ backgroundColor: b.bgColor, color: b.textColor }}
-              >
-                <p className="text-xl font-bold sm:text-2xl">{b.title}</p>
-                {b.subtitle && (
-                  <p className="mt-1 text-sm opacity-90">{b.subtitle}</p>
-                )}
-                {b.ctaText && (
-                  <span className="mt-4 inline-block rounded-full bg-white/20 px-4 py-1.5 text-xs font-semibold">
-                    {b.ctaText} →
-                  </span>
-                )}
-              </a>
-            ))}
-        </div>
-
-        {/* Trust strip */}
-        <div className="mb-10 grid gap-3 sm:grid-cols-3">
-          {[
-            {
-              icon: Truck,
-              title: "Envíos a todo México",
-              body: theme.shippingNote,
-            },
-            {
-              icon: Package,
-              title: "Inventario real",
-              body: "Mismo stock que tus sucursales físicas. Sin sorpresas.",
-            },
-            {
-              icon: ShieldCheck,
-              title: "Compra segura",
-              body: "Pedidos con reserva de stock y seguimiento en el sistema.",
-            },
-          ].map((item) => (
-            <div
-              key={item.title}
-              className="flex gap-3 rounded-2xl border border-rose-100 bg-white p-4 shadow-sm"
-            >
-              <div
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-white"
-                style={{ backgroundColor: theme.primary }}
-              >
-                <item.icon className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-sm font-bold text-rose-950">{item.title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-rose-500">
-                  {item.body}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Reseñas / comentarios */}
-        <section className="mb-12">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-2">
+        {/* Beneficios */}
+        <section className="grid grid-cols-1 gap-3 border-b border-rose-100 py-5 sm:grid-cols-3">
+          <div className="flex items-center gap-3 rounded-xl bg-white p-3">
+            <Truck className="h-5 w-5 shrink-0 text-rose-600" />
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-rose-400">
-                Clientes felices
-              </p>
-              <h2 className="mt-1 text-2xl font-bold text-rose-950">
-                {theme.trustLine}
-              </h2>
-            </div>
-            <div className="flex items-center gap-2 text-sm text-rose-600">
-              <Stars n={5} />
-              <span className="font-semibold">
-                {theme.ratingValue}/5 · {theme.ratingCount}
-              </span>
+              <p className="text-sm font-semibold">Envíos disponibles</p>
+              <p className="text-xs text-slate-500">{theme.shippingNote}</p>
             </div>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {config.reviews.map((r) => (
-              <div
-                key={r.id}
-                className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm"
-              >
-                <Stars n={r.rating} />
-                <p className="mt-3 text-sm leading-relaxed text-rose-800">
-                  “{r.text}”
-                </p>
-                <p className="mt-3 text-xs font-semibold text-rose-950">
-                  {r.name}
-                  {r.city ? (
-                    <span className="font-normal text-rose-400">
-                      {" "}
-                      · {r.city}
-                    </span>
-                  ) : null}
-                </p>
-              </div>
-            ))}
+
+          <div className="flex items-center gap-3 rounded-xl bg-white p-3">
+            <Package className="h-5 w-5 shrink-0 text-rose-600" />
+            <div>
+              <p className="text-sm font-semibold">Existencias actualizadas</p>
+              <p className="text-xs text-slate-500">
+                Consulta del inventario de la tienda
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-xl bg-white p-3">
+            <ShieldCheck className="h-5 w-5 shrink-0 text-rose-600" />
+            <div>
+              <p className="text-sm font-semibold">Atención Lula Shop</p>
+              <p className="text-xs text-slate-500">
+                Estamos para ayudarte con tu compra
+              </p>
+            </div>
           </div>
         </section>
 
         {/* Catálogo */}
-        <section id="catalogo">
-          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+        <section id="catalogo" className="pt-7 sm:pt-10">
+          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="text-xs font-bold uppercase tracking-widest text-rose-400">
-                Catálogo
-              </p>
-              <h2 className="mt-1 text-2xl font-bold text-rose-950">
-                Productos disponibles
+              <h2 className="text-xl font-bold text-slate-900 sm:text-2xl">
+                Nuestro catálogo
               </h2>
-              <p className="mt-1 text-sm text-rose-500">
-                Stock del inventario compartido (consulta cada 15 s)
+              <p className="mt-1 text-sm text-slate-500">
+                {filtered.length} productos encontrados
               </p>
             </div>
-            {cartTotal > 0 && remainingForFreeShipping > 0 && (
-              <div className="rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-900">
-                Te faltan{" "}
-                <strong>
-                  ${remainingForFreeShipping.toLocaleString("es-MX")}
-                </strong>{" "}
-                para envío gratis
-              </div>
-            )}
-            {cartTotal >= theme.freeShippingFrom && cartTotal > 0 && (
-              <div className="rounded-full border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-medium text-emerald-800">
-                ✓ Tu pedido califica para envío gratis
-              </div>
-            )}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-2 rounded-lg border border-rose-100 bg-white px-3 py-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showOutOfStock}
+                  onChange={(event) => setShowOutOfStock(event.target.checked)}
+                  className="accent-rose-600"
+                />
+                Mostrar agotados
+              </label>
+
+              <label className="flex items-center gap-2 rounded-lg border border-rose-100 bg-white px-3 py-2">
+                <SlidersHorizontal className="h-4 w-4 text-rose-500" />
+                <span className="text-xs text-slate-500">Ordenar:</span>
+                <select
+                  value={sort}
+                  onChange={(event) =>
+                    setSort(event.target.value as SortOption)
+                  }
+                  className="max-w-[155px] bg-transparent text-xs font-medium text-slate-800 outline-none"
+                  aria-label="Ordenar productos"
+                >
+                  <option value="recommended">Recomendados</option>
+                  <option value="name-asc">Nombre: A a Z</option>
+                  <option value="name-desc">Nombre: Z a A</option>
+                  <option value="price-asc">Precio: menor a mayor</option>
+                  <option value="price-desc">Precio: mayor a menor</option>
+                </select>
+              </label>
+            </div>
           </div>
 
-          <div className="mb-6 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* Categorías */}
+          <nav
+            aria-label="Categorías de productos"
+            className="mb-6 flex gap-2 overflow-x-auto pb-2 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {storeCategories.map((cat) => {
               const active = category === cat;
+
               return (
                 <button
                   key={cat}
                   type="button"
                   onClick={() => setCategory(cat)}
-                  className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium transition ${
+                  className={`shrink-0 rounded-full border px-4 py-2 text-xs font-semibold transition sm:text-sm ${
                     active
-                      ? "text-white shadow-sm"
-                      : "border border-rose-100 bg-white text-rose-700 hover:border-rose-300"
+                      ? "border-rose-600 bg-rose-600 text-white shadow-sm"
+                      : "border-rose-100 bg-white text-slate-600 hover:border-rose-300 hover:text-rose-700"
                   }`}
-                  style={
-                    active ? { backgroundColor: theme.primary } : undefined
-                  }
                 >
                   {cat}
                 </button>
               );
             })}
-          </div>
+          </nav>
 
-          {loadingInventory ? (
-            <div className="rounded-2xl border border-dashed border-rose-200 bg-white py-20 text-center">
-              <p className="text-sm font-medium text-rose-800">
-                Cargando catálogo e inventario…
-              </p>
-            </div>
-          ) : filtered.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-rose-200 bg-white py-20 text-center">
-              <p className="text-sm font-medium text-rose-800">
-                No hay productos con ese criterio
-              </p>
-              <p className="mt-1 text-xs text-rose-400">
-                Prueba otra búsqueda o revisa el inventario en el sistema
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
-              {filtered.map((product) => (
-                <StoreProductCard
-                  key={product.id}
-                  product={product}
-                  onAdd={handleAdd}
-                />
+          {/* Estado de carga */}
+          {loadingInventory && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, index) => (
+                <div
+                  key={index}
+                  className="animate-pulse overflow-hidden rounded-xl border border-rose-100 bg-white"
+                >
+                  <div className="aspect-square bg-rose-50" />
+                  <div className="space-y-3 p-3">
+                    <div className="h-3 w-2/3 rounded bg-rose-100" />
+                    <div className="h-4 w-full rounded bg-rose-100" />
+                    <div className="h-8 rounded-full bg-rose-100" />
+                  </div>
+                </div>
               ))}
             </div>
           )}
+
+          {/* Error */}
+          {!loadingInventory && isError && (
+            <div className="rounded-2xl border border-rose-100 bg-white px-5 py-12 text-center">
+              <Package className="mx-auto h-10 w-10 text-rose-300" />
+              <h3 className="mt-4 font-semibold text-slate-800">
+                No pudimos cargar el catálogo
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Intenta actualizar la página o vuelve a intentarlo.
+              </p>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-5 inline-flex items-center gap-2 rounded-full bg-rose-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Volver a cargar
+              </button>
+            </div>
+          )}
+
+          {/* Sin resultados */}
+          {!loadingInventory && !isError && filtered.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-rose-200 bg-white px-5 py-16 text-center">
+              <Package className="mx-auto h-10 w-10 text-rose-300" />
+              <h3 className="mt-4 font-semibold text-slate-800">
+                No encontramos productos
+              </h3>
+              <p className="mt-2 text-sm text-slate-500">
+                Prueba con otra búsqueda o selecciona una categoría diferente.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setCategory("Todos");
+                  setShowOutOfStock(false);
+                }}
+                className="mt-5 rounded-full border border-rose-200 px-5 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          )}
+
+          {/* Productos */}
+          {!loadingInventory && !isError && visibleProducts.length > 0 && (
+            <>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 xl:grid-cols-4">
+                {visibleProducts.map((product) => (
+                  <StoreProductCard
+                    key={product.id}
+                    product={product}
+                    onAdd={handleAdd}
+                  />
+                ))}
+              </div>
+
+              {/* Paginación */}
+              {totalPages > 1 && (
+                <div className="mt-9 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    disabled={currentPage <= 1}
+                    onClick={() => {
+                      setPage((value) => Math.max(1, value - 1));
+                      document
+                        .getElementById("catalogo")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="flex h-10 items-center gap-1 rounded-full border border-rose-100 bg-white px-4 text-sm font-medium text-slate-700 disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Anterior
+                  </button>
+
+                  <span className="px-3 text-sm text-slate-500">
+                    Página {currentPage} de {totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={currentPage >= totalPages}
+                    onClick={() => {
+                      setPage((value) =>
+                        Math.min(totalPages, value + 1),
+                      );
+                      document
+                        .getElementById("catalogo")
+                        ?.scrollIntoView({ behavior: "smooth" });
+                    }}
+                    className="flex h-10 items-center gap-1 rounded-full border border-rose-100 bg-white px-4 text-sm font-medium text-slate-700 disabled:opacity-40"
+                  >
+                    Siguiente
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </>
+          )}
         </section>
 
-        {/* FAQ / envíos */}
-        <section className="mt-16 rounded-3xl border border-rose-100 bg-white p-6 shadow-sm sm:p-10">
+        {/* Información de compra */}
+        <section className="mt-14 rounded-2xl border border-rose-100 bg-white p-5 sm:p-8">
           <div className="flex items-center gap-2">
-            <MessageCircle
-              className="h-5 w-5"
-              style={{ color: theme.primary }}
-            />
-            <h2 className="text-xl font-bold text-rose-950">
-              Envíos y garantía
+            <MessageCircle className="h-5 w-5 text-rose-600" />
+            <h2 className="text-lg font-bold text-slate-900">
+              Compra en Lula Shop
             </h2>
           </div>
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
+
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <div>
-              <p className="text-sm font-semibold text-rose-900">
-                ¿Cuánto tarda el envío?
-              </p>
-              <p className="mt-1 text-sm text-rose-500">
-                {theme.shippingNote}. El tiempo exacto se confirma al procesar
-                tu pedido.
+              <h3 className="text-sm font-semibold text-slate-800">
+                ¿Cómo se actualizan las existencias?
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                El catálogo consulta las existencias disponibles del sistema
+                periódicamente. La disponibilidad final se vuelve a validar
+                al intentar realizar el pedido.
               </p>
             </div>
+
             <div>
-              <p className="text-sm font-semibold text-rose-900">
-                ¿Hay envío gratis?
-              </p>
-              <p className="mt-1 text-sm text-rose-500">
-                {theme.freeShippingText}. El umbral se configura desde el panel
-                de Pedidos.
+              <h3 className="text-sm font-semibold text-slate-800">
+                ¿Cómo recibo mi compra?
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                Puedes indicar tus datos y dirección en el carrito. La tienda
+                confirmará contigo los detalles de entrega.
               </p>
             </div>
+
             <div>
-              <p className="text-sm font-semibold text-rose-900">
-                ¿El stock es real?
-              </p>
-              <p className="mt-1 text-sm text-rose-500">
-                Sí. Usamos el inventario compartido de Pixel Perfect (mismas
-                existencias que las 2 sucursales físicas). Se actualiza cada 15
-                segundos.
+              <h3 className="text-sm font-semibold text-slate-800">
+                ¿Cuánto cuesta el envío?
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                {theme.shippingNote}. {theme.freeShippingText}.
               </p>
             </div>
+
             <div>
-              <p className="text-sm font-semibold text-rose-900">
-                ¿Cómo doy seguimiento?
-              </p>
-              <p className="mt-1 text-sm text-rose-500">
-                Cada compra llega a la pantalla Pedidos del sistema para
-                confirmar, preparar y entregar.
+              <h3 className="text-sm font-semibold text-slate-800">
+                ¿Necesitas ayuda?
+              </h3>
+              <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                Ponte en contacto con Lula Shop para resolver cualquier duda
+                sobre productos y pedidos.
               </p>
             </div>
           </div>
         </section>
       </main>
 
-      <footer className="border-t border-rose-100 bg-white py-10 text-center">
-        <p className="text-sm font-bold" style={{ color: theme.primary }}>
+      {/* Pie de página */}
+      <footer className="mt-12 border-t border-rose-100 bg-white px-4 py-9 text-center">
+        <p className="text-lg font-bold" style={{ color: theme.primary }}>
           Lula Shop
         </p>
-        <p className="mt-1 text-xs text-rose-400">{theme.footerText}</p>
-        <p className="mt-3 text-[11px] text-rose-300">
-          Inventario unificado · Configuración desde el panel de administración
+        <p className="mt-1 text-xs text-slate-500">{theme.footerText}</p>
+        <p className="mt-3 text-[11px] text-slate-400">
+          Productos profesionales · Tienda en línea
         </p>
       </footer>
 
+      {/* Carrito existente */}
       <StoreCartSheet
         open={cartOpen}
         onOpenChange={setCartOpen}
@@ -669,18 +771,21 @@ function TiendaPage() {
         onPlaceOrder={() => placeOrder.mutate()}
         onIncrease={(id) => {
           const current =
-            items.find((i) => i.productId === id)?.quantity ?? 0;
+            items.find((item) => item.productId === id)?.quantity ?? 0;
           const max = stockByProduct.get(id) ?? 0;
+
           if (current + 1 > max) {
             toast.error(`Solo hay ${max} disponibles`);
             return;
           }
+
           setCartQuantity(id, current + 1);
           refreshCart();
         }}
         onDecrease={(id) => {
           const current =
-            items.find((i) => i.productId === id)?.quantity ?? 0;
+            items.find((item) => item.productId === id)?.quantity ?? 0;
+
           setCartQuantity(id, current - 1);
           refreshCart();
         }}
