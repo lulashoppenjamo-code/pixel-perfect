@@ -33,7 +33,7 @@ export function StoreProductCard({
   };
 
   return (
-    <article className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white transition duration-200 hover:-translate-y-0.5 hover:border-rose-200 hover:shadow-lg">
+    <article className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-black/5 bg-white shadow-[0_4px_20px_rgba(139,58,92,0.08)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_8px_30px_rgba(139,58,92,0.16)]">
       {/* Fotografía */}
       <div className="relative aspect-square overflow-hidden bg-white">
         {hasImage ? (
@@ -73,8 +73,11 @@ export function StoreProductCard({
       </div>
 
       {/* Información del producto */}
-      <div className="flex flex-1 flex-col border-t border-slate-100 p-2.5 sm:p-4">
-        <p className="mb-1 line-clamp-1 text-[9px] font-bold uppercase tracking-wider text-rose-500 sm:text-[10px]">
+      <div className="flex flex-1 flex-col p-2.5 sm:p-4">
+        <p
+          className="mb-1 line-clamp-1 text-[9px] font-bold uppercase tracking-[0.16em] sm:text-[10px]"
+          style={{ color: "var(--store-primary, #e11d48)" }}
+        >
           {product.category || "Producto"}
         </p>
 
@@ -97,7 +100,7 @@ export function StoreProductCard({
             type="button"
             disabled={!available}
             onClick={handleAdd}
-            className="h-9 w-full rounded-full text-[11px] font-semibold text-white shadow-none transition sm:h-10 sm:text-xs"
+            className="h-9 w-full rounded-full text-[11px] font-semibold uppercase tracking-wider text-white shadow-none transition hover:opacity-90 sm:h-10 sm:text-xs"
             style={{
               backgroundColor: available ? "var(--store-primary, #e11d48)" : "#f1f1f1",
               color: available ? "#ffffff" : "#9ca3af",
