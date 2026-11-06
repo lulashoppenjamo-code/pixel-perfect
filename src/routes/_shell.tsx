@@ -107,7 +107,7 @@ function ShellErrorComponent({
 
 function ShellLayout() {
   /*
-   * Etapa 2 — Unificación visual catálogo/stock:
+   * Etapa 2 - Unificación visual catálogo/stock:
    * - "Artículos" (/productos) = catálogo + ficha + stock lectura + variantes
    * - "Movimientos" (/inventario) = ajustes, alertas, movimientos (sin duplicar catálogo)
    * Rutas y permisos (navKey) sin cambios.
@@ -432,7 +432,7 @@ function ShellLayout() {
             </button>
           </div>
 
-          {/* Marca — solo expandido */}
+          {/* Marca - solo expandido */}
           {!sidebarCollapsed && (
             <div className="mx-2 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
               <Crown className="h-4 w-4 shrink-0 text-white" />
@@ -447,7 +447,7 @@ function ShellLayout() {
             </div>
           )}
 
-          {/* Vender — siempre visible si tiene permiso */}
+          {/* Vender - siempre visible si tiene permiso */}
           {navItems.some((item) => item.key === "caja") && (
             <div className={sidebarCollapsed ? "px-0" : "px-2"}>
               <button
@@ -467,7 +467,7 @@ function ShellLayout() {
             </div>
           )}
 
-          {/* Sucursal — solo expandido */}
+          {/* Sucursal - solo expandido */}
           {!sidebarCollapsed && (
             <div className="px-2">
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
