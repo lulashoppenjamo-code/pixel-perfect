@@ -575,7 +575,12 @@ function ShellLayout() {
       {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* BARRA SUPERIOR */}
-        <header className="pixel-topbar zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden">
+        <header
+          className="pixel-topbar zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden"
+          style={{
+            paddingTop: "env(safe-area-inset-top, 0px)",
+          }}
+        >
           <button
             onClick={() => setSidebarOpen(true)}
             className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white/90 active:bg-white/10"
@@ -686,7 +691,12 @@ function ShellLayout() {
           className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0"
         >
           <div className="flex min-h-full flex-col">
-            <div className="bg-[#1a73e8] px-4 pb-5 pt-6 text-white sm:px-5">
+            <div
+              className="bg-[#1a73e8] px-4 pb-5 text-white sm:px-5"
+              style={{
+                paddingTop: "calc(1.5rem + env(safe-area-inset-top, 0px))",
+              }}
+            >
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
                   L
