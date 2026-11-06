@@ -46,7 +46,11 @@ function NotFoundComponent() {
 function getErrorDetails(error: unknown) {
   if (error instanceof Response) {
     return {
-      message: `Response \( {error.status} \){error.url ? ` — ${error.url}` : ""}`,
+      message:
+        "Response (" +
+        error.status +
+        ")" +
+        (error.url ? " — " + error.url : ""),
       stack: "",
     };
   }
@@ -91,7 +95,11 @@ function ErrorComponent({
             <div className="text-sm font-medium text-destructive">
               Error de la aplicación
             </div>
-            <h1 className="text-2xl font-bold">Algo salió mal</h1>
+
+            <h1 className="text-2xl font-bold">
+              Algo salió mal
+            </h1>
+
             <p className="text-sm text-muted-foreground">
               El sistema detectó un error. Ahora puedes ver directamente el
               detalle para localizar el problema.
