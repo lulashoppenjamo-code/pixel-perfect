@@ -46,7 +46,7 @@ function NotFoundComponent() {
 function getErrorDetails(error: unknown) {
   if (error instanceof Response) {
     return {
-      message: `Response ${error.status}${error.url ? ` — ${error.url}` : ""}`,
+      message: `Response \( {error.status} \){error.url ? ` — ${error.url}` : ""}`,
       stack: "",
     };
   }
@@ -89,13 +89,9 @@ function ErrorComponent({
         <div className="rounded-xl border border-destructive/30 bg-card p-6 shadow-sm">
           <div className="flex flex-col gap-2">
             <div className="text-sm font-medium text-destructive">
-              Error de compilación o ejecución
+              Error de la aplicación
             </div>
-
-            <h1 className="text-xl font-semibold tracking-tight">
-              No se pudo cargar esta página
-            </h1>
-
+            <h1 className="text-2xl font-bold">Algo salió mal</h1>
             <p className="text-sm text-muted-foreground">
               El sistema detectó un error. Ahora puedes ver directamente el
               detalle para localizar el problema.
@@ -162,7 +158,7 @@ export const Route =
         },
         {
           name: "viewport",
-          content: "width=device-width, initial-scale=1",
+          content: "width=device-width, initial-scale=1, viewport-fit=cover",
         },
         {
           title: "Lula Shop OS",
@@ -195,7 +191,7 @@ export const Route =
         },
         {
           name: "theme-color",
-          content: "#ffffff",
+          content: "#1a73e8",
         },
         {
           name: "mobile-web-app-capable",
@@ -207,7 +203,7 @@ export const Route =
         },
         {
           name: "apple-mobile-web-app-status-bar-style",
-          content: "default",
+          content: "black-translucent",
         },
         {
           name: "apple-mobile-web-app-title",
