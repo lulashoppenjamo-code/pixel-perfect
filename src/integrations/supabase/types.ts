@@ -445,6 +445,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inventory_variant_id_fkey"
             columns: ["variant_id"]
             isOneToOne: false
@@ -509,6 +516,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "inventory_movements_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "inventory_movements_variant_id_fkey"
             columns: ["variant_id"]
             isOneToOne: false
@@ -564,6 +578,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "online_order_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
             referencedColumns: ["id"]
           },
           {
@@ -719,6 +740,13 @@ export type Database = {
             referencedRelation: "products"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "product_variants_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
+            referencedColumns: ["id"]
+          },
         ]
       }
       products: {
@@ -864,6 +892,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "purchase_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "purchase_items_purchase_id_fkey"
             columns: ["purchase_id"]
             isOneToOne: false
@@ -1005,6 +1040,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sale_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sale_items_sale_id_fkey"
             columns: ["sale_id"]
             isOneToOne: false
@@ -1137,6 +1179,64 @@ export type Database = {
           },
         ]
       }
+      shared_inventory: {
+        Row: {
+          created_at: string
+          id: string
+          max_stock: number | null
+          min_stock: number
+          product_id: string
+          reserved_stock: number
+          stock: number
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          max_stock?: number | null
+          min_stock?: number
+          product_id: string
+          reserved_stock?: number
+          stock?: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          max_stock?: number | null
+          min_stock?: number
+          product_id?: string
+          reserved_stock?: number
+          stock?: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_inventory_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_inventory_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "v_online_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "shared_inventory_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppliers: {
         Row: {
           created_at: string
@@ -1190,7 +1290,56 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      v_online_catalog: {
+        Row: {
+          available_stock: number | null
+          barcode: string | null
+          category_id: string | null
+          description: string | null
+          emoji: string | null
+          has_variants: boolean | null
+          id: string | null
+          image_url: string | null
+          name: string | null
+          price: number | null
+          sku: string | null
+        }
+        Insert: {
+          available_stock?: never
+          barcode?: string | null
+          category_id?: string | null
+          description?: string | null
+          emoji?: string | null
+          has_variants?: never
+          id?: string | null
+          image_url?: string | null
+          name?: string | null
+          price?: number | null
+          sku?: string | null
+        }
+        Update: {
+          available_stock?: never
+          barcode?: string | null
+          category_id?: string | null
+          description?: string | null
+          emoji?: string | null
+          has_variants?: never
+          id?: string | null
+          image_url?: string | null
+          name?: string | null
+          price?: number | null
+          sku?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "products_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       adjust_stock: {
@@ -1419,6 +1568,7 @@ export type Database = {
         }[]
       }
       get_my_permissions: { Args: never; Returns: string[] }
+      get_online_branch_id: { Args: never; Returns: string }
       get_shared_inventory: {
         Args: never
         Returns: {
