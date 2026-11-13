@@ -23,6 +23,7 @@ export function StoreHeader({
   onSelectCategory,
 }: StoreHeaderProps) {
   const [mobileMenu, setMobileMenu] = useState(false);
+
   const links = [
     ["Inicio", "#inicio"],
     ["Productos", "#catalogo"],
@@ -30,14 +31,20 @@ export function StoreHeader({
     ["Preguntas frecuentes", "#preguntas"],
     ["Contacto", "#contacto"],
   ];
+
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background text-foreground">
       <div className="bg-primary px-4 py-2 text-center text-xs text-primary-foreground">
         Lula Shop · Tienda en línea
       </div>
+
       <div className="mx-auto grid max-w-[1440px] grid-cols-[1fr_auto] items-center gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[1fr_auto_1fr] lg:px-10 lg:py-6">
         <div className="relative hidden max-w-sm lg:block">
-          <Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-primary" />
+          <Search
+            aria-hidden="true"
+            className="absolute left-3 top-3 h-4 w-4 text-primary"
+          />
+
           <Input
             aria-label="Buscar productos"
             value={search}
@@ -45,6 +52,7 @@ export function StoreHeader({
             placeholder="Busca tus favoritos"
             className="h-10 rounded-full border-border bg-secondary pl-10 pr-10"
           />
+
           {search && (
             <Button
               variant="ghost"
@@ -57,6 +65,7 @@ export function StoreHeader({
             </Button>
           )}
         </div>
+
         <a
           href="#inicio"
           className="w-fit text-primary lg:text-center"
@@ -65,8 +74,12 @@ export function StoreHeader({
           <span className="block font-serif text-3xl font-bold italic leading-none sm:text-4xl">
             Lula Shop
           </span>
-          <span className="mt-1.5 block text-[10px] uppercase">Tienda en línea</span>
+
+          <span className="mt-1.5 block text-[10px] uppercase">
+            Tienda en línea
+          </span>
         </a>
+
         <div className="flex items-center justify-end gap-2">
           <Button
             variant="ghost"
@@ -79,6 +92,7 @@ export function StoreHeader({
           >
             {mobileMenu ? <X /> : <Menu />}
           </Button>
+
           <Button
             variant="outline"
             onClick={onOpenCart}
@@ -90,8 +104,13 @@ export function StoreHeader({
             <span className="min-w-4 text-center">{cartCount}</span>
           </Button>
         </div>
+
         <div className="relative col-span-2 lg:hidden">
-          <Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-primary" />
+          <Search
+            aria-hidden="true"
+            className="absolute left-3 top-3 h-4 w-4 text-primary"
+          />
+
           <Input
             aria-label="Buscar productos"
             value={search}
@@ -99,6 +118,7 @@ export function StoreHeader({
             placeholder="¿Qué estás buscando?"
             className="h-10 rounded-full bg-secondary pl-10 pr-10"
           />
+
           {search && (
             <Button
               variant="ghost"
@@ -112,16 +132,22 @@ export function StoreHeader({
           )}
         </div>
       </div>
+
       <nav
         aria-label="Navegación de tienda"
         className="hidden justify-center gap-8 border-t border-border px-4 py-3 text-xs font-semibold md:flex"
       >
         {links.map(([label, href]) => (
-          <a key={href} href={href} className="transition-colors hover:text-primary">
+          <a
+            key={href}
+            href={href}
+            className="transition-colors hover:text-primary"
+          >
             {label}
           </a>
         ))}
       </nav>
+
       {mobileMenu && (
         <nav
           id="store-mobile-nav"
@@ -139,6 +165,7 @@ export function StoreHeader({
               <ArrowRight className="h-4 w-4 text-primary" />
             </a>
           ))}
+
           {categories.length > 1 && (
             <div className="flex flex-wrap gap-2 py-3">
               {categories.map((cat) => (
