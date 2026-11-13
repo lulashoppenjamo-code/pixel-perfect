@@ -177,7 +177,7 @@ function TiendaPage() {
   const [category, setCategory] = useState("Todos");
   const [sort, setSort] = useState<SortOption>("recommended");
   const [page, setPage] = useState(1);
-  const [showOutOfStock, setShowOutOfStock] = useState(false);
+  const [showOutOfStock, setShowOutOfStock] = useState(true);
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
