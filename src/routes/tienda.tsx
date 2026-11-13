@@ -21,6 +21,7 @@ import {
 import { StoreHeader } from "@/components/store/StoreHeader";
 import { StoreProductCard } from "@/components/store/StoreProductCard";
 import { StoreCartSheet } from "@/components/store/StoreCartSheet";
+import { ProductImage } from "@/components/ProductImage";
 import { type StoreProduct } from "@/lib/store/demoCatalog";
 import {
   addToCart,
@@ -649,18 +650,12 @@ function TiendaPage() {
                   }`}
                 >
                   <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-[#fbf2f6]">
-                    {product.image_url ? (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        loading="lazy"
-                        className="h-full w-full object-contain"
-                      />
-                    ) : (
-                      <span className="text-5xl">
-                        {product.emoji || "💗"}
-                      </span>
-                    )}
+                    <ProductImage
+                      src={product.image_url}
+                      emoji={product.emoji}
+                      name={product.name}
+                      className="h-full w-full object-contain"
+                    />
                   </div>
 
                   <span className="mt-2 line-clamp-1 text-left text-[9px] font-semibold text-[#553647] sm:text-[10px]">
