@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,16 +32,8 @@ import {
   subscribeCart,
   type CartItem,
 } from "@/lib/store/cart";
-import {
-  loadStoreConfig,
-  subscribeStoreConfig,
-  type StoreConfig,
-  DEFAULT_STORE_CONFIG,
-} from "@/lib/store/storeConfig";
-import {
-  getStorePublicData,
-  createStoreOnlineOrder,
-} from "@/lib/store/store.functions";
+import { loadStoreConfig, subscribeStoreConfig, type StoreConfig } from "@/lib/store/storeConfig";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -52,6 +43,7 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
+import { DEFAULT_STORE_CONFIG } from "@/lib/store/storeConfig";
 
 export const Route = createFileRoute("/tienda")({
   head: () => ({
@@ -88,12 +80,9 @@ type OnlineCatalogRow = {
   available_stock: number;
 };
 
-type SortOption =
-  | "recommended"
-  | "name-asc"
-  | "name-desc"
-  | "price-asc"
-  | "price-desc";
+type CategoryRow = { id: string; name: string };
+
+type SortOption = "recommended" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
 
 const PAGE_SIZE = 40;
 
@@ -114,26 +103,62 @@ function mapCatalog(
       emoji: row.emoji || "💅",
       image_url: row.image_url ?? null,
       available: stock > 0,
-      description:
-        row.description?.trim() ||
-        (row.sku ? `SKU: ${row.sku}` : undefined),
+      description: row.description?.trim() || (row.sku ? `SKU: ${row.sku}` : undefined),
       stock,
     };
   });
 }
 
+async function fetchCatalog(): Promise<OnlineCatalogRow[]> {
+  const all: OnlineCatalogRow[] = [];
+  const pageSize = 500;
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("v_online_catalog")
+      .select(
+        "id, name, sku, barcode, description, category_id, price, image_url, emoji, has_variants, available_stock",
+      )
+      .order("name", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    const rows = (data ?? []) as OnlineCatalogRow[];
+    all.push(...rows);
+
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return all;
+}
+
+async function fetchCategories(ids: string[]) {
+  const result = new Map<string, string>();
+  if (!ids.length) return result;
+
+  const { data, error } = await supabase.from("categories").select("id, name").in("id", ids);
+
+  if (error) throw error;
+
+  for (const row of (data ?? []) as CategoryRow[]) {
+    result.set(row.id, row.name);
+  }
+
+  return result;
+}
+
 function TiendaPage() {
   const qc = useQueryClient();
 
-  const [config, setConfig] = useState<StoreConfig>(
-    DEFAULT_STORE_CONFIG,
-  );
+  const [config, setConfig] = useState<StoreConfig>(DEFAULT_STORE_CONFIG);
 
   useEffect(() => {
     setConfig(loadStoreConfig());
-    return subscribeStoreConfig(() =>
-      setConfig(loadStoreConfig()),
-    );
+    return subscribeStoreConfig(() => setConfig(loadStoreConfig()));
   }, []);
 
   const theme = config.theme;
@@ -168,151 +193,126 @@ function TiendaPage() {
     return subscribeCart(refreshCart);
   }, [refreshCart]);
 
-  // Catálogo, categorías y sucursales consultados desde el servidor.
   const {
-    data: storeData,
+    data: catalogPayload,
     isLoading: loadingInventory,
     isFetching,
     isError,
     refetch,
   } = useQuery({
     queryKey: ["online-catalog", "tienda-publica"],
-    queryFn: () => getStorePublicData(),
+    queryFn: async () => {
+      const rows = await fetchCatalog();
+      const ids = Array.from(
+        new Set(rows.map((row) => row.category_id).filter((id): id is string => Boolean(id))),
+      );
+      const categoryById = await fetchCategories(ids);
+      return { rows, categoryById };
+    },
     refetchInterval: 15000,
     staleTime: 5000,
   });
 
-  const onlineBranchId = storeData?.onlineBranchId ?? null;
-  const contactBranches = storeData?.branches ?? [];
-  const contactError = isError;
+  // Se conserva la selección de sucursal del sistema actual.
+  const { data: onlineBranchId } = useQuery({
+    queryKey: ["online-branch-id"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("branches")
+        .select("id")
+        .eq("is_active", true)
+        .order("name")
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("[tienda] Error de sucursal:", error.message);
+        return null;
+      }
+
+      return data?.id ?? null;
+    },
+    staleTime: 60000,
+    retry: false,
+  });
+
+  const { data: contactBranches = [], isError: contactError } = useQuery({
+    queryKey: ["store-contact-branches"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("branches")
+        .select("id, name, address, phone")
+        .eq("is_active", true)
+        .order("name");
+      if (error) throw error;
+      return data ?? [];
+    },
+    staleTime: 60000,
+    retry: false,
+  });
 
   const products = useMemo(() => {
-    if (!storeData) return [];
-
-    const categoryById = new Map(
-      storeData.categories.map((item) => [
-        item.id,
-        item.name,
-      ]),
-    );
-
-    return mapCatalog(
-      storeData.rows,
-      categoryById,
-    );
-  }, [storeData]);
+    if (!catalogPayload) return [];
+    return mapCatalog(catalogPayload.rows, catalogPayload.categoryById);
+  }, [catalogPayload]);
 
   const categories = useMemo(() => {
-    const names = new Set(
-      products.map((product) => product.category).filter(Boolean),
-    );
-
-    return [
-      "Todos",
-      ...Array.from(names).sort((a, b) =>
-        a.localeCompare(b, "es"),
-      ),
-    ];
+    const names = new Set(products.map((p) => p.category).filter(Boolean));
+    return ["Todos", ...Array.from(names).sort((a, b) => a.localeCompare(b, "es"))];
   }, [products]);
 
   const stockByProduct = useMemo(() => {
     const map = new Map<string, number>();
-
-    products.forEach((product) => {
-      map.set(product.id, product.stock);
-    });
-
+    products.forEach((p) => map.set(p.id, p.stock));
     return map;
   }, [products]);
 
   const priceBounds = useMemo(() => {
-    const prices = products.map((product) => product.price);
-
+    const prices = products.map((p) => p.price);
     return {
-      min: prices.length
-        ? Math.floor(Math.min(...prices))
-        : 0,
-      max: prices.length
-        ? Math.ceil(Math.max(...prices))
-        : 1000,
+      min: prices.length ? Math.floor(Math.min(...prices)) : 0,
+      max: prices.length ? Math.ceil(Math.max(...prices)) : 1000,
     };
   }, [products]);
 
   const filtered = useMemo(() => {
     const query = search.trim().toLocaleLowerCase("es");
     const min = minPrice.trim() ? Number(minPrice) : 0;
-    const max = maxPrice.trim()
-      ? Number(maxPrice)
-      : Number.POSITIVE_INFINITY;
+    const max = maxPrice.trim() ? Number(maxPrice) : Number.POSITIVE_INFINITY;
 
-    const result = products.filter((product) => {
+    const result = products.filter((p) => {
       const matchesSearch =
         !query ||
-        product.name.toLocaleLowerCase("es").includes(query) ||
-        (product.description || "")
-          .toLocaleLowerCase("es")
-          .includes(query) ||
-        product.category
-          .toLocaleLowerCase("es")
-          .includes(query);
+        p.name.toLocaleLowerCase("es").includes(query) ||
+        (p.description || "").toLocaleLowerCase("es").includes(query) ||
+        p.category.toLocaleLowerCase("es").includes(query);
 
-      const matchesCategory =
-        category === "Todos" ||
-        product.category === category;
+      const matchesCategory = category === "Todos" || p.category === category;
+      const matchesStock = showOutOfStock || p.available;
+      const matchesPrice = p.price >= min && p.price <= max;
 
-      const matchesStock =
-        showOutOfStock || product.available;
-
-      const matchesPrice =
-        product.price >= min &&
-        product.price <= max;
-
-      return (
-        matchesSearch &&
-        matchesCategory &&
-        matchesStock &&
-        matchesPrice
-      );
+      return matchesSearch && matchesCategory && matchesStock && matchesPrice;
     });
 
     switch (sort) {
       case "name-asc":
-        result.sort((a, b) =>
-          a.name.localeCompare(b.name, "es"),
-        );
+        result.sort((a, b) => a.name.localeCompare(b.name, "es"));
         break;
-
       case "name-desc":
-        result.sort((a, b) =>
-          b.name.localeCompare(a.name, "es"),
-        );
+        result.sort((a, b) => b.name.localeCompare(a.name, "es"));
         break;
-
       case "price-asc":
         result.sort((a, b) => a.price - b.price);
         break;
-
       case "price-desc":
         result.sort((a, b) => b.price - a.price);
         break;
     }
 
     return result;
-  }, [
-    products,
-    search,
-    category,
-    showOutOfStock,
-    minPrice,
-    maxPrice,
-    sort,
-  ]);
+  }, [products, search, category, showOutOfStock, minPrice, maxPrice, sort]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filtered.length / PAGE_SIZE),
-  );
-
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
 
   const visibleProducts = useMemo(() => {
@@ -322,105 +322,77 @@ function TiendaPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [
-    search,
-    category,
-    sort,
-    showOutOfStock,
-    minPrice,
-    maxPrice,
-  ]);
+  }, [search, category, sort, showOutOfStock, minPrice, maxPrice]);
 
-  const handleAdd = (
-    product: StoreProduct,
-    quantity = 1,
-  ) => {
+  const handleAdd = (product: StoreProduct, quantity = 1) => {
     const stock = stockByProduct.get(product.id) ?? 0;
-
-    const existing =
-      getCartItems().find(
-        (item) => item.productId === product.id,
-      )?.quantity ?? 0;
+    const existing = getCartItems().find((item) => item.productId === product.id)?.quantity ?? 0;
 
     if (stock <= 0 || existing + quantity > stock) {
-      toast.error(
-        `Existencia insuficiente. Disponible: ${stock}`,
-      );
+      toast.error(`Existencia insuficiente. Disponible: ${stock}`);
       return;
     }
 
     addToCart(product, quantity);
     refreshCart();
-
-    toast.success(
-      `${quantity} pieza(s) agregadas al carrito`,
-    );
+    toast.success(`${quantity} pieza(s) agregadas al carrito`);
   };
 
-  // El pedido se crea en el servidor.
-  // Los precios y nombres se vuelven a consultar allí.
+  // Se conserva el mecanismo actual de creación de pedidos.
   const placeOrder = useMutation({
     mutationFn: async () => {
       if (!onlineBranchId) {
-        throw new Error(
-          "No hay sucursal activa para el pedido online.",
-        );
+        throw new Error("No hay sucursal activa para el pedido online.");
       }
 
       const cart = getCartItems();
+      if (!cart.length) throw new Error("El carrito está vacío");
 
-      if (!cart.length) {
-        throw new Error("El carrito está vacío");
+      for (const item of cart) {
+        const available = stockByProduct.get(item.productId) ?? 0;
+        if (item.quantity > available) {
+          throw new Error(`Stock insuficiente para ${item.name}. Disponible: ${available}`);
+        }
       }
 
-      return createStoreOnlineOrder({
-        data: {
-          branchId: onlineBranchId,
-          customerName,
-          customerPhone,
-          address,
-          notes,
-          items: cart.map((item) => ({
-            productId: item.productId,
-            quantity: item.quantity,
-          })),
-        },
-      });
-    },
+      const orderItems = cart.map((item) => ({
+        product_id: item.productId,
+        name: item.name,
+        unit_price: item.price,
+        quantity: item.quantity,
+      }));
 
+      const { data, error } = await supabase.rpc("create_online_order", {
+        _branch_id: onlineBranchId,
+        _items: orderItems,
+        ...(customerName.trim() ? { _customer_name: customerName.trim() } : {}),
+        ...(customerPhone.trim() ? { _customer_phone: customerPhone.trim() } : {}),
+        ...(address.trim() ? { _delivery_address: address.trim() } : {}),
+        ...(notes.trim() ? { _notes: notes.trim() } : {}),
+      });
+
+      if (error) throw error;
+      return data;
+    },
     onSuccess: () => {
       toast.success("¡Pedido enviado correctamente!");
-
       clearCart();
       refreshCart();
-
       setCartOpen(false);
       setCustomerName("");
       setCustomerPhone("");
       setAddress("");
       setNotes("");
 
-      void qc.invalidateQueries({
-        queryKey: ["online-catalog"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["online-orders"],
-      });
-
-      void qc.invalidateQueries({
-        queryKey: ["pos-products-shared"],
-      });
-
+      void qc.invalidateQueries({ queryKey: ["online-catalog"] });
+      void qc.invalidateQueries({ queryKey: ["online-orders"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
       void qc.invalidateQueries({
         queryKey: ["pos-variant-inventory-shared"],
       });
     },
-
     onError: (error: Error) => {
-      toast.error(
-        error.message || "No se pudo crear el pedido",
-      );
+      toast.error(error.message || "No se pudo crear el pedido");
     },
   });
 
@@ -435,36 +407,24 @@ function TiendaPage() {
   };
 
   const changePage = (next: number) => {
-    setPage(
-      Math.max(1, Math.min(totalPages, next)),
-    );
-
-    document
-      .getElementById("catalogo")
-      ?.scrollIntoView({
-        behavior: window.matchMedia(
-          "(prefers-reduced-motion: reduce)",
-        ).matches
-          ? "instant"
-          : "smooth",
-        block: "start",
-      });
+    setPage(Math.max(1, Math.min(totalPages, next)));
+    document.getElementById("catalogo")?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+      block: "start",
+    });
   };
 
   const renderFilters = () => (
     <div className="space-y-6">
       <section>
-        <h3 className="mb-3 text-sm font-semibold">
-          Categorías
-        </h3>
-
+        <h3 className="mb-3 text-sm font-semibold">Categorías</h3>
         <div className="max-h-72 space-y-1 overflow-y-auto">
           {categories.map((cat) => (
             <Button
               key={cat}
-              variant={
-                category === cat ? "secondary" : "ghost"
-              }
+              variant={category === cat ? "secondary" : "ghost"}
               aria-pressed={category === cat}
               onClick={() => setCategory(cat)}
               className="h-auto min-h-9 w-full justify-start whitespace-normal rounded px-3 py-2 text-left text-xs"
@@ -474,12 +434,8 @@ function TiendaPage() {
           ))}
         </div>
       </section>
-
       <section className="border-t border-border pt-5">
-        <h3 className="mb-3 text-sm font-semibold">
-          Precio
-        </h3>
-
+        <h3 className="mb-3 text-sm font-semibold">Precio</h3>
         <div className="grid grid-cols-2 gap-2">
           <label className="text-xs text-muted-foreground">
             Desde
@@ -488,14 +444,11 @@ function TiendaPage() {
               min="0"
               step="0.01"
               value={minPrice}
-              onChange={(e) =>
-                setMinPrice(e.target.value)
-              }
+              onChange={(e) => setMinPrice(e.target.value)}
               placeholder={String(priceBounds.min)}
               className="mt-2 h-10 rounded"
             />
           </label>
-
           <label className="text-xs text-muted-foreground">
             Hasta
             <Input
@@ -503,110 +456,50 @@ function TiendaPage() {
               min="0"
               step="0.01"
               value={maxPrice}
-              onChange={(e) =>
-                setMaxPrice(e.target.value)
-              }
+              onChange={(e) => setMaxPrice(e.target.value)}
               placeholder={String(priceBounds.max)}
               className="mt-2 h-10 rounded"
             />
           </label>
         </div>
-
-        {minPrice &&
-          maxPrice &&
-          Number(minPrice) > Number(maxPrice) && (
-            <p
-              role="status"
-              className="mt-2 text-xs text-destructive"
-            >
-              El precio mínimo supera al máximo.
-            </p>
-          )}
+        {minPrice && maxPrice && Number(minPrice) > Number(maxPrice) && (
+          <p role="status" className="mt-2 text-xs text-destructive">
+            El precio mínimo supera al máximo.
+          </p>
+        )}
       </section>
-
       <section className="border-t border-border pt-5">
-        <h3 className="mb-3 text-sm font-semibold">
-          Disponibilidad
-        </h3>
-
+        <h3 className="mb-3 text-sm font-semibold">Disponibilidad</h3>
         <label className="flex cursor-pointer items-start gap-2 text-xs leading-5">
           <input
             type="checkbox"
             checked={showOutOfStock}
-            onChange={(e) =>
-              setShowOutOfStock(e.target.checked)
-            }
+            onChange={(e) => setShowOutOfStock(e.target.checked)}
             className="mt-1 accent-primary"
           />
           Mostrar también agotados
         </label>
       </section>
-
-      <Button
-        variant="outline"
-        onClick={resetFilters}
-        className="w-full rounded-full text-xs"
-      >
+      <Button variant="outline" onClick={resetFilters} className="w-full rounded-full text-xs">
         Borrar filtros
       </Button>
     </div>
   );
 
-  const heroTitle =
-    theme.heroTitle?.trim() || "Lula Shop";
-
+  const heroTitle = theme.heroTitle?.trim() || "Lula Shop";
+  // Default commercial claims and example testimonials are deliberately not rendered.
   const heroSubtitle =
-    theme.heroSubtitle !==
-    DEFAULT_STORE_CONFIG.theme.heroSubtitle
-      ? theme.heroSubtitle
-      : "";
-
-  const footerText =
-    theme.footerText ||
-    DEFAULT_STORE_CONFIG.theme.footerText;
+    theme.heroSubtitle !== DEFAULT_STORE_CONFIG.theme.heroSubtitle ? theme.heroSubtitle : "";
+  const footerText = theme.footerText || DEFAULT_STORE_CONFIG.theme.footerText;
 
   return (
-    <div
-      id="inicio"
-      className="lula-store min-h-screen bg-background text-foreground"
-    >
+    <div id="inicio" className="lula-store min-h-screen bg-background text-foreground">
       <style>{`
-        .lula-store, .store-filters {
-          --primary: #b5276b;
-          --primary-foreground: #ffffff;
-          --background: #ffffff;
-          --foreground: #30232b;
-          --card: #ffffff;
-          --card-foreground: #30232b;
-          --secondary: #fceaf2;
-          --secondary-foreground: #872354;
-          --muted: #f7f4f6;
-          --muted-foreground: #75646e;
-          --accent: #fceaf2;
-          --accent-foreground: #872354;
-          --border: #efdee6;
-          --input: #dfcad4;
-          --ring: #b5276b;
-          --destructive: #b42338;
-          --store-banner: #f5c7dd;
-          letter-spacing: 0;
-        }
-
-        .lula-store section[id],
-        .lula-store footer[id] {
-          scroll-margin-top: 220px;
-        }
-
-        .lula-store .store-banner {
-          background: var(--store-banner);
-        }
-
-        .lula-store ::selection {
-          background: var(--secondary);
-          color: var(--foreground);
-        }
+        .lula-store, .store-filters { --primary: #b5276b; --primary-foreground: #ffffff; --background: #ffffff; --foreground: #30232b; --card: #ffffff; --card-foreground: #30232b; --secondary: #fceaf2; --secondary-foreground: #872354; --muted: #f7f4f6; --muted-foreground: #75646e; --accent: #fceaf2; --accent-foreground: #872354; --border: #efdee6; --input: #dfcad4; --ring: #b5276b; --destructive: #b42338; --store-banner: #f5c7dd; letter-spacing: 0; }
+        .lula-store section[id], .lula-store footer[id] { scroll-margin-top: 220px; }
+        .lula-store .store-banner { background: var(--store-banner); }
+        .lula-store ::selection { background: var(--secondary); color: var(--foreground); }
       `}</style>
-
       <StoreHeader
         search={search}
         onSearchChange={setSearch}
@@ -616,34 +509,22 @@ function TiendaPage() {
         activeCategory={category}
         onSelectCategory={setCategory}
       />
-
       <main>
         <section className="store-banner border-b border-border px-5 py-12 text-center sm:px-8 sm:py-16">
           <h1 className="mx-auto max-w-3xl break-words font-serif text-4xl font-medium leading-tight sm:text-5xl">
             Lula Shop
           </h1>
-
-          <p className="mx-auto mt-4 max-w-2xl break-words text-lg leading-relaxed">
-            {heroTitle}
-          </p>
-
+          <p className="mx-auto mt-4 max-w-2xl break-words text-lg leading-relaxed">{heroTitle}</p>
           {heroSubtitle && (
-            <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed">
-              {heroSubtitle}
-            </p>
+            <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed">{heroSubtitle}</p>
           )}
-
-          <Button
-            asChild
-            className="mt-7 h-11 rounded-full px-7"
-          >
+          <Button asChild className="mt-7 h-11 rounded-full px-7">
             <a href="#catalogo">
               {theme.heroCta || "Ver productos"}
               <ArrowRight />
             </a>
           </Button>
         </section>
-
         <div className="mx-auto grid max-w-[1440px] gap-4 border-b border-border px-5 py-5 text-xs sm:grid-cols-3 sm:px-8 lg:px-10">
           {[
             [ShoppingBag, "Catálogo con existencias disponibles"],
@@ -651,19 +532,14 @@ function TiendaPage() {
             [Truck, "Recoger en sucursal o envío a domicilio"],
           ].map(([Icon, text]) => {
             const ItemIcon = Icon as typeof ShoppingBag;
-
             return (
-              <div
-                key={String(text)}
-                className="flex items-center justify-center gap-2"
-              >
+              <div key={String(text)} className="flex items-center justify-center gap-2">
                 <ItemIcon className="h-4 w-4 shrink-0 text-primary" />
                 <span>{String(text)}</span>
               </div>
             );
           })}
         </div>
-
         <section
           id="catalogo"
           className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 sm:py-12 lg:px-10"
@@ -675,9 +551,7 @@ function TiendaPage() {
             {categories.map((cat) => (
               <Button
                 key={cat}
-                variant={
-                  category === cat ? "default" : "outline"
-                }
+                variant={category === cat ? "default" : "outline"}
                 size="sm"
                 aria-pressed={category === cat}
                 onClick={() => setCategory(cat)}
@@ -687,83 +561,47 @@ function TiendaPage() {
               </Button>
             ))}
           </div>
-
           <div className="mb-7 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="mb-2 text-xs text-muted-foreground">
-                Lula Shop / Catálogo
-              </p>
-
+              <p className="mb-2 text-xs text-muted-foreground">Lula Shop / Catálogo</p>
               <h2 className="font-serif text-3xl">
-                {category === "Todos"
-                  ? "Productos"
-                  : category}
+                {category === "Todos" ? "Productos" : category}
               </h2>
-
-              <p
-                role="status"
-                className="mt-2 text-xs text-muted-foreground"
-              >
+              <p role="status" className="mt-2 text-xs text-muted-foreground">
                 {loadingInventory
                   ? "Cargando catálogo…"
                   : isError
                     ? "Catálogo no disponible"
                     : `${filtered.length} productos encontrados`}
-
-                {!loadingInventory && isFetching
-                  ? " · Actualizando"
-                  : ""}
+                {!loadingInventory && isFetching ? " · Actualizando" : ""}
               </p>
             </div>
-
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
-                onClick={() =>
-                  setMobileFiltersOpen(true)
-                }
+                onClick={() => setMobileFiltersOpen(true)}
                 className="rounded-full text-xs lg:hidden"
               >
                 <Filter />
                 Filtros
               </Button>
-
               <label className="flex min-w-0 items-center gap-2 rounded-full border border-border px-3 py-2">
                 <SlidersHorizontal className="h-4 w-4 shrink-0 text-primary" />
-
-                <span className="sr-only">
-                  Ordenar productos
-                </span>
-
+                <span className="sr-only">Ordenar productos</span>
                 <select
                   value={sort}
-                  onChange={(e) =>
-                    setSort(
-                      e.target.value as SortOption,
-                    )
-                  }
+                  onChange={(e) => setSort(e.target.value as SortOption)}
                   className="min-w-0 max-w-48 bg-background text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
-                  <option value="recommended">
-                    Nombre: A a Z
-                  </option>
-                  <option value="price-asc">
-                    Precio: menor a mayor
-                  </option>
-                  <option value="price-desc">
-                    Precio: mayor a menor
-                  </option>
-                  <option value="name-asc">
-                    A - Z
-                  </option>
-                  <option value="name-desc">
-                    Z - A
-                  </option>
+                  <option value="recommended">Nombre: A a Z</option>
+                  <option value="price-asc">Precio: menor a mayor</option>
+                  <option value="price-desc">Precio: mayor a menor</option>
+                  <option value="name-asc">A - Z</option>
+                  <option value="name-desc">Z - A</option>
                 </select>
               </label>
             </div>
           </div>
-
           <div className="grid gap-8 lg:grid-cols-[190px_minmax(0,1fr)]">
             <aside
               aria-label="Filtros de productos"
@@ -773,142 +611,94 @@ function TiendaPage() {
                 <Filter className="h-4 w-4 text-primary" />
                 Filtros
               </h2>
-
               {renderFilters()}
             </aside>
-
-            <div
-              className="min-w-0"
-              aria-busy={isFetching}
-            >
+            <div className="min-w-0" aria-busy={isFetching}>
               {loadingInventory && (
                 <div
                   className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4"
                   aria-label="Cargando productos"
                 >
-                  {Array.from({ length: 8 }).map(
-                    (_, i) => (
-                      <div
-                        key={i}
-                        className="overflow-hidden rounded-lg border border-border motion-safe:animate-pulse"
-                      >
-                        <div className="aspect-square bg-secondary" />
-
-                        <div className="space-y-3 p-4">
-                          <div className="h-3 w-1/2 bg-muted" />
-                          <div className="h-5 bg-muted" />
-                          <div className="h-10 bg-muted" />
-                        </div>
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="overflow-hidden rounded-lg border border-border motion-safe:animate-pulse"
+                    >
+                      <div className="aspect-square bg-secondary" />
+                      <div className="space-y-3 p-4">
+                        <div className="h-3 w-1/2 bg-muted" />
+                        <div className="h-5 bg-muted" />
+                        <div className="h-10 bg-muted" />
                       </div>
-                    ),
-                  )}
+                    </div>
+                  ))}
                 </div>
               )}
-
               {!loadingInventory && isError && (
-                <div
-                  role="alert"
-                  className="py-16 text-center"
-                >
+                <div role="alert" className="py-16 text-center">
                   <Package className="mx-auto h-10 w-10 text-primary" />
-
-                  <h3 className="mt-4 text-lg font-semibold">
-                    No pudimos cargar los productos
-                  </h3>
-
+                  <h3 className="mt-4 text-lg font-semibold">No pudimos cargar los productos</h3>
                   <p className="mt-2 text-sm text-muted-foreground">
                     Intenta consultar el catálogo nuevamente.
                   </p>
-
-                  <Button
-                    onClick={() => void refetch()}
-                    className="mt-5 rounded-full"
-                  >
+                  <Button onClick={() => void refetch()} className="mt-5 rounded-full">
                     <RefreshCw />
                     Volver a cargar
                   </Button>
                 </div>
               )}
-
-              {!loadingInventory &&
-                !isError &&
-                filtered.length === 0 && (
-                  <div className="py-16 text-center">
-                    <Package className="mx-auto h-10 w-10 text-primary" />
-
-                    <h3 className="mt-4 text-lg font-semibold">
-                      No encontramos productos
-                    </h3>
-
-                    <p className="mt-2 text-sm text-muted-foreground">
-                      Prueba otra búsqueda o cambia los filtros.
-                    </p>
-
-                    <Button
-                      onClick={resetFilters}
-                      className="mt-5 rounded-full"
-                    >
-                      Borrar filtros
-                    </Button>
+              {!loadingInventory && !isError && filtered.length === 0 && (
+                <div className="py-16 text-center">
+                  <Package className="mx-auto h-10 w-10 text-primary" />
+                  <h3 className="mt-4 text-lg font-semibold">No encontramos productos</h3>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Prueba otra búsqueda o cambia los filtros.
+                  </p>
+                  <Button onClick={resetFilters} className="mt-5 rounded-full">
+                    Borrar filtros
+                  </Button>
+                </div>
+              )}
+              {!loadingInventory && !isError && visibleProducts.length > 0 && (
+                <>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                    {visibleProducts.map((product) => (
+                      <StoreProductCard key={product.id} product={product} onAdd={handleAdd} />
+                    ))}
                   </div>
-                )}
-
-              {!loadingInventory &&
-                !isError &&
-                visibleProducts.length > 0 && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                      {visibleProducts.map((product) => (
-                        <StoreProductCard
-                          key={product.id}
-                          product={product}
-                          onAdd={handleAdd}
-                        />
-                      ))}
-                    </div>
-
-                    <nav
-                      aria-label="Paginación del catálogo"
-                      className="mt-8 flex flex-wrap items-center justify-center gap-3"
+                  <nav
+                    aria-label="Paginación del catálogo"
+                    className="mt-8 flex flex-wrap items-center justify-center gap-3"
+                  >
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Página anterior"
+                      disabled={currentPage <= 1}
+                      onClick={() => changePage(currentPage - 1)}
+                      className="rounded-full"
                     >
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        aria-label="Página anterior"
-                        disabled={currentPage <= 1}
-                        onClick={() =>
-                          changePage(currentPage - 1)
-                        }
-                        className="rounded-full"
-                      >
-                        <ChevronLeft />
-                      </Button>
-
-                      <span className="text-xs text-muted-foreground">
-                        Página {currentPage} de {totalPages}
-                      </span>
-
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        aria-label="Página siguiente"
-                        disabled={
-                          currentPage >= totalPages
-                        }
-                        onClick={() =>
-                          changePage(currentPage + 1)
-                        }
-                        className="rounded-full"
-                      >
-                        <ChevronRight />
-                      </Button>
-                    </nav>
-                  </>
-                )}
+                      <ChevronLeft />
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Página {currentPage} de {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      aria-label="Página siguiente"
+                      disabled={currentPage >= totalPages}
+                      onClick={() => changePage(currentPage + 1)}
+                      className="rounded-full"
+                    >
+                      <ChevronRight />
+                    </Button>
+                  </nav>
+                </>
+              )}
             </div>
           </div>
         </section>
-
         <section
           id="como-comprar"
           className="border-y border-border bg-secondary px-5 py-12 sm:py-16"
@@ -917,11 +707,7 @@ function TiendaPage() {
             <p className="text-center text-xs font-semibold uppercase text-primary">
               Tu pedido, paso a paso
             </p>
-
-            <h2 className="mt-3 text-center font-serif text-3xl">
-              ¿Cómo comprar en Lula Shop?
-            </h2>
-
+            <h2 className="mt-3 text-center font-serif text-3xl">¿Cómo comprar en Lula Shop?</h2>
             <div className="mt-9 grid gap-8 sm:grid-cols-3">
               {[
                 [
@@ -939,42 +725,24 @@ function TiendaPage() {
                   "Envía tu pedido",
                   "Confirma tu pedido. Para resolver detalles de pago o entrega, contacta a la tienda.",
                 ],
-              ].map(([n, title, description]) => (
-                <div
-                  key={n}
-                  className="border-t border-primary/20 pt-5"
-                >
-                  <span className="font-serif text-3xl text-primary">
-                    {n}
-                  </span>
-
-                  <h3 className="mt-3 text-base font-semibold">
-                    {title}
-                  </h3>
-
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    {description}
-                  </p>
+              ].map(([n, title, text]) => (
+                <div key={n} className="border-t border-primary/20 pt-5">
+                  <span className="font-serif text-3xl text-primary">{n}</span>
+                  <h3 className="mt-3 text-base font-semibold">{title}</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
                 </div>
               ))}
             </div>
           </div>
         </section>
-
         <section
           id="preguntas"
           className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 sm:py-16 lg:grid-cols-[1fr_2fr]"
         >
           <div>
-            <p className="text-xs font-semibold uppercase text-primary">
-              Antes de pedir
-            </p>
-
-            <h2 className="mt-3 font-serif text-3xl">
-              Preguntas frecuentes
-            </h2>
+            <p className="text-xs font-semibold uppercase text-primary">Antes de pedir</p>
+            <h2 className="mt-3 font-serif text-3xl">Preguntas frecuentes</h2>
           </div>
-
           <div>
             {[
               [
@@ -998,55 +766,32 @@ function TiendaPage() {
                 "Tu nombre y teléfono. Si solicitas envío, también tu dirección. Puedes agregar indicaciones en las notas del pedido.",
               ],
             ].map(([question, answer]) => (
-              <details
-                key={question}
-                className="group border-b border-border py-4"
-              >
+              <details key={question} className="group border-b border-border py-4">
                 <summary className="cursor-pointer text-sm font-semibold text-foreground">
                   {question}
                 </summary>
-
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                  {answer}
-                </p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{answer}</p>
               </details>
             ))}
           </div>
         </section>
-
-        <section
-          id="contacto"
-          className="border-t border-border bg-muted px-5 py-12"
-        >
+        <section id="contacto" className="border-t border-border bg-muted px-5 py-12">
           <div className="mx-auto max-w-6xl">
             <div className="mb-8">
-              <p className="text-xs font-semibold uppercase text-primary">
-                Estamos en contacto
-              </p>
-
-              <h2 className="mt-3 font-serif text-3xl">
-                Sucursales Lula Shop
-              </h2>
+              <p className="text-xs font-semibold uppercase text-primary">Estamos en contacto</p>
+              <h2 className="mt-3 font-serif text-3xl">Sucursales Lula Shop</h2>
             </div>
-
             {contactBranches.length ? (
               <div className="grid gap-8 sm:grid-cols-2">
                 {contactBranches.map((branch) => (
-                  <div
-                    key={branch.id}
-                    className="border-t border-border pt-5"
-                  >
-                    <h3 className="mb-3 text-lg font-semibold">
-                      {branch.name.trim()}
-                    </h3>
-
+                  <div key={branch.id} className="border-t border-border pt-5">
+                    <h3 className="mb-3 text-lg font-semibold">{branch.name.trim()}</h3>
                     {branch.address?.trim() && (
                       <p className="flex items-start gap-2 text-sm text-muted-foreground">
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                         {branch.address.trim()}
                       </p>
                     )}
-
                     {branch.phone?.trim() && (
                       <a
                         href={`tel:${branch.phone.replace(/[^+\d]/g, "")}`}
@@ -1069,46 +814,25 @@ function TiendaPage() {
           </div>
         </section>
       </main>
-
       <footer className="border-t border-border px-5 py-10">
         <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-3">
           <div>
-            <a
-              href="#inicio"
-              className="font-serif text-3xl font-bold italic text-primary"
-            >
+            <a href="#inicio" className="font-serif text-3xl font-bold italic text-primary">
               Lula Shop
             </a>
-
-            <p className="mt-3 text-xs text-muted-foreground">
-              {footerText}
-            </p>
+            <p className="mt-3 text-xs text-muted-foreground">{footerText}</p>
           </div>
-
-          <nav
-            aria-label="Navegación del pie de página"
-            className="grid gap-3 text-sm"
-          >
+          <nav aria-label="Navegación del pie de página" className="grid gap-3 text-sm">
             <a href="#catalogo">Productos</a>
             <a href="#como-comprar">¿Cómo comprar?</a>
             <a href="#preguntas">Preguntas frecuentes</a>
             <a href="#contacto">Contacto y sucursales</a>
           </nav>
-
           <div>
-            <h3 className="mb-3 text-sm font-semibold">
-              Contacto
-            </h3>
-
+            <h3 className="mb-3 text-sm font-semibold">Contacto</h3>
             {contactBranches.map((branch) => (
-              <div
-                key={branch.id}
-                className="mb-3 text-xs text-muted-foreground"
-              >
-                <a href="#contacto">
-                  {branch.name.trim()}
-                </a>
-
+              <div key={branch.id} className="mb-3 text-xs text-muted-foreground">
+                <a href="#contacto">{branch.name.trim()}</a>
                 {branch.phone?.trim() && (
                   <a
                     href={`tel:${branch.phone.replace(/[^+\d]/g, "")}`}
@@ -1121,37 +845,22 @@ function TiendaPage() {
             ))}
           </div>
         </div>
-
         <div className="mx-auto mt-8 max-w-6xl border-t border-border pt-5 text-xs text-muted-foreground">
           Lula Shop · Tienda en línea
         </div>
       </footer>
-
-      <Sheet
-        open={mobileFiltersOpen}
-        onOpenChange={setMobileFiltersOpen}
-      >
+      <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
         <SheetContent className="store-filters flex w-[90%] flex-col bg-background text-foreground sm:max-w-sm">
           <SheetHeader>
             <SheetTitle>Filtros</SheetTitle>
-            <SheetDescription>
-              Precio, categoría y disponibilidad
-            </SheetDescription>
+            <SheetDescription>Precio, categoría y disponibilidad</SheetDescription>
           </SheetHeader>
-
-          <div className="flex-1 overflow-y-auto py-6">
-            {renderFilters()}
-          </div>
-
-          <Button
-            onClick={() => setMobileFiltersOpen(false)}
-            className="rounded-full"
-          >
+          <div className="flex-1 overflow-y-auto py-6">{renderFilters()}</div>
+          <Button onClick={() => setMobileFiltersOpen(false)} className="rounded-full">
             Ver {filtered.length} productos
           </Button>
         </SheetContent>
       </Sheet>
-
       <StoreCartSheet
         open={cartOpen}
         onOpenChange={setCartOpen}
@@ -1169,25 +878,17 @@ function TiendaPage() {
         placing={placeOrder.isPending}
         onPlaceOrder={() => placeOrder.mutate()}
         onIncrease={(id) => {
-          const current =
-            items.find((item) => item.productId === id)
-              ?.quantity ?? 0;
-
+          const current = items.find((item) => item.productId === id)?.quantity ?? 0;
           const max = stockByProduct.get(id) ?? 0;
-
           if (current + 1 > max) {
             toast.error(`Solo hay ${max} disponibles`);
             return;
           }
-
           setCartQuantity(id, current + 1);
           refreshCart();
         }}
         onDecrease={(id) => {
-          const current =
-            items.find((item) => item.productId === id)
-              ?.quantity ?? 0;
-
+          const current = items.find((item) => item.productId === id)?.quantity ?? 0;
           setCartQuantity(id, current - 1);
           refreshCart();
         }}
