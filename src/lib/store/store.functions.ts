@@ -56,17 +56,12 @@ function cleanText(value: unknown, maxLength: number): string {
 }
 
 async function getAdminClient() {
-  // Importación dinámica: la clave privada solo se carga en el servidor.
   const { supabaseAdmin } = await import(
     "@/integrations/supabase/client.server"
   );
   return supabaseAdmin;
 }
 
-/**
- * Catálogo público de Lula Shop.
- * Consulta productos, categorías y sucursales desde el servidor.
- */
 export const getStorePublicData = createServerFn({
   method: "GET",
 }).handler(async (): Promise<StorePublicData> => {
@@ -87,7 +82,7 @@ export const getStorePublicData = createServerFn({
       .range(from, from + pageSize - 1);
 
     if (error) {
-      console.error("[tienda] Error al consultar catálogo:", error.message);
+      console.error("[tienda] Error catálogo:", error);
       throw new Error("No fue posible cargar el catálogo.");
     }
 
@@ -95,9 +90,9 @@ export const getStorePublicData = createServerFn({
     rows.push(...page);
 
     if (page.length < pageSize) break;
+
     from += pageSize;
 
-    // Protección contra catálogos anormalmente grandes.
     if (rows.length >= 20000) break;
   }
 
@@ -118,7 +113,7 @@ export const getStorePublicData = createServerFn({
       .in("id", categoryIds);
 
     if (error) {
-      console.error("[tienda] Error al consultar categorías:", error.message);
+      console.error("[tienda] Error categorías:", error);
       throw new Error("No fue posible cargar las categorías.");
     }
 
@@ -135,7 +130,7 @@ export const getStorePublicData = createServerFn({
     .order("name");
 
   if (branchError) {
-    console.error("[tienda] Error al consultar sucursales:", branchError.message);
+    console.error("[tienda] Error sucursales:", branchError);
     throw new Error("No fue posible consultar las sucursales.");
   }
 
@@ -149,11 +144,6 @@ export const getStorePublicData = createServerFn({
   };
 });
 
-/**
- * Crea un pedido público.
- * Los precios y nombres se obtienen nuevamente del catálogo en el servidor.
- * La función SQL existente create_online_order realiza el registro del pedido.
- */
 export const createStoreOnlineOrder = createServerFn({
   method: "POST",
 })
@@ -166,7 +156,7 @@ export const createStoreOnlineOrder = createServerFn({
     const customerName = cleanText(data.customerName, 120);
     const customerPhone = cleanText(data.customerPhone, 40);
     const address = cleanText(data.address, 500);
-    const notes = cleanText(data.notes, 1500);
+    const notes = cleanText(data.notes, 1000);
 
     if (customerName.length < 2) {
       throw new Error("Escribe tu nombre para continuar.");
@@ -213,7 +203,6 @@ export const createStoreOnlineOrder = createServerFn({
 
     const supabase = await getAdminClient();
 
-    // Comprobar que la sucursal continúa activa.
     const { data: branch, error: branchError } = await supabase
       .from("branches")
       .select("id")
@@ -221,23 +210,24 @@ export const createStoreOnlineOrder = createServerFn({
       .eq("is_active", true)
       .maybeSingle();
 
-    if (branchError || !branch) {
+    if (branchError) {
+      console.error("[tienda] Error verificando sucursal:", branchError);
+      throw new Error("No fue posible verificar la sucursal.");
+    }
+
+    if (!branch) {
       throw new Error("La sucursal ya no está disponible.");
     }
 
     const productIds = [...quantities.keys()];
 
-    // El precio y el stock enviados por el navegador NO se consideran confiables.
     const { data: products, error: productsError } = await supabase
       .from("v_online_catalog")
       .select("id, name, price, available_stock")
       .in("id", productIds);
 
     if (productsError) {
-      console.error(
-        "[tienda] Error al verificar productos:",
-        productsError.message,
-      );
+      console.error("[tienda] Error verificando productos:", productsError);
       throw new Error("No fue posible verificar los productos.");
     }
 
@@ -278,25 +268,43 @@ export const createStoreOnlineOrder = createServerFn({
       };
     });
 
-    // La selección de pago y entrega se conserva en las notas que envía
-    // StoreCartSheet, igual que en la versión actual de la tienda.
+    // Se envían todos los parámetros de la función SQL,
+    // igual que en el flujo público de pedidos del proyecto.
     const { data: order, error: orderError } = await supabase.rpc(
       "create_online_order",
       {
         _branch_id: data.branchId,
-        _items: orderItems,
+        _customer_email: null,
+        _customer_id: null,
         _customer_name: customerName,
         _customer_phone: customerPhone,
-        ...(address ? { _delivery_address: address } : {}),
-        ...(notes ? { _notes: notes } : {}),
+        _delivery_address: address || null,
+        _discount: 0,
+        _items: orderItems,
+        _notes: notes || null,
       },
     );
 
     if (orderError) {
-      console.error("[tienda] Error al crear pedido:", orderError.message);
+      // El detalle queda en los registros del servidor.
+      // No se exponen errores internos de la base de datos al comprador.
+      console.error("[tienda] Falló create_online_order:", {
+        message: orderError.message,
+        code: orderError.code,
+        details: orderError.details,
+        hint: orderError.hint,
+        branchId: data.branchId,
+        productIds,
+      });
+
       throw new Error(
-        "No se pudo registrar el pedido. Verifica los datos e intenta nuevamente.",
+        "No se pudo registrar el pedido. Intenta nuevamente.",
       );
+    }
+
+    if (!order) {
+      console.error("[tienda] La función SQL no devolvió un pedido.");
+      throw new Error("No se recibió confirmación del pedido.");
     }
 
     return order;
