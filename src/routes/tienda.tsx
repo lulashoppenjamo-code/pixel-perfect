@@ -518,7 +518,13 @@ function TiendaPage() {
     <div id="inicio" className="lula-store min-h-screen bg-background text-foreground">
       
 <style>{`
-  .lula-store {
+  .lula-store header a[aria-label="Lula Shop, inicio"] {
+  color: #E05EA6 !important;
+}
+
+.lula-store header a[aria-label="Lula Shop, inicio"] span:last-child {
+  color: #8B6B7A !important;
+}
     --color-header: #E05EA6;
     --color-bg: #E9AEC3;
     --color-card: #FFF0F7;
