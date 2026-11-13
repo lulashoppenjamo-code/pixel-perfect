@@ -495,7 +495,7 @@ function TiendaPage() {
   return (
     <div id="inicio" className="lula-store min-h-screen bg-background text-foreground">
       <style>{`
-        .lula-store { --primary: #b5276b; --primary-foreground: #ffffff; --background: #ffffff; --foreground: #30232b; --card: #ffffff; --card-foreground: #30232b; --secondary: #fceaf2; --secondary-foreground: #872354; --muted: #f7f4f6; --muted-foreground: #75646e; --accent: #fceaf2; --accent-foreground: #872354; --border: #efdee6; --input: #dfcad4; --ring: #b5276b; --destructive: #b42338; --store-banner: #f5c7dd; letter-spacing: 0; }
+        .lula-store, .store-filters { --primary: #b5276b; --primary-foreground: #ffffff; --background: #ffffff; --foreground: #30232b; --card: #ffffff; --card-foreground: #30232b; --secondary: #fceaf2; --secondary-foreground: #872354; --muted: #f7f4f6; --muted-foreground: #75646e; --accent: #fceaf2; --accent-foreground: #872354; --border: #efdee6; --input: #dfcad4; --ring: #b5276b; --destructive: #b42338; --store-banner: #f5c7dd; letter-spacing: 0; }
         .lula-store section[id], .lula-store footer[id] { scroll-margin-top: 220px; }
         .lula-store .store-banner { background: var(--store-banner); }
         .lula-store ::selection { background: var(--secondary); color: var(--foreground); }
@@ -511,10 +511,10 @@ function TiendaPage() {
       />
       <main>
         <section className="store-banner border-b border-border px-5 py-12 text-center sm:px-8 sm:py-16">
-          <p className="mb-4 text-xs font-semibold uppercase text-primary">Lula Shop</p>
           <h1 className="mx-auto max-w-3xl break-words font-serif text-4xl font-medium leading-tight sm:text-5xl">
-            {heroTitle}
+            Lula Shop
           </h1>
+          <p className="mx-auto mt-4 max-w-2xl break-words text-lg leading-relaxed">{heroTitle}</p>
           {heroSubtitle && (
             <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed">{heroSubtitle}</p>
           )}
@@ -545,7 +545,7 @@ function TiendaPage() {
           className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 sm:py-12 lg:px-10"
         >
           <div
-            className="mb-6 flex flex-wrap gap-2 overflow-x-auto pb-2"
+            className="mb-6 flex gap-2 overflow-x-auto pb-3"
             aria-label="Categorías de productos"
           >
             {categories.map((cat) => (
@@ -850,7 +850,7 @@ function TiendaPage() {
         </div>
       </footer>
       <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
-        <SheetContent className="flex w-[90%] flex-col bg-background sm:max-w-sm">
+        <SheetContent className="store-filters flex w-[90%] flex-col bg-background text-foreground sm:max-w-sm">
           <SheetHeader>
             <SheetTitle>Filtros</SheetTitle>
             <SheetDescription>Precio, categoría y disponibilidad</SheetDescription>
