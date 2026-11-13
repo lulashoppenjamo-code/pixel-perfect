@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -82,7 +83,12 @@ type OnlineCatalogRow = {
 
 type CategoryRow = { id: string; name: string };
 
-type SortOption = "recommended" | "name-asc" | "name-desc" | "price-asc" | "price-desc";
+type SortOption =
+  | "recommended"
+  | "name-asc"
+  | "name-desc"
+  | "price-asc"
+  | "price-desc";
 
 const PAGE_SIZE = 40;
 
@@ -140,7 +146,10 @@ async function fetchCategories(ids: string[]) {
   const result = new Map<string, string>();
   if (!ids.length) return result;
 
-  const { data, error } = await supabase.from("categories").select("id, name").in("id", ids);
+  const { data, error } = await supabase
+    .from("categories")
+    .select("id, name")
+    .in("id", ids);
 
   if (error) throw error;
 
@@ -244,6 +253,7 @@ function TiendaPage() {
         .select("id, name, address, phone")
         .eq("is_active", true)
         .order("name");
+
       if (error) throw error;
       return data ?? [];
     },
@@ -326,7 +336,8 @@ function TiendaPage() {
 
   const handleAdd = (product: StoreProduct, quantity = 1) => {
     const stock = stockByProduct.get(product.id) ?? 0;
-    const existing = getCartItems().find((item) => item.productId === product.id)?.quantity ?? 0;
+    const existing =
+      getCartItems().find((item) => item.productId === product.id)?.quantity ?? 0;
 
     if (stock <= 0 || existing + quantity > stock) {
       toast.error(`Existencia insuficiente. Disponible: ${stock}`);
@@ -351,7 +362,9 @@ function TiendaPage() {
       for (const item of cart) {
         const available = stockByProduct.get(item.productId) ?? 0;
         if (item.quantity > available) {
-          throw new Error(`Stock insuficiente para ${item.name}. Disponible: ${available}`);
+          throw new Error(
+            `Stock insuficiente para ${item.name}. Disponible: ${available}`,
+          );
         }
       }
 
@@ -434,6 +447,7 @@ function TiendaPage() {
           ))}
         </div>
       </section>
+
       <section className="border-t border-border pt-5">
         <h3 className="mb-3 text-sm font-semibold">Precio</h3>
         <div className="grid grid-cols-2 gap-2">
@@ -468,6 +482,7 @@ function TiendaPage() {
           </p>
         )}
       </section>
+
       <section className="border-t border-border pt-5">
         <h3 className="mb-3 text-sm font-semibold">Disponibilidad</h3>
         <label className="flex cursor-pointer items-start gap-2 text-xs leading-5">
@@ -480,26 +495,63 @@ function TiendaPage() {
           Mostrar también agotados
         </label>
       </section>
-      <Button variant="outline" onClick={resetFilters} className="w-full rounded-full text-xs">
+
+      <Button
+        variant="outline"
+        onClick={resetFilters}
+        className="w-full rounded-full text-xs"
+      >
         Borrar filtros
       </Button>
     </div>
   );
 
   const heroTitle = theme.heroTitle?.trim() || "Lula Shop";
-  // Default commercial claims and example testimonials are deliberately not rendered.
   const heroSubtitle =
-    theme.heroSubtitle !== DEFAULT_STORE_CONFIG.theme.heroSubtitle ? theme.heroSubtitle : "";
+    theme.heroSubtitle !== DEFAULT_STORE_CONFIG.theme.heroSubtitle
+      ? theme.heroSubtitle
+      : "";
   const footerText = theme.footerText || DEFAULT_STORE_CONFIG.theme.footerText;
 
   return (
     <div id="inicio" className="lula-store min-h-screen bg-background text-foreground">
       <style>{`
-        .lula-store, .store-filters { --primary: #b5276b; --primary-foreground: #ffffff; --background: #ffffff; --foreground: #30232b; --card: #ffffff; --card-foreground: #30232b; --secondary: #fceaf2; --secondary-foreground: #872354; --muted: #f7f4f6; --muted-foreground: #75646e; --accent: #fceaf2; --accent-foreground: #872354; --border: #efdee6; --input: #dfcad4; --ring: #b5276b; --destructive: #b42338; --store-banner: #f5c7dd; letter-spacing: 0; }
-        .lula-store section[id], .lula-store footer[id] { scroll-margin-top: 220px; }
-        .lula-store .store-banner { background: var(--store-banner); }
-        .lula-store ::selection { background: var(--secondary); color: var(--foreground); }
+        .lula-store, .store-filters {
+          --primary: #b5276b;
+          --primary-foreground: #ffffff;
+          --background: #ffffff;
+          --foreground: #30232b;
+          --card: #ffffff;
+          --card-foreground: #30232b;
+          --secondary: #fceaf2;
+          --secondary-foreground: #872354;
+          --muted: #f7f4f6;
+          --muted-foreground: #75646e;
+          --accent: #fceaf2;
+          --accent-foreground: #872354;
+          --border: #efdee6;
+          --input: #dfcad4;
+          --ring: #b5276b;
+          --destructive: #b42338;
+          --store-banner: #f5c7dd;
+          letter-spacing: 0;
+        }
+
+        .lula-store section[id],
+        .lula-store footer[id] {
+          scroll-margin-top: 220px;
+        }
+
+        .lula-store .store-banner {
+          background: var(--store-banner);
+        }
+
+        .lula-store ::selection {
+          background: var(--secondary);
+          color: var(--foreground);
+        }
       `}</style>
+
       <StoreHeader
         search={search}
         onSearchChange={setSearch}
@@ -509,37 +561,225 @@ function TiendaPage() {
         activeCategory={category}
         onSelectCategory={setCategory}
       />
+
       <main>
-        <section className="store-banner border-b border-border px-5 py-12 text-center sm:px-8 sm:py-16">
-          <h1 className="mx-auto max-w-3xl break-words font-serif text-4xl font-medium leading-tight sm:text-5xl">
-            Lula Shop
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl break-words text-lg leading-relaxed">{heroTitle}</p>
-          {heroSubtitle && (
-            <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed">{heroSubtitle}</p>
-          )}
-          <Button asChild className="mt-7 h-11 rounded-full px-7">
-            <a href="#catalogo">
-              {theme.heroCta || "Ver productos"}
-              <ArrowRight />
-            </a>
-          </Button>
-        </section>
-        <div className="mx-auto grid max-w-[1440px] gap-4 border-b border-border px-5 py-5 text-xs sm:grid-cols-3 sm:px-8 lg:px-10">
-          {[
-            [ShoppingBag, "Catálogo con existencias disponibles"],
-            [CreditCard, "Transferencia o pago al recibir"],
-            [Truck, "Recoger en sucursal o envío a domicilio"],
-          ].map(([Icon, text]) => {
-            const ItemIcon = Icon as typeof ShoppingBag;
-            return (
-              <div key={String(text)} className="flex items-center justify-center gap-2">
-                <ItemIcon className="h-4 w-4 shrink-0 text-primary" />
-                <span>{String(text)}</span>
+        {/* PORTADA PRINCIPAL */}
+        <section className="store-banner relative isolate overflow-hidden border-b border-[#efd5e0]">
+          <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_78%_35%,rgba(255,255,255,0.9),transparent_30%),linear-gradient(115deg,#f9e5ed_0%,#f4cbdc_52%,#f8e9ef_100%)]" />
+
+          <div className="mx-auto grid min-h-[440px] max-w-[1440px] items-center gap-8 px-5 py-12 sm:px-8 md:grid-cols-[1.05fr_0.95fr] md:py-16 lg:px-12">
+            <div className="relative z-10 max-w-2xl">
+              <p className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#dca9bf] bg-white/70 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.2em] text-[#8e3d60]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#b5276b]" />
+                Lula Shop · Belleza y estilo
+              </p>
+
+              <h1 className="max-w-xl font-serif text-5xl font-medium leading-[1.04] tracking-tight text-[#482b3a] sm:text-6xl lg:text-7xl">
+                Todo lo que buscas,{" "}
+                <span className="italic text-[#a83f6c]">
+                  en un solo lugar.
+                </span>
+              </h1>
+
+              <p className="mt-5 max-w-lg text-sm leading-7 text-[#765365] sm:text-base">
+                {heroTitle !== "Lula Shop"
+                  ? heroTitle
+                  : "Descubre productos de belleza, uñas y accesorios en Lula Shop."}
+              </p>
+
+              {heroSubtitle && (
+                <p className="mt-2 max-w-lg text-sm leading-6 text-[#765365]">
+                  {heroSubtitle}
+                </p>
+              )}
+
+              <div className="mt-8 flex flex-wrap items-center gap-3">
+                <Button
+                  asChild
+                  className="h-12 rounded-full bg-[#a83f6c] px-8 text-xs font-semibold uppercase tracking-wider text-white shadow-lg shadow-[#a83f6c]/20 hover:bg-[#873254]"
+                >
+                  <a href="#catalogo">
+                    {theme.heroCta || "Comprar ahora"}
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </a>
+                </Button>
+
+                <a
+                  href="#categorias-tienda"
+                  className="px-3 py-3 text-xs font-semibold text-[#8e3d60] underline decoration-[#c98ba7] underline-offset-4"
+                >
+                  Explorar categorías
+                </a>
               </div>
-            );
-          })}
+
+              <div className="mt-9 flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-medium uppercase tracking-[0.12em] text-[#805b6d]">
+                <span className="inline-flex items-center gap-2">
+                  <ShoppingBag className="h-4 w-4" />
+                  Catálogo en línea
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <CreditCard className="h-4 w-4" />
+                  Pago flexible
+                </span>
+                <span className="inline-flex items-center gap-2">
+                  <Truck className="h-4 w-4" />
+                  Opciones de entrega
+                </span>
+              </div>
+            </div>
+
+            {/* PRODUCTOS REALES DEL CATÁLOGO */}
+            <div className="relative mx-auto flex h-[300px] w-full max-w-[520px] items-center justify-center sm:h-[390px]">
+              <div className="absolute h-[250px] w-[250px] rounded-full border border-white/80 bg-white/35 shadow-[0_20px_80px_rgba(139,64,96,0.12)] sm:h-[330px] sm:w-[330px]" />
+
+              <div className="absolute right-[8%] top-[4%] h-20 w-20 rounded-full bg-[#e8b4ca]/70 blur-2xl sm:h-28 sm:w-28" />
+
+              {products.slice(0, 3).map((product, index) => (
+                <button
+                  key={product.id}
+                  type="button"
+                  onClick={() => handleAdd(product, 1)}
+                  aria-label={`Agregar ${product.name} al carrito`}
+                  className={`absolute z-10 flex h-[158px] w-[126px] flex-col overflow-hidden rounded-2xl border border-white/90 bg-white p-2 shadow-[0_18px_45px_rgba(101,48,72,0.16)] transition-transform hover:-translate-y-2 sm:h-[205px] sm:w-[164px] ${
+                    index === 0
+                      ? "left-[2%] top-[18%] -rotate-6"
+                      : index === 1
+                        ? "right-[2%] top-[10%] rotate-6"
+                        : "bottom-[2%] left-[34%] rotate-1"
+                  }`}
+                >
+                  <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden rounded-xl bg-[#fbf2f6]">
+                    {product.image_url ? (
+                      <img
+                        src={product.image_url}
+                        alt={product.name}
+                        loading="lazy"
+                        className="h-full w-full object-contain"
+                      />
+                    ) : (
+                      <span className="text-5xl">
+                        {product.emoji || "💗"}
+                      </span>
+                    )}
+                  </div>
+
+                  <span className="mt-2 line-clamp-1 text-left text-[9px] font-semibold text-[#553647] sm:text-[10px]">
+                    {product.name}
+                  </span>
+
+                  <span className="mt-1 text-left text-xs font-bold text-[#a83f6c]">
+                    {new Intl.NumberFormat("es-MX", {
+                      style: "currency",
+                      currency: "MXN",
+                    }).format(product.price)}
+                  </span>
+                </button>
+              ))}
+
+              {products.length === 0 && (
+                <div className="relative z-10 flex h-56 w-56 items-center justify-center rounded-full border border-white bg-white/70 text-7xl shadow-xl">
+                  💗
+                </div>
+              )}
+
+              <span className="absolute bottom-[8%] right-[4%] rounded-full border border-white bg-white/80 px-4 py-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[#8e3d60] shadow-sm">
+                Lula Shop
+              </span>
+            </div>
+          </div>
+        </section>
+
+        {/* BENEFICIOS DE COMPRA */}
+        <div className="border-b border-[#f0dfe6] bg-white">
+          <div className="mx-auto grid max-w-[1440px] grid-cols-1 divide-y divide-[#f0dfe6] px-5 py-4 text-xs text-[#674b5a] sm:grid-cols-3 sm:divide-x sm:divide-y-0 sm:px-8 lg:px-12">
+            <div className="flex items-center justify-center gap-3 py-2 sm:py-1">
+              <ShoppingBag className="h-5 w-5 text-[#a83f6c]" />
+              <span>Productos con existencias consultables</span>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 py-2 sm:py-1">
+              <CreditCard className="h-5 w-5 text-[#a83f6c]" />
+              <span>Transferencia o pago al recibir</span>
+            </div>
+
+            <div className="flex items-center justify-center gap-3 py-2 sm:py-1">
+              <Truck className="h-5 w-5 text-[#a83f6c]" />
+              <span>Recoge en sucursal o solicita envío</span>
+            </div>
+          </div>
         </div>
+
+        {/* CATEGORÍAS DESTACADAS */}
+        <section
+          id="categorias-tienda"
+          className="mx-auto max-w-[1440px] px-5 pb-5 pt-10 sm:px-8 lg:px-12"
+        >
+          <div className="mb-5 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[#a65a7b]">
+                Encuentra lo que necesitas
+              </p>
+              <h2 className="mt-2 font-serif text-3xl text-[#482b3a] sm:text-4xl">
+                Compra por categoría
+              </h2>
+            </div>
+
+            <a
+              href="#catalogo"
+              className="hidden text-xs font-semibold text-[#a83f6c] underline underline-offset-4 sm:block"
+            >
+              Ver todo el catálogo
+            </a>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {categories
+              .filter((cat) => cat !== "Todos")
+              .slice(0, 8)
+              .map((cat, index) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => {
+                    setCategory(cat);
+                    document
+                      .getElementById("catalogo")
+                      ?.scrollIntoView({ behavior: "smooth" });
+                  }}
+                  className={`group flex min-h-[104px] items-center justify-between gap-3 overflow-hidden rounded-xl border border-[#f0dce5] px-4 py-4 text-left transition-all hover:-translate-y-1 hover:border-[#d9a5bc] hover:shadow-md sm:min-h-[125px] sm:px-5 ${
+                    index % 4 === 0
+                      ? "bg-[#fbf0f5]"
+                      : index % 4 === 1
+                        ? "bg-[#f8edf0]"
+                        : index % 4 === 2
+                          ? "bg-[#fdf6f2]"
+                          : "bg-[#f5eef7]"
+                  }`}
+                >
+                  <span className="min-w-0">
+                    <span className="block text-[9px] font-bold uppercase tracking-[0.15em] text-[#a66a83]">
+                      Explorar
+                    </span>
+                    <span className="mt-2 block line-clamp-2 text-sm font-semibold text-[#57394a] sm:text-base">
+                      {cat}
+                    </span>
+                  </span>
+
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/80 text-lg text-[#a83f6c] shadow-sm transition-transform group-hover:translate-x-1">
+                    <ArrowRight className="h-4 w-4" />
+                  </span>
+                </button>
+              ))}
+          </div>
+
+          {categories.length <= 1 && (
+            <p className="rounded-xl bg-[#fbf0f5] px-4 py-5 text-sm text-[#805b6d]">
+              Las categorías aparecerán aquí cuando el catálogo termine de cargar.
+            </p>
+          )}
+        </section>
+
+        {/* CATÁLOGO ORIGINAL */}
         <section
           id="catalogo"
           className="mx-auto max-w-[1440px] px-4 py-8 sm:px-6 sm:py-12 lg:px-10"
@@ -561,12 +801,17 @@ function TiendaPage() {
               </Button>
             ))}
           </div>
+
           <div className="mb-7 flex flex-col gap-4 border-b border-border pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <p className="mb-2 text-xs text-muted-foreground">Lula Shop / Catálogo</p>
+              <p className="mb-2 text-xs text-muted-foreground">
+                Lula Shop / Catálogo
+              </p>
+
               <h2 className="font-serif text-3xl">
                 {category === "Todos" ? "Productos" : category}
               </h2>
+
               <p role="status" className="mt-2 text-xs text-muted-foreground">
                 {loadingInventory
                   ? "Cargando catálogo…"
@@ -576,6 +821,7 @@ function TiendaPage() {
                 {!loadingInventory && isFetching ? " · Actualizando" : ""}
               </p>
             </div>
+
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 variant="outline"
@@ -585,6 +831,7 @@ function TiendaPage() {
                 <Filter />
                 Filtros
               </Button>
+
               <label className="flex min-w-0 items-center gap-2 rounded-full border border-border px-3 py-2">
                 <SlidersHorizontal className="h-4 w-4 shrink-0 text-primary" />
                 <span className="sr-only">Ordenar productos</span>
@@ -602,6 +849,7 @@ function TiendaPage() {
               </label>
             </div>
           </div>
+
           <div className="grid gap-8 lg:grid-cols-[190px_minmax(0,1fr)]">
             <aside
               aria-label="Filtros de productos"
@@ -613,6 +861,7 @@ function TiendaPage() {
               </h2>
               {renderFilters()}
             </aside>
+
             <div className="min-w-0" aria-busy={isFetching}>
               {loadingInventory && (
                 <div
@@ -634,38 +883,56 @@ function TiendaPage() {
                   ))}
                 </div>
               )}
+
               {!loadingInventory && isError && (
                 <div role="alert" className="py-16 text-center">
                   <Package className="mx-auto h-10 w-10 text-primary" />
-                  <h3 className="mt-4 text-lg font-semibold">No pudimos cargar los productos</h3>
+                  <h3 className="mt-4 text-lg font-semibold">
+                    No pudimos cargar los productos
+                  </h3>
                   <p className="mt-2 text-sm text-muted-foreground">
                     Intenta consultar el catálogo nuevamente.
                   </p>
-                  <Button onClick={() => void refetch()} className="mt-5 rounded-full">
+                  <Button
+                    onClick={() => void refetch()}
+                    className="mt-5 rounded-full"
+                  >
                     <RefreshCw />
                     Volver a cargar
                   </Button>
                 </div>
               )}
+
               {!loadingInventory && !isError && filtered.length === 0 && (
                 <div className="py-16 text-center">
                   <Package className="mx-auto h-10 w-10 text-primary" />
-                  <h3 className="mt-4 text-lg font-semibold">No encontramos productos</h3>
+                  <h3 className="mt-4 text-lg font-semibold">
+                    No encontramos productos
+                  </h3>
                   <p className="mt-2 text-sm text-muted-foreground">
                     Prueba otra búsqueda o cambia los filtros.
                   </p>
-                  <Button onClick={resetFilters} className="mt-5 rounded-full">
+                  <Button
+                    onClick={resetFilters}
+                    className="mt-5 rounded-full"
+                  >
                     Borrar filtros
                   </Button>
                 </div>
               )}
+
               {!loadingInventory && !isError && visibleProducts.length > 0 && (
                 <>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
                     {visibleProducts.map((product) => (
-                      <StoreProductCard key={product.id} product={product} onAdd={handleAdd} />
+                      <StoreProductCard
+                        key={product.id}
+                        product={product}
+                        onAdd={handleAdd}
+                      />
                     ))}
                   </div>
+
                   <nav
                     aria-label="Paginación del catálogo"
                     className="mt-8 flex flex-wrap items-center justify-center gap-3"
@@ -680,9 +947,11 @@ function TiendaPage() {
                     >
                       <ChevronLeft />
                     </Button>
+
                     <span className="text-xs text-muted-foreground">
                       Página {currentPage} de {totalPages}
                     </span>
+
                     <Button
                       variant="outline"
                       size="icon"
@@ -699,6 +968,8 @@ function TiendaPage() {
             </div>
           </div>
         </section>
+
+        {/* CÓMO COMPRAR */}
         <section
           id="como-comprar"
           className="border-y border-border bg-secondary px-5 py-12 sm:py-16"
@@ -707,7 +978,11 @@ function TiendaPage() {
             <p className="text-center text-xs font-semibold uppercase text-primary">
               Tu pedido, paso a paso
             </p>
-            <h2 className="mt-3 text-center font-serif text-3xl">¿Cómo comprar en Lula Shop?</h2>
+
+            <h2 className="mt-3 text-center font-serif text-3xl">
+              ¿Cómo comprar en Lula Shop?
+            </h2>
+
             <div className="mt-9 grid gap-8 sm:grid-cols-3">
               {[
                 [
@@ -729,20 +1004,29 @@ function TiendaPage() {
                 <div key={n} className="border-t border-primary/20 pt-5">
                   <span className="font-serif text-3xl text-primary">{n}</span>
                   <h3 className="mt-3 text-base font-semibold">{title}</h3>
-                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{text}</p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    {text}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
         </section>
+
+        {/* PREGUNTAS FRECUENTES */}
         <section
           id="preguntas"
           className="mx-auto grid max-w-6xl gap-8 px-5 py-12 sm:px-8 sm:py-16 lg:grid-cols-[1fr_2fr]"
         >
           <div>
-            <p className="text-xs font-semibold uppercase text-primary">Antes de pedir</p>
-            <h2 className="mt-3 font-serif text-3xl">Preguntas frecuentes</h2>
+            <p className="text-xs font-semibold uppercase text-primary">
+              Antes de pedir
+            </p>
+            <h2 className="mt-3 font-serif text-3xl">
+              Preguntas frecuentes
+            </h2>
           </div>
+
           <div>
             {[
               [
@@ -766,32 +1050,54 @@ function TiendaPage() {
                 "Tu nombre y teléfono. Si solicitas envío, también tu dirección. Puedes agregar indicaciones en las notas del pedido.",
               ],
             ].map(([question, answer]) => (
-              <details key={question} className="group border-b border-border py-4">
+              <details
+                key={question}
+                className="group border-b border-border py-4"
+              >
                 <summary className="cursor-pointer text-sm font-semibold text-foreground">
                   {question}
                 </summary>
-                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{answer}</p>
+                <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+                  {answer}
+                </p>
               </details>
             ))}
           </div>
         </section>
-        <section id="contacto" className="border-t border-border bg-muted px-5 py-12">
+
+        {/* CONTACTO Y SUCURSALES */}
+        <section
+          id="contacto"
+          className="border-t border-border bg-muted px-5 py-12"
+        >
           <div className="mx-auto max-w-6xl">
             <div className="mb-8">
-              <p className="text-xs font-semibold uppercase text-primary">Estamos en contacto</p>
-              <h2 className="mt-3 font-serif text-3xl">Sucursales Lula Shop</h2>
+              <p className="text-xs font-semibold uppercase text-primary">
+                Estamos en contacto
+              </p>
+              <h2 className="mt-3 font-serif text-3xl">
+                Sucursales Lula Shop
+              </h2>
             </div>
+
             {contactBranches.length ? (
               <div className="grid gap-8 sm:grid-cols-2">
                 {contactBranches.map((branch) => (
-                  <div key={branch.id} className="border-t border-border pt-5">
-                    <h3 className="mb-3 text-lg font-semibold">{branch.name.trim()}</h3>
+                  <div
+                    key={branch.id}
+                    className="border-t border-border pt-5"
+                  >
+                    <h3 className="mb-3 text-lg font-semibold">
+                      {branch.name.trim()}
+                    </h3>
+
                     {branch.address?.trim() && (
                       <p className="flex items-start gap-2 text-sm text-muted-foreground">
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                         {branch.address.trim()}
                       </p>
                     )}
+
                     {branch.phone?.trim() && (
                       <a
                         href={`tel:${branch.phone.replace(/[^+\d]/g, "")}`}
@@ -814,25 +1120,39 @@ function TiendaPage() {
           </div>
         </section>
       </main>
+
+      {/* PIE DE PÁGINA */}
       <footer className="border-t border-border px-5 py-10">
         <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-3">
           <div>
-            <a href="#inicio" className="font-serif text-3xl font-bold italic text-primary">
+            <a
+              href="#inicio"
+              className="font-serif text-3xl font-bold italic text-primary"
+            >
               Lula Shop
             </a>
             <p className="mt-3 text-xs text-muted-foreground">{footerText}</p>
           </div>
-          <nav aria-label="Navegación del pie de página" className="grid gap-3 text-sm">
+
+          <nav
+            aria-label="Navegación del pie de página"
+            className="grid gap-3 text-sm"
+          >
             <a href="#catalogo">Productos</a>
             <a href="#como-comprar">¿Cómo comprar?</a>
             <a href="#preguntas">Preguntas frecuentes</a>
             <a href="#contacto">Contacto y sucursales</a>
           </nav>
+
           <div>
             <h3 className="mb-3 text-sm font-semibold">Contacto</h3>
             {contactBranches.map((branch) => (
-              <div key={branch.id} className="mb-3 text-xs text-muted-foreground">
+              <div
+                key={branch.id}
+                className="mb-3 text-xs text-muted-foreground"
+              >
                 <a href="#contacto">{branch.name.trim()}</a>
+
                 {branch.phone?.trim() && (
                   <a
                     href={`tel:${branch.phone.replace(/[^+\d]/g, "")}`}
@@ -845,22 +1165,36 @@ function TiendaPage() {
             ))}
           </div>
         </div>
+
         <div className="mx-auto mt-8 max-w-6xl border-t border-border pt-5 text-xs text-muted-foreground">
           Lula Shop · Tienda en línea
         </div>
       </footer>
+
+      {/* FILTROS PARA CELULAR */}
       <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
         <SheetContent className="store-filters flex w-[90%] flex-col bg-background text-foreground sm:max-w-sm">
           <SheetHeader>
             <SheetTitle>Filtros</SheetTitle>
-            <SheetDescription>Precio, categoría y disponibilidad</SheetDescription>
+            <SheetDescription>
+              Precio, categoría y disponibilidad
+            </SheetDescription>
           </SheetHeader>
-          <div className="flex-1 overflow-y-auto py-6">{renderFilters()}</div>
-          <Button onClick={() => setMobileFiltersOpen(false)} className="rounded-full">
+
+          <div className="flex-1 overflow-y-auto py-6">
+            {renderFilters()}
+          </div>
+
+          <Button
+            onClick={() => setMobileFiltersOpen(false)}
+            className="rounded-full"
+          >
             Ver {filtered.length} productos
           </Button>
         </SheetContent>
       </Sheet>
+
+      {/* CARRITO Y PEDIDOS: SE CONSERVA EL COMPONENTE ORIGINAL */}
       <StoreCartSheet
         open={cartOpen}
         onOpenChange={setCartOpen}
@@ -878,17 +1212,21 @@ function TiendaPage() {
         placing={placeOrder.isPending}
         onPlaceOrder={() => placeOrder.mutate()}
         onIncrease={(id) => {
-          const current = items.find((item) => item.productId === id)?.quantity ?? 0;
+          const current =
+            items.find((item) => item.productId === id)?.quantity ?? 0;
           const max = stockByProduct.get(id) ?? 0;
+
           if (current + 1 > max) {
             toast.error(`Solo hay ${max} disponibles`);
             return;
           }
+
           setCartQuantity(id, current + 1);
           refreshCart();
         }}
         onDecrease={(id) => {
-          const current = items.find((item) => item.productId === id)?.quantity ?? 0;
+          const current =
+            items.find((item) => item.productId === id)?.quantity ?? 0;
           setCartQuantity(id, current - 1);
           refreshCart();
         }}
