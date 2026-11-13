@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ShellRouteImport } from './routes/_shell'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as TiendaRouteImport } from './routes/tienda'
 import { Route as ShellAjustesRouteImport } from './routes/_shell.ajustes'
 import { Route as ShellCajaRouteImport } from './routes/_shell.caja'
 import { Route as ShellCeoRouteImport } from './routes/_shell.ceo'
@@ -38,6 +39,11 @@ const ShellRoute = ShellRouteImport.update({
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TiendaRoute = TiendaRouteImport.update({
+  id: '/tienda',
+  path: '/tienda',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ShellAjustesRoute = ShellAjustesRouteImport.update({
@@ -109,6 +115,7 @@ const ShellVentasRoute = ShellVentasRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/tienda': typeof TiendaRoute
   '/ajustes': typeof ShellAjustesRoute
   '/caja': typeof ShellCajaRoute
   '/ceo': typeof ShellCeoRoute
@@ -126,6 +133,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/tienda': typeof TiendaRoute
   '/ajustes': typeof ShellAjustesRoute
   '/caja': typeof ShellCajaRoute
   '/ceo': typeof ShellCeoRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_shell': typeof ShellRouteWithChildren
   '/auth': typeof AuthRoute
+  '/tienda': typeof TiendaRoute
   '/_shell/ajustes': typeof ShellAjustesRoute
   '/_shell/caja': typeof ShellCajaRoute
   '/_shell/ceo': typeof ShellCeoRoute
@@ -164,6 +173,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/auth'
+    | '/tienda'
     | '/ajustes'
     | '/caja'
     | '/ceo'
@@ -181,6 +191,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/auth'
+    | '/tienda'
     | '/ajustes'
     | '/caja'
     | '/ceo'
@@ -199,6 +210,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_shell'
     | '/auth'
+    | '/tienda'
     | '/_shell/ajustes'
     | '/_shell/caja'
     | '/_shell/ceo'
@@ -218,6 +230,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ShellRoute: typeof ShellRouteWithChildren
   AuthRoute: typeof AuthRoute
+  TiendaRoute: typeof TiendaRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -241,6 +254,13 @@ declare module '@tanstack/react-router' {
       path: '/auth'
       fullPath: '/auth'
       preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/tienda': {
+      id: '/tienda'
+      path: '/tienda'
+      fullPath: '/tienda'
+      preLoaderRoute: typeof TiendaRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_shell/ajustes': {
@@ -375,6 +395,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ShellRoute: ShellRouteWithChildren,
   AuthRoute: AuthRoute,
+  TiendaRoute: TiendaRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
