@@ -1,9 +1,7 @@
-
 import { useState } from "react";
-import { Search, ShoppingBag, Truck, X } from "lucide-react";
+import { Search, ShoppingBag, Menu, X, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { loadStoreConfig } from "@/lib/store/storeConfig";
 
 type StoreHeaderProps = {
   search: string;
@@ -15,112 +13,153 @@ type StoreHeaderProps = {
   onSelectCategory?: (category: string) => void;
 };
 
-const pink = "#E95C9B";
-const darkPink = "#C93678";
-
 export function StoreHeader({
   search,
   onSearchChange,
   cartCount,
   onOpenCart,
+  categories = [],
+  activeCategory,
+  onSelectCategory,
 }: StoreHeaderProps) {
-  const config = loadStoreConfig();
-  const [mobileSearch, setMobileSearch] = useState(false);
-
+  const [mobileMenu, setMobileMenu] = useState(false);
   const links = [
-    ["Inicio", "/tienda"],
+    ["Inicio", "#inicio"],
     ["Productos", "#catalogo"],
     ["¿Cómo comprar?", "#como-comprar"],
     ["Preguntas frecuentes", "#preguntas"],
     ["Contacto", "#contacto"],
   ];
-
   return (
-    <header className="sticky top-0 z-50 w-full bg-white shadow-sm">
-      <div
-        className="flex min-h-9 items-center justify-center gap-2 px-3 py-2 text-center text-[10px] font-bold tracking-wide text-white sm:text-xs"
-        style={{ backgroundColor: darkPink }}
-      >
-        <Truck className="h-3.5 w-3.5" />
-        <span>{config.theme.promoBarText || "Bienvenida a Lula Shop"}</span>
+    <header className="sticky top-0 z-40 border-b border-border bg-background text-foreground">
+      <div className="bg-primary px-4 py-2 text-center text-xs text-primary-foreground">
+        Lula Shop · Tienda en línea
       </div>
-
-      <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-3 px-3 py-4 sm:px-6 lg:px-8">
-        <a href="/tienda" className="flex shrink-0 items-center gap-2">
-          <div
-            className="flex h-11 w-11 items-center justify-center rounded-full text-xl font-black text-white"
-            style={{ background: `linear-gradient(135deg, ${pink}, ${darkPink})` }}
-          >
-            L
-          </div>
-          <div>
-            <p className="text-lg font-black uppercase tracking-[0.12em] text-pink-800 sm:text-2xl">
-              LULA SHOP
-            </p>
-            <p className="hidden text-[9px] font-semibold tracking-[0.2em] text-pink-400 sm:block">
-              BELLEZA Y ACCESORIOS
-            </p>
-          </div>
-        </a>
-
-        <div className="relative mx-5 hidden max-w-2xl flex-1 md:block">
-          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-pink-400" />
+      <div className="mx-auto grid max-w-[1440px] grid-cols-[1fr_auto] items-center gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[1fr_auto_1fr] lg:px-10 lg:py-6">
+        <div className="relative hidden max-w-sm lg:block">
+          <Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-primary" />
           <Input
+            aria-label="Buscar productos"
             value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="¿Qué estás buscando?"
-            className="h-11 rounded-full border-pink-200 bg-pink-50/50 pl-11 text-sm"
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Busca tus favoritos"
+            className="h-10 rounded-full border-border bg-secondary pl-10 pr-10"
           />
+          {search && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onSearchChange("")}
+              aria-label="Borrar búsqueda"
+              className="absolute right-0 top-0 rounded-full"
+            >
+              <X />
+            </Button>
+          )}
         </div>
-
-        <div className="flex shrink-0 items-center gap-2">
+        <a
+          href="#inicio"
+          className="w-fit text-primary lg:text-center"
+          aria-label="Lula Shop, inicio"
+        >
+          <span className="block font-serif text-3xl font-bold italic leading-none sm:text-4xl">
+            Lula Shop
+          </span>
+          <span className="mt-1.5 block text-[10px] uppercase">Tienda en línea</span>
+        </a>
+        <div className="flex items-center justify-end gap-2">
           <Button
-            type="button"
             variant="ghost"
             size="icon"
-            onClick={() => setMobileSearch((value) => !value)}
-            className="text-pink-700 md:hidden"
-            aria-label="Buscar"
+            aria-label={mobileMenu ? "Cerrar navegación" : "Abrir navegación"}
+            aria-expanded={mobileMenu}
+            aria-controls="store-mobile-nav"
+            onClick={() => setMobileMenu(!mobileMenu)}
+            className="text-primary md:hidden"
           >
-            {mobileSearch ? <X /> : <Search />}
+            {mobileMenu ? <X /> : <Menu />}
           </Button>
-
           <Button
-            type="button"
+            variant="outline"
             onClick={onOpenCart}
-            className="relative h-10 rounded-full px-3 text-white sm:px-5"
-            style={{ backgroundColor: pink }}
+            aria-label={`Abrir carrito, ${cartCount} piezas`}
+            className="rounded-full border-primary text-primary"
           >
-            <ShoppingBag className="mr-1.5 h-4 w-4" />
-            <span>Carrito</span>
-            <span>({cartCount})</span>
+            <ShoppingBag />
+            <span className="hidden sm:inline">Carrito</span>
+            <span className="min-w-4 text-center">{cartCount}</span>
           </Button>
+        </div>
+        <div className="relative col-span-2 lg:hidden">
+          <Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-primary" />
+          <Input
+            aria-label="Buscar productos"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="¿Qué estás buscando?"
+            className="h-10 rounded-full bg-secondary pl-10 pr-10"
+          />
+          {search && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Borrar búsqueda"
+              onClick={() => onSearchChange("")}
+              className="absolute right-0 top-0 rounded-full"
+            >
+              <X />
+            </Button>
+          )}
         </div>
       </div>
-
-      {mobileSearch && (
-        <div className="border-t border-pink-100 p-3 md:hidden">
-          <Input
-            autoFocus
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar productos..."
-            className="rounded-full border-pink-200 bg-pink-50"
-          />
-        </div>
-      )}
-
-      <nav className="flex items-center justify-center gap-5 overflow-x-auto border-t border-pink-100 px-3 py-3 sm:gap-9">
+      <nav
+        aria-label="Navegación de tienda"
+        className="hidden justify-center gap-8 border-t border-border px-4 py-3 text-xs font-semibold md:flex"
+      >
         {links.map(([label, href]) => (
-          <a
-            key={label}
-            href={href}
-            className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-slate-700 transition hover:text-pink-600 sm:text-xs"
-          >
+          <a key={href} href={href} className="transition-colors hover:text-primary">
             {label}
           </a>
         ))}
       </nav>
+      {mobileMenu && (
+        <nav
+          id="store-mobile-nav"
+          aria-label="Navegación móvil"
+          className="max-h-[50dvh] overflow-y-auto border-t border-border px-4 py-2 md:hidden"
+        >
+          {links.map(([label, href]) => (
+            <a
+              key={href}
+              href={href}
+              onClick={() => setMobileMenu(false)}
+              className="flex items-center justify-between border-b border-border py-3 text-sm"
+            >
+              {label}
+              <ArrowRight className="h-4 w-4 text-primary" />
+            </a>
+          ))}
+          {categories.length > 1 && (
+            <div className="flex flex-wrap gap-2 py-3">
+              {categories.map((cat) => (
+                <Button
+                  key={cat}
+                  size="sm"
+                  variant={activeCategory === cat ? "default" : "outline"}
+                  className="rounded-full"
+                  onClick={() => {
+                    onSelectCategory?.(cat);
+                    setMobileMenu(false);
+                    document.getElementById("catalogo")?.scrollIntoView();
+                  }}
+                >
+                  {cat}
+                </Button>
+              ))}
+            </div>
+          )}
+        </nav>
+      )}
     </header>
   );
 }
