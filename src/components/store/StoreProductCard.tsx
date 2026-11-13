@@ -29,12 +29,12 @@ export function StoreProductCard({
 
   return (
     <article className="group flex min-w-0 flex-col overflow-hidden rounded-[3px] border border-[#f0e4e9] bg-white transition-all duration-300 hover:-translate-y-0.5 hover:border-[#dfb8ca] hover:shadow-[0_10px_28px_rgba(119,48,79,0.09)]">
-      <div className="relative flex aspect-square items-center justify-center overflow-hidden bg-[#fff9fb] p-3 sm:p-5">
+      <div className="relative aspect-square w-full overflow-hidden bg-[#fff9fb]">
         <ProductImage
           src={product.image_url}
           emoji={product.emoji}
           name={product.name}
-          className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.045]"
+          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.045]"
         />
 
         {!available && (
