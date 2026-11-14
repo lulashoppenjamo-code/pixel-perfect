@@ -107,10 +107,10 @@ function ShellErrorComponent({
 
 function ShellLayout() {
   /*
-   * Etapa 2 - Unificación visual catálogo/stock:
-   * - "Artículos" (/productos) = catálogo + ficha + stock lectura + variantes
-   * - "Movimientos" (/inventario) = ajustes, alertas, movimientos (sin duplicar catálogo)
-   * Rutas y permisos (navKey) sin cambios.
+   * Unificación: un solo panel Inventario (/inventario).
+   * - Catálogo (Productos) vive como pestaña dentro de Inventario.
+   * - La ruta /productos se conserva por compatibilidad de enlaces.
+   * - Permisos (navKey) sin cambios.
    */
 
   // CAMBIO 1: incluir los permisos del usuario autenticado.
@@ -194,7 +194,7 @@ function ShellLayout() {
       key: "ventas",
     },
     {
-      label: "Movimientos",
+      label: "Inventario",
       path: "/inventario",
       icon: Boxes,
       key: "inventario",
@@ -597,7 +597,7 @@ function ShellLayout() {
                       : location.pathname.startsWith("/gastos")
                         ? "Gastos"
                         : location.pathname.startsWith("/inventario")
-                          ? "Movimientos"
+                          ? "Inventario"
                           : location.pathname.startsWith("/clientes")
                             ? "Clientes"
                             : location.pathname.startsWith("/ajustes")
