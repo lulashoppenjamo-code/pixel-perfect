@@ -194,12 +194,6 @@ function ShellLayout() {
       key: "ventas",
     },
     {
-      label: "Artículos",
-      path: "/productos",
-      icon: Package,
-      key: "productos",
-    },
-    {
       label: "Movimientos",
       path: "/inventario",
       icon: Boxes,
@@ -300,10 +294,10 @@ function ShellLayout() {
       key: "caja" as NavKey,
     },
     {
-      label: "Artículos",
-      path: "/productos",
-      icon: LayoutGrid,
-      key: "productos" as NavKey,
+      label: "Inventario",
+      path: "/inventario",
+      icon: Boxes,
+      key: "inventario" as NavKey,
     },
   ].filter((item) =>
     navItems.some((n) => n.key === item.key),
@@ -311,7 +305,7 @@ function ShellLayout() {
 
   const moreItems = navItems.filter(
     (item) =>
-      !["reportes", "ventas", "caja", "productos"].includes(
+      !["reportes", "ventas", "caja", "inventario"].includes(
         item.key,
       ),
   );
