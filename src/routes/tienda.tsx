@@ -517,7 +517,6 @@ function TiendaPage() {
   return (
     <div id="inicio" className="lula-store min-h-screen bg-background text-foreground">
       
-<CodeBlock language="tsx" editable>
 <style>{`
 .lula-store{
  --color-header: #E05EA6;
