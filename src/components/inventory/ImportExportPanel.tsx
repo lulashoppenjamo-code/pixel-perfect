@@ -1,3 +1,4 @@
+
 /**
  * Import / Export Excel — LULA OS
  *
@@ -68,6 +69,7 @@ import {
 import { buildImportPayload } from "@/lib/productImport";
 
 const BATCH_SIZE = 500;
+const PAGE_SIZE = 1000;
 
 /**
  * Evita errores de PostgreSQL JSONB por caracteres que no admite:
@@ -148,6 +150,11 @@ export function ImportExportPanel() {
     profile?.branch_id ??
     (isAdmin || isManager ? branches[0]?.id ?? null : null);
 
+  /**
+   * Consulta el catálogo completo por páginas.
+   * Supabase limita normalmente cada respuesta a 1000 registros.
+   * La paginación evita comparar el Excel solamente contra la primera página.
+   */
   const {
     data: existingProducts = [],
     isPending: loadingExisting,
@@ -155,19 +162,43 @@ export function ImportExportPanel() {
   } = useQuery({
     queryKey: ["import-existing-products-shared"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select("id, name, sku, barcode, has_variants");
-
-      if (error) throw error;
-
-      return (data ?? []) as {
+      const allProducts: {
         id: string;
         name: string;
         sku: string | null;
         barcode: string | null;
         has_variants: boolean;
-      }[];
+      }[] = [];
+
+      let offset = 0;
+
+      while (true) {
+        const { data, error } = await supabase
+          .from("products")
+          .select("id, name, sku, barcode, has_variants")
+          .order("id", { ascending: true })
+          .range(offset, offset + PAGE_SIZE - 1);
+
+        if (error) throw error;
+
+        const page = data ?? [];
+
+        allProducts.push(
+          ...(page as {
+            id: string;
+            name: string;
+            sku: string | null;
+            barcode: string | null;
+            has_variants: boolean;
+          }[]),
+        );
+
+        if (page.length < PAGE_SIZE) break;
+
+        offset += PAGE_SIZE;
+      }
+
+      return allProducts;
     },
   });
 
@@ -330,7 +361,7 @@ export function ImportExportPanel() {
         const batch = batches[i]!;
 
         setPhase(
-          `Importando lote \( {i + 1}/ \){batches.length} (${batch.length} productos)...`,
+          `Importando lote ${i + 1}/${batches.length} (${batch.length} productos)...`,
         );
 
         const { data, error } = await supabase.rpc("bulk_import_products", {
@@ -362,7 +393,7 @@ export function ImportExportPanel() {
           setLastFailures(failures);
 
           throw new Error(
-            `Error al importar el lote \( {i + 1}/ \){batches.length}: ${error.message ?? "Error desconocido"}`,
+            `Error al importar el lote ${i + 1}/${batches.length}: ${error.message ?? "Error desconocido"}`,
           );
         }
 
@@ -696,16 +727,16 @@ export function ImportExportPanel() {
                 Vaciar inventario
               </CardTitle>
               <p className="text-xs text-muted-foreground">
-                Elimina productos y existencias relacionadas, sin borrar la estructura
-                del sistema.
+                Elimina productos y existencias relacionadas, sin borrar la
+                estructura del sistema.
               </p>
             </CardHeader>
 
             <CardContent className="space-y-3">
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
                 También se eliminan los detalles de compras y conteos vinculados,
-                además de movimientos y solicitudes relacionados. Las ventas y los
-                encabezados de compras y conteos se conservan.
+                además de movimientos y solicitudes relacionados. Las ventas y
+                los encabezados de compras y conteos se conservan.
               </div>
 
               <p className="text-sm">
@@ -758,7 +789,9 @@ export function ImportExportPanel() {
                 <Label>Escribe BORRAR INVENTARIO para confirmar</Label>
                 <Input
                   value={clearConfirmation}
-                  onChange={(event) => setClearConfirmation(event.target.value)}
+                  onChange={(event) =>
+                    setClearConfirmation(event.target.value)
+                  }
                   placeholder="BORRAR INVENTARIO"
                   disabled={clearCatalog.isPending}
                 />
@@ -783,7 +816,9 @@ export function ImportExportPanel() {
                   }
                   onClick={() => clearCatalog.mutate()}
                 >
-                  {clearCatalog.isPending ? "Eliminando..." : "Sí, borrar inventario"}
+                  {clearCatalog.isPending
+                    ? "Eliminando..."
+                    : "Sí, borrar inventario"}
                 </Button>
               </DialogFooter>
             </DialogContent>
@@ -792,4 +827,4 @@ export function ImportExportPanel() {
       )}
     </>
   );
-} 
+}
