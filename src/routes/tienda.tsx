@@ -519,9 +519,9 @@ function TiendaPage() {
       
 <CodeBlock language="tsx" editable>
 <style>{`
-.lula-store
+.lula-store{
  --color-header: #E05EA6;
-    --color-bg: #E9AEC3;
+    --color-bg: #E83E8C;
     --color-card: #FFF0F7;
     --color-surface: #F9F8FE;
     --color-discount: #FFC107;
