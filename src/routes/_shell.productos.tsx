@@ -1323,8 +1323,8 @@ export function ProductosPage({
     }
   };
 
-  return (
-    <PageShell>
+  const content = (
+    <>
       {!embedded && (
         <PageHeader
           icon={Package}
@@ -2902,6 +2902,12 @@ export function ProductosPage({
           onClose={() => setScannerOpen(false)}
         />
       )}
-    </PageShell>
+    </>
   );
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PageShell>{content}</PageShell>;
 }
