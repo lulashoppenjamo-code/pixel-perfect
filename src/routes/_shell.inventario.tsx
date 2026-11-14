@@ -76,16 +76,16 @@ import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgr
 import { ProductosPage } from "./_shell.productos";
 
 /**
- * BLOQUE 4 — Visual Inventario / Movimientos.
+ * BLOQUE 4 — Visual Inventario.
  * Solo presentación. NO toca inventario compartido, RPCs ni arquitectura.
- * Etapa 3: catálogo en Artículos; aquí stock, ajustes, límites, conteo e historial.
+ * Productos (catálogo) integrado como pestaña; aquí también stock, ajustes, límites, conteo e historial.
  */
 
 export const Route = createFileRoute("/_shell/inventario")({
   head: () => ({
     meta: [
       {
-        title: "Movimientos — Lula OS",
+        title: "Inventario — Lula Shop OS",
       },
       {
         name: "description",
@@ -2643,4 +2643,4 @@ function CountKpi({
       </p>
     </div>
   );
-}   
+}  
