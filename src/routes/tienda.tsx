@@ -518,9 +518,6 @@ function TiendaPage() {
       
 <style>{`
 
-
-<style>{`
-
 /* ===== LULA SHOP: ROSA ELEGANTE Y DEGRADADOS SUAVES ===== */
 
 .lula-store {
