@@ -40,6 +40,8 @@ import {
   getSharedInventory,
   type SharedInventoryRow,
 } from "@/lib/sharedInventory";
+import { getOperationalInventory } from "@/lib/inventoryData";
+import { INVENTORY_WRITE_BLOCKED, requireInventoryBranch } from "@/lib/inventoryModel";
 import { money } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
@@ -595,7 +597,7 @@ export function ProductosPage({
   const canEditProduct = canEdit || isManager;
   const canAdjustStock = isManager;
 
-  const { branchId, branches } = useBranch();
+  const { branchId, branches, loading: branchLoading } = useBranch();
   const qc = useQueryClient();
 
   const [form, setForm] = useState<ProductForm>(emptyProduct);
@@ -670,8 +672,8 @@ export function ProductosPage({
     isLoading: inventoryLoading,
     refetch: refetchInventory,
   } = useQuery<SharedInventoryRow[]>({
-    queryKey: ["shared-inventory", "products"],
-    queryFn: getSharedInventory,
+    queryKey: ["operational-inventory", "products"],
+    queryFn: getOperationalInventory,
   });
 
   const {
@@ -681,12 +683,13 @@ export function ProductosPage({
     queryKey: ["product-variants", form.id ?? "none"],
     enabled: Boolean(form.id),
     queryFn: async () => {
+      if (!form.id) return [];
       const { data, error } = await (supabase as any)
         .from("product_variants")
         .select(
           "id, product_id, name, sku, barcode, cost_override, price_override, image_url",
         )
-        .eq("product_id", form.id!)
+        .eq("product_id", form.id)
         .order("name");
 
       if (error) throw error;
@@ -698,16 +701,19 @@ export function ProductosPage({
     data: productMovements = [],
     isLoading: movementsLoading,
   } = useQuery<ProductMovementRow[]>({
-    queryKey: ["product-movements", form.id ?? "none"],
-    enabled: Boolean(form.id),
+    queryKey: ["product-movements", form.id ?? "none", branchId],
+    enabled: Boolean(form.id) && !!branchId && !branchLoading,
     staleTime: 15_000,
     queryFn: async () => {
+      if (!form.id) return [];
+      const origin = requireInventoryBranch(branchId, branches, branchLoading);
       const { data, error } = await supabase
         .from("inventory_movements")
         .select(
           "id, type, quantity, notes, created_at, reference_type, branch_id",
         )
-        .eq("product_id", form.id!)
+        .eq("product_id", form.id)
+        .eq("branch_id", origin)
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -929,6 +935,7 @@ export function ProductosPage({
       toast.success(form.id ? "Producto actualizado" : "Producto creado");
       setForm(emptyProduct);
 
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
       void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
@@ -958,6 +965,7 @@ export function ProductosPage({
 
     onSuccess: () => {
       toast.success("Producto desactivado");
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
@@ -1125,8 +1133,7 @@ export function ProductosPage({
         .eq("id", form.id);
 
       if (flagError) {
-        // No bloqueamos la creación de la variante si el flag falla.
-        console.warn("has_variants flag:", flagError.message);
+        throw new Error(`Variante guardada, pero no se pudo actualizar el producto: ${flagError.message}. No repitas la creación.`);
       }
     },
 
@@ -1139,6 +1146,7 @@ export function ProductosPage({
       void qc.invalidateQueries({
         queryKey: ["product-variants", form.id ?? "none"],
       });
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
@@ -1150,21 +1158,8 @@ export function ProductosPage({
   });
 
   const removeVariant = useMutation({
-    mutationFn: async (variantId: string) => {
-      if (!form.id) {
-        throw new Error("Producto no válido");
-      }
-      if (!canEditProduct && !isManager) {
-        throw new Error("No tienes permiso para eliminar variantes.");
-      }
-
-      const { error } = await (supabase as any)
-        .from("product_variants")
-        .delete()
-        .eq("id", variantId)
-        .eq("product_id", form.id);
-
-      if (error) throw error;
+    mutationFn: async (_variantId: string) => {
+      throw new Error("No se eliminan variantes: deben conservarse sus existencias y relaciones históricas.");
     },
 
     onSuccess: () => {
@@ -1174,6 +1169,7 @@ export function ProductosPage({
       void qc.invalidateQueries({
         queryKey: ["product-variants", form.id ?? "none"],
       });
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
@@ -1191,6 +1187,7 @@ export function ProductosPage({
   
   const adjustProductStock = useMutation({
     mutationFn: async () => {
+      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!canAdjustStock) {
         throw new Error("Solo un administrador puede ajustar existencias.");
       }
@@ -2024,7 +2021,7 @@ export function ProductosPage({
                     Existencias
                   </p>
                   {(() => {
-                    const stock = stockMap.get(form.id!);
+                    const stock = form.id ? stockMap.get(form.id) : undefined;
                     const available = Number(stock?.availableStock ?? 0);
                     const reserved = Number(stock?.reservedStock ?? 0);
                     const physical = Number(stock?.stock ?? 0);
@@ -2086,9 +2083,7 @@ export function ProductosPage({
                           </div>
                         </div>
                         <p className="mt-2 text-[11px] leading-4 text-[#9e9e9e]">
-                          Inventario compartido. Al vender, el POS descuenta
-                          automáticamente. Compras y conteos también actualizan
-                          el stock.
+                          Existencias globales compartidas. La sucursal identifica el origen de los movimientos, no un inventario separado.
                         </p>
 
                         {canAdjustStock ? (
@@ -2139,7 +2134,7 @@ export function ProductosPage({
                               <Button
                                 type="button"
                                 className="h-11 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
-                                disabled={adjustProductStock.isPending}
+                                disabled={true}
                                 onClick={() => adjustProductStock.mutate()}
                               >
                                 {adjustProductStock.isPending
@@ -2148,8 +2143,7 @@ export function ProductosPage({
                               </Button>
                             </div>
                             <p className="text-[10px] text-[#9e9e9e]">
-                              Usa la misma función que Movimientos (adjust_stock).
-                              No modifica el flujo de ventas.
+                              {INVENTORY_WRITE_BLOCKED}
                             </p>
                           </div>
                         ) : (
@@ -2614,7 +2608,7 @@ export function ProductosPage({
                 <Button
                   type="button"
                   className="h-9 rounded-md bg-[#e53935] px-4 text-sm font-bold text-white hover:bg-[#c62828]"
-                  disabled={removeVariant.isPending}
+                  disabled={true}
                   onClick={() => {
                     if (variantForm.id) {
                       removeVariant.mutate(variantForm.id);
