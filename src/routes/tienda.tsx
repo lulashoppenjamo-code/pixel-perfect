@@ -518,226 +518,176 @@ function TiendaPage() {
     <div id="inicio" className="lula-store min-h-screen bg-background text-foreground">
       
 <style>{`
-.lula-store{
- --color-header: #E05EA6;
-    --color-bg: #E83E8C;
-    --color-card: #FFF0F7;
-    --color-surface: #F9F8FE;
-    --color-discount: #FFC107;
-    --color-button-border: #E8B923;
-    --color-whatsapp: #25D366;
-    --color-text-primary: #3D2A35;
-    --color-text-secondary: #8B6B7A;
-    --color-price: #E05EA6;
-    --color-price-old: #A88B9A;
 
-    --primary: #E05EA6;
-    --primary-foreground: #ffffff;
-    --background: #E9AEC3;
-    --foreground: #3D2A35;
-    --card: #FFF0F7;
-    --card-foreground: #3D2A35;
-    --secondary: #F9F8FE;
-    --secondary-foreground: #3D2A35;
-    --muted: #F9F8FE;
-    --muted-foreground: #8B6B7A;
-    --accent: #FFF0F7;
-    --accent-foreground: #E05EA6;
-    --border: #E8B9CC;
-    --input: #E8B9CC;
-    --ring: #E05EA6;
-    --destructive: #B42338;
-    --store-banner: #E9AEC3;
+/* ===== CONTRASTE Y LEGIBILIDAD LULA SHOP ===== */
 
-    background: #E9AEC3;
-    color: #3D2A35;
-    letter-spacing: 0;
-  }
+.lula-store {
+  --background: #E83E8C;
+  --foreground: #24121B;
+  --primary: #24121B;
+  --primary-foreground: #FFFFFF;
+  --muted-foreground: #604653;
+  --accent-foreground: #24121B;
+  --ring: #24121B;
 
-  .lula-store main {
-    background:
-      radial-gradient(
-        ellipse at 15% 15%,
-        rgba(255,255,255,.25),
-        transparent 40%
-      ),
-      radial-gradient(
-        ellipse at 90% 55%,
-        rgba(224,94,166,.15),
-        transparent 45%
-      ),
-      #E9AEC3;
-  }
+  color: #24121B;
+}
 
-  /* HEADER */
-  .lula-store header {
-    background: #E05EA6 !important;
-    color: white !important;
-    border-color: rgba(255,255,255,.25) !important;
-  }
+.lula-store main {
+  background:
+    radial-gradient(
+      ellipse at 15% 15%,
+      rgba(255,255,255,.22),
+      transparent 40%
+    ),
+    radial-gradient(
+      ellipse at 90% 55%,
+      rgba(184,50,114,.18),
+      transparent 45%
+    ),
+    #E83E8C !important;
+  color: #24121B;
+}
 
-  .lula-store header a,
-  .lula-store header nav,
-  .lula-store header button {
-    color: white;
-  }
+/* Encabezado rosa */
+.lula-store header {
+  background: #E05EA6 !important;
+  color: #24121B !important;
+}
 
-  .lula-store header input {
-    background: #F9F8FE;
-    color: #3D2A35;
-  }
+.lula-store header a,
+.lula-store header nav,
+.lula-store header button {
+  color: #24121B !important;
+}
 
-  .lula-store header input::placeholder {
-    color: #8B6B7A;
-  }
+/* Carrito oscuro: conserva letras blancas */
+.lula-store header button[class*="bg-[#B83272]"] {
+  background: #B83272 !important;
+  color: #FFFFFF !important;
+}
 
-  .lula-store header nav {
-    border-color: rgba(255,255,255,.2) !important;
-  }
+.lula-store header input {
+  background: #FFFFFF !important;
+  color: #3D2A35 !important;
+}
 
-  /* PORTADA Y DEGRADADOS */
-  .lula-store .store-banner {
-    background: #E9AEC3;
-    border-color: #E8B9CC;
-  }
+.lula-store header input::placeholder {
+  color: #604653 !important;
+}
 
-  .lula-store .store-banner > div:first-child {
-    background-image:
-      radial-gradient(
-        circle at 78% 35%,
-        rgba(255,255,255,.48),
-        transparent 32%
-      ),
-      radial-gradient(
-        circle at 15% 85%,
-        rgba(224,94,166,.25),
-        transparent 38%
-      ),
-      linear-gradient(
-        115deg,
-        #E9AEC3 0%,
-        #E05EA6 52%,
-        #E9AEC3 100%
-      ) !important;
-  }
+/* Portada */
+.lula-store .store-banner {
+  background: #E83E8C !important;
+}
 
-  /* SUPERFICIES */
-  .lula-store .bg-white {
-    background-color: #FFF0F7 !important;
-  }
+.lula-store .store-banner > div:first-child {
+  background-image:
+    radial-gradient(
+      circle at 78% 35%,
+      rgba(255,255,255,.35),
+      transparent 32%
+    ),
+    radial-gradient(
+      circle at 15% 85%,
+      rgba(184,50,114,.25),
+      transparent 38%
+    ),
+    linear-gradient(
+      115deg,
+      #E83E8C 0%,
+      #D92D82 52%,
+      #E83E8C 100%
+    ) !important;
+}
 
-  .lula-store .bg-background {
-    background-color: #E9AEC3 !important;
-  }
+.lula-store .store-banner h1 {
+  color: #24121B !important;
+}
 
-  .lula-store .bg-secondary,
-  .lula-store .bg-muted {
-    background-color: #F9F8FE !important;
-  }
+.lula-store .store-banner h1 span {
+  color: #71304B !important;
+}
 
-  /* CATEGORÍAS */
-  .lula-store #categorias-tienda button {
-    background: #FFF0F7;
-    border-color: #E8B9CC;
-    color: #3D2A35;
-  }
+.lula-store .store-banner p:not(.inline-flex) {
+  color: #3D2A35 !important;
+}
 
-  .lula-store #categorias-tienda button:hover {
-    border-color: #E05EA6;
-    box-shadow: 0 10px 25px rgba(224,94,166,.15);
-  }
+/* Tarjetas */
+.lula-store article.group {
+  background: #FFF0F7 !important;
+}
 
-  /* TARJETAS DE PRODUCTOS */
-  .lula-store article.group {
-    background: #FFF0F7 !important;
-    border-color: rgba(224,94,166,.22) !important;
-    border-radius: 14px !important;
-    box-shadow: 0 5px 18px rgba(100,40,70,.06);
-  }
+.lula-store article.group h3 {
+  color: #3D2A35 !important;
+}
 
-  .lula-store article.group:hover {
-    border-color: #E05EA6 !important;
-    box-shadow: 0 12px 28px rgba(100,40,70,.13);
-  }
+.lula-store article.group p {
+  color: #62505A !important;
+}
 
-  .lula-store article.group p {
-    color: #8B6B7A;
-  }
+.lula-store article.group p:first-child {
+  color: #71304B !important;
+}
 
-  .lula-store article.group p.text-base,
-  .lula-store article.group p.sm\\:text-lg {
-    color: #E05EA6;
-  }
+.lula-store article.group p.text-base,
+.lula-store article.group p.sm\:text-lg {
+  color: #8A2854 !important;
+}
 
-  /* BOTONES */
-  .lula-store button.bg-\\[\\#a83f6c\\] {
-    background: #E05EA6 !important;
-    color: white !important;
-  }
+/* Categorías */
+.lula-store #categorias-tienda button {
+  color: #3D2A35 !important;
+  background: #FFF0F7 !important;
+}
 
-  .lula-store button.bg-\\[\\#a83f6c\\]:hover {
-    background: #C94C91 !important;
-  }
+.lula-store #categorias-tienda button:hover {
+  border-color: #8A2854 !important;
+}
 
-  .lula-store button[class*="rounded-full"][class*="border"] {
-    border-color: #E8B923;
-  }
+/* Superficies y textos secundarios */
+.lula-store .bg-white {
+  background-color: #FFF0F7 !important;
+}
 
-  /* DESCUENTOS */
-  .lula-store .discount-badge {
-    background: #FFC107;
-    color: #3D2A35;
-  }
+.lula-store .bg-background {
+  background-color: #E83E8C !important;
+}
 
-  /* BUSCADOR Y CAMPOS */
-  .lula-store input,
-  .lula-store select,
-  .lula-store textarea {
-    background-color: #F9F8FE;
-    border-color: #E8B9CC;
-    color: #3D2A35;
-  }
+.lula-store .bg-secondary,
+.lula-store .bg-muted {
+  background-color: #F9F8FE !important;
+}
 
-  .lula-store input:focus,
-  .lula-store select:focus,
-  .lula-store textarea:focus {
-    border-color: #E05EA6;
-    outline-color: #E05EA6;
-  }
+.lula-store .text-muted-foreground {
+  color: #604653 !important;
+}
 
-  /* TEXTOS */
-  .lula-store h1,
-  .lula-store h2,
-  .lula-store h3 {
-    color: #3D2A35;
-  }
+.lula-store .text-primary {
+  color: #24121B !important;
+}
 
-  /* PIE DE PÁGINA */
-  .lula-store footer {
-    background: #FFF0F7;
-    color: #3D2A35;
-  }
+/* Campos */
+.lula-store input,
+.lula-store select,
+.lula-store textarea {
+  color: #3D2A35;
+}
 
-  /* FILTROS MÓVILES */
-  .lula-store .store-filters {
-    --background: #FFF0F7;
-    --card: #FFF0F7;
-    --foreground: #3D2A35;
-    --primary: #E05EA6;
-    background: #FFF0F7;
-    color: #3D2A35;
-  }
+.lula-store input::placeholder,
+.lula-store textarea::placeholder {
+  color: #604653 !important;
+}
 
-  .lula-store section[id],
-  .lula-store footer[id] {
-    scroll-margin-top: 220px;
-  }
+/* Carrito: mejora textos claros en el panel */
+body [class~="text-rose-400"],
+body [class~="text-rose-500"] {
+  color: #7A244A !important;
+}
 
-  .lula-store ::selection {
-    background: #E05EA6;
-    color: white;
-  }
-`}</style>
+body [class~="text-rose-300"] {
+  color: #8A2854 !important;
+}
 
       <StoreHeader
         search={search}
