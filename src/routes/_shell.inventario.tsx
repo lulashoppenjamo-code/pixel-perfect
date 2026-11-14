@@ -73,6 +73,7 @@ import { cn } from "@/lib/utils";
 import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
 import { RestockList } from "@/components/inventory/RestockList";
 import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgress";
+import { ProductosPage } from "./_shell.productos";
 
 /**
  * BLOQUE 4 — Visual Inventario / Movimientos.
@@ -146,7 +147,8 @@ const MOVEMENT_LABELS: Record<string, string> = {
 };
 
 function InventarioPage() {
-  const { isManager } = useAuth();
+  const { isManager, can } = useAuth();
+  const canViewProducts = can("productos.view");
   const { branchId, branches, loading: branchLoading } = useBranch();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -750,8 +752,8 @@ function InventarioPage() {
     <PageShell>
       <PageHeader
         icon={Boxes}
-        title="Movimientos"
-        description="Ajustes, límites, conteo físico e historial. El catálogo se edita en Artículos."
+        title="Inventario"
+        description="Centro de control de productos, existencias y movimientos de Lula Shop."
         action={
           lowStock.length > 0 ? (
             <Badge
@@ -765,23 +767,6 @@ function InventarioPage() {
         }
       />
 
-      <div className="mb-3 flex flex-col gap-2 rounded-xl border border-[#e3f2fd] bg-[#e3f2fd]/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-[#1565c0]">
-          Catálogo, precios y variantes:{" "}
-          <strong>Artículos</strong>. Aquí solo
-          movimientos y control de stock.
-        </p>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="h-9 shrink-0 rounded-lg border-[#90caf9] text-[#1565c0]"
-          onClick={() => navigate({ to: "/productos" })}
-        >
-          Ir a Artículos
-        </Button>
-      </div>
-
       {inventoryError && (
         <Card className="border-destructive/30">
           <CardContent className="pt-5 text-sm text-destructive sm:pt-6">
@@ -791,9 +776,18 @@ function InventarioPage() {
         </Card>
       )}
 
-      <Tabs defaultValue="existencias">
+      <Tabs defaultValue={canViewProducts ? "productos" : "existencias"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
           <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+            {canViewProducts && (
+              <TabsTrigger
+                value="productos"
+                className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              >
+                <Package className="mr-1 h-3.5 w-3.5" />
+                Productos
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="existencias"
               className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
@@ -855,6 +849,12 @@ function InventarioPage() {
             </TabsTrigger>
           </TabsList>
         </div>
+
+        {canViewProducts && (
+          <TabsContent value="productos" className="mt-3 sm:mt-4">
+            <ProductosPage embedded />
+          </TabsContent>
+        )}
 
         {/* =====================================================
          * EXISTENCIAS
