@@ -577,7 +577,11 @@ const PRODUCT_MOVEMENT_LABELS: Record<string, string> = {
 };
 
 
-function ProductosPage() {
+export function ProductosPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { isManager, can } = useAuth();
 
   const canCreate = can("productos.create");
@@ -1321,11 +1325,13 @@ function ProductosPage() {
 
   return (
     <PageShell>
-      <PageHeader
-        icon={Package}
-        title="Artículos"
-        description="Catálogo, precios y existencias (inventario compartido)."
-      />
+      {!embedded && (
+        <PageHeader
+          icon={Package}
+          title="Artículos"
+          description="Catálogo, precios y existencias (inventario compartido)."
+        />
+      )}
 
       <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
         <Card className="border-[#e0e0e0] shadow-sm">
