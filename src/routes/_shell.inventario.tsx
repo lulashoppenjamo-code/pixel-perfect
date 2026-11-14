@@ -25,6 +25,8 @@ import {
   getSharedInventory,
   setSharedInventoryLimits,
 } from "@/lib/sharedInventory";
+import { getOperationalInventory } from "@/lib/inventoryData";
+import { INVENTORY_WRITE_BLOCKED, requireInventoryBranch } from "@/lib/inventoryModel";
 import { money, shortDate } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
@@ -92,6 +94,10 @@ export const Route = createFileRoute("/_shell/inventario")({
         content:
           "Catálogo de productos, existencias, ajustes, conteos físicos e historial de Lula Shop.",
       },
+      { property: "og:title", content: "Inventario — Lula Shop OS" },
+      { property: "og:description", content: "Existencias compartidas e historial de inventario de Lula Shop." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
 
@@ -208,9 +214,9 @@ function InventarioPage() {
     isLoading: inventoryLoading,
     error: inventoryError,
   } = useQuery({
-    queryKey: ["shared-inventory"],
+    queryKey: ["operational-inventory"],
     staleTime: 15_000,
-    queryFn: getSharedInventory,
+    queryFn: getOperationalInventory,
   });
 
   const { data: products = [] } = useQuery({
@@ -232,14 +238,17 @@ function InventarioPage() {
   });
 
   const { data: movements = [] } = useQuery({
-    queryKey: ["inventory-movements"],
+    queryKey: ["inventory-movements", branchId],
+    enabled: !!branchId && !branchLoading,
 
     queryFn: async () => {
+      const origin = requireInventoryBranch(branchId, branches, branchLoading);
       const { data, error } = await supabase
         .from("inventory_movements")
         .select(
-          "id,type,quantity,notes,created_at,products(name)",
+          "id,type,quantity,notes,created_at,branch_id,variant_id,products(name)",
         )
+        .eq("branch_id", origin)
         .order("created_at", {
           ascending: false,
         })
@@ -261,6 +270,7 @@ function InventarioPage() {
     enabled: !!branchId,
 
     queryFn: async () => {
+      if (!branchId) return [];
       const { data, error } =
         await (supabase as any)
           .from("inventory_counts")
@@ -276,7 +286,7 @@ function InventarioPage() {
             completed_at
           `,
           )
-          .eq("branch_id", branchId!)
+          .eq("branch_id", branchId)
           .order("started_at", {
             ascending: false,
           })
@@ -307,6 +317,7 @@ function InventarioPage() {
     enabled: !!activeCount?.id,
 
     queryFn: async () => {
+      if (!activeCount) return [];
       const { data, error } =
         await (supabase as any)
           .from("inventory_count_items")
@@ -325,7 +336,7 @@ function InventarioPage() {
             products(name,sku)
           `,
           )
-          .eq("count_id", activeCount!.id)
+          .eq("count_id", activeCount.id)
           .order("product_id");
 
       if (error) {
@@ -436,6 +447,7 @@ function InventarioPage() {
 
   const startCount = useMutation({
     mutationFn: async () => {
+      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para iniciar un inventario físico.",
@@ -544,6 +556,7 @@ function InventarioPage() {
 
   const completeCount = useMutation({
     mutationFn: async () => {
+      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para cerrar el inventario físico.",
@@ -593,6 +606,7 @@ function InventarioPage() {
 
   const adjustInventory = useMutation({
     mutationFn: async () => {
+      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para ajustar inventario.",
@@ -666,6 +680,7 @@ function InventarioPage() {
 
   const updateLimits = useMutation({
     mutationFn: async () => {
+      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para modificar límites.",
@@ -776,6 +791,7 @@ function InventarioPage() {
         </Card>
       )}
 
+      <p role="status" className="mb-3 text-sm text-destructive">{INVENTORY_WRITE_BLOCKED}</p>
       <Tabs defaultValue={canViewProducts ? "productos" : "existencias"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
           <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
@@ -1346,6 +1362,7 @@ function InventarioPage() {
               <Button
                 className="min-h-11 w-full touch-manipulation rounded-xl"
                 disabled={
+                  true ||
                   !isManager ||
                   !branchId ||
                   !adjustProduct ||
@@ -1442,6 +1459,7 @@ function InventarioPage() {
               <Button
                 className="min-h-11 w-full touch-manipulation rounded-xl"
                 disabled={
+                  true ||
                   !isManager ||
                   !limitProduct ||
                   updateLimits.isPending
