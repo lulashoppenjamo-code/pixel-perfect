@@ -90,7 +90,7 @@ export const Route = createFileRoute("/_shell/inventario")({
       {
         name: "description",
         content:
-          "Movimientos de stock, ajustes, conteo físico, límites e historial.",
+          "Catálogo de productos, existencias, ajustes, conteos físicos e historial de Lula Shop.",
       },
     ],
   }),
