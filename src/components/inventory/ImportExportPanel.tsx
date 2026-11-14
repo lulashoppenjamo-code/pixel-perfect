@@ -1,4 +1,3 @@
-
 /**
  * Import / Export Excel — LULA OS
  *
@@ -22,6 +21,7 @@ import {
   Upload,
   FileSpreadsheet,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +36,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -44,6 +45,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   analyzeProductFile,
@@ -131,6 +140,8 @@ export function ImportExportPanel() {
   const [lastFailures, setLastFailures] = useState<
     { row: number; nombre: string; message: string }[]
   >([]);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearConfirmation, setClearConfirmation] = useState("");
 
   const branchId =
     activeBranchId ??
@@ -157,6 +168,55 @@ export function ImportExportPanel() {
         barcode: string | null;
         has_variants: boolean;
       }[];
+    },
+  });
+
+  const {
+    data: productCount = 0,
+    isPending: loadingProductCount,
+    isError: productCountError,
+  } = useQuery({
+    queryKey: ["clear-product-catalog-count"],
+    enabled: isAdmin,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("products")
+        .select("id", { count: "exact", head: true });
+
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
+
+  const clearCatalog = useMutation({
+    mutationFn: async () => {
+      if (!isAdmin) {
+        throw new Error("Solo el administrador puede vaciar el inventario.");
+      }
+
+      if (clearConfirmation.trim() !== "BORRAR INVENTARIO") {
+        throw new Error("La confirmación no es correcta.");
+      }
+
+      const { data, error } = await supabase.rpc("clear_product_catalog", {
+        _confirmation: clearConfirmation.trim(),
+      });
+
+      if (error) throw error;
+
+      const result = data as { deleted_products?: number } | null;
+      return Number(result?.deleted_products ?? 0);
+    },
+
+    onSuccess: (deleted) => {
+      toast.success(`${deleted} productos eliminados correctamente.`);
+      setClearDialogOpen(false);
+      setClearConfirmation("");
+      void qc.invalidateQueries();
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message);
     },
   });
 
@@ -270,7 +330,7 @@ export function ImportExportPanel() {
         const batch = batches[i]!;
 
         setPhase(
-          `Importando lote ${i + 1}/${batches.length} (${batch.length} productos)...`,
+          `Importando lote \( {i + 1}/ \){batches.length} (${batch.length} productos)...`,
         );
 
         const { data, error } = await supabase.rpc("bulk_import_products", {
@@ -302,7 +362,7 @@ export function ImportExportPanel() {
           setLastFailures(failures);
 
           throw new Error(
-            `Error al importar el lote ${i + 1}/${batches.length}: ${error.message ?? "Error desconocido"}`,
+            `Error al importar el lote \( {i + 1}/ \){batches.length}: ${error.message ?? "Error desconocido"}`,
           );
         }
 
@@ -385,245 +445,351 @@ export function ImportExportPanel() {
   }
 
   return (
-    <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
-      <CardHeader className="border-b border-[#f0f0f0] pb-3">
-        <CardTitle className="flex items-center gap-2 text-base font-bold text-[#212121]">
-          <FileSpreadsheet className="h-5 w-5 text-[#1a73e8]" />
-          Importar / Exportar inventario
-        </CardTitle>
+    <>
+      <Card className="rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
+        <CardHeader className="border-b border-[#f0f0f0] pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-bold text-[#212121]">
+            <FileSpreadsheet className="h-5 w-5 text-[#1a73e8]" />
+            Importar / Exportar inventario
+          </CardTitle>
 
-        <p className="text-xs text-[#757575]">
-          Importación masiva por lotes de {BATCH_SIZE}: categorías, códigos,
-          precios, costos y existencias de la sucursal seleccionada.
-        </p>
-      </CardHeader>
-
-      <CardContent className="space-y-4 pt-4">
-        {!branchId && (
-          <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-            <p>
-              Selecciona una sucursal arriba para registrar las existencias en
-              esa sucursal.
-            </p>
-          </div>
-        )}
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 rounded-xl"
-            onClick={() => void downloadTemplate()}
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Plantilla
-          </Button>
-
-          <Button
-            type="button"
-            variant="outline"
-            className="min-h-11 rounded-xl"
-            disabled={
-              parsing ||
-              loadingExisting ||
-              existingError ||
-              doImport.isPending
-            }
-            onClick={() => fileRef.current?.click()}
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            {parsing ? "Leyendo…" : "Elegir Excel / CSV"}
-          </Button>
-
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".xlsx,.xls,.csv"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              e.target.value = "";
-              if (f) void onFile(f);
-            }}
-          />
-        </div>
-
-        {existingError && (
-          <p className="text-sm text-destructive">
-            No se pudo consultar el catálogo. Vuelve a cargar la página antes
-            de elegir un archivo.
+          <p className="text-xs text-[#757575]">
+            Importación masiva por lotes de {BATCH_SIZE}: categorías, códigos,
+            precios, costos y existencias de la sucursal seleccionada.
           </p>
-        )}
+        </CardHeader>
 
-        {rows.length > 0 && (
-          <>
-            <div className="flex flex-wrap gap-2">
-              <Badge variant="secondary">Total {stats.total}</Badge>
-
-              <Badge className="bg-[#e8f5e9] text-[#2e7d32]">
-                Nuevos {stats.valid}
-              </Badge>
-
-              <Badge className="bg-[#e8f0fe] text-[#1a73e8]">
-                Existentes {stats.existing}
-              </Badge>
-
-              {stats.error > 0 && (
-                <Badge className="bg-[#fce4ec] text-[#c2185b]">
-                  Errores {stats.error}
-                </Badge>
-              )}
-            </div>
-
-            <div className="space-y-2 text-sm">
+        <CardContent className="space-y-4 pt-4">
+          {!branchId && (
+            <div className="flex gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               <p>
-                <strong>Campos detectados:</strong>{" "}
-                {detected.join(", ") || "Ninguno"}
+                Selecciona una sucursal arriba para registrar las existencias en
+                esa sucursal.
               </p>
-
-              {unsupported.length > 0 && (
-                <p className="text-destructive">
-                  <strong>No se importarán:</strong>{" "}
-                  {unsupported.join(", ")}. No existe equivalencia en este
-                  flujo; las filas con variantes se rechazan.
-                </p>
-              )}
-
-              <p className="text-muted-foreground">
-                Stock = existencia final de la sucursal seleccionada. Los
-                campos vacíos conservan los valores existentes cuando la
-                función SQL admite esa regla. Este flujo no importa unidad ni
-                imagen; las filas con variantes se rechazan.
-              </p>
-
-              <div className="max-h-64 overflow-auto border border-border rounded-lg">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr>
-                      <th className="p-2">Fila</th>
-                      <th className="p-2">Producto</th>
-                      <th className="p-2">Estado / error</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.slice(0, 100).map((row) => (
-                      <tr
-                        key={row.row}
-                        className="border-t border-border"
-                      >
-                        <td className="p-2">{row.row}</td>
-                        <td className="p-2 break-words">
-                          {row.nombre || row.sku || row.codigo_barras}
-                        </td>
-                        <td className="p-2 break-words">
-                          {row.error ??
-                            (row.status === "existing"
-                              ? "Existente"
-                              : "Nuevo")}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {rows.length > 100 && (
-                <p>
-                  Vista previa: primeras 100 de {rows.length} filas. El
-                  reporte contiene todas las filas con error.
-                </p>
-              )}
             </div>
+          )}
 
-            <div className="space-y-1.5">
-              <Label>Acción sobre existentes</Label>
-
-              <Select
-                value={action}
-                onValueChange={(v) => setAction(v as ImportAction)}
-              >
-                <SelectTrigger className="h-11 rounded-xl">
-                  <SelectValue />
-                </SelectTrigger>
-
-                <SelectContent>
-                  <SelectItem value="update_all">
-                    Actualizar todo (datos + precio + stock)
-                  </SelectItem>
-
-                  <SelectItem value="update_stock">
-                    Solo stock
-                  </SelectItem>
-
-                  <SelectItem value="update_price_cost">
-                    Solo precio y costo
-                  </SelectItem>
-
-                  <SelectItem value="update_data">
-                    Solo datos (nombre, código, categoría)
-                  </SelectItem>
-
-                  <SelectItem value="skip_existing">
-                    Saltar existentes
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {phase && (
-              <p className="text-sm font-medium text-[#1a73e8]">
-                {phase}
-              </p>
-            )}
-
-            {progress.total > 0 && (
-              <p className="text-xs text-[#757575]">
-                Lote {progress.current} / {progress.total}
-              </p>
-            )}
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button
+              type="button"
+              variant="outline"
+              className="min-h-11 rounded-xl"
+              onClick={() => void downloadTemplate()}
+            >
+              <Download className="mr-2 h-4 w-4" />
+              Plantilla
+            </Button>
 
             <Button
               type="button"
-              className="min-h-12 w-full rounded-xl bg-[#34a853] text-[15px] font-bold text-white hover:bg-[#2d8f47]"
+              variant="outline"
+              className="min-h-11 rounded-xl"
               disabled={
-                doImport.isPending ||
-                !branchId ||
-                stats.valid +
-                  (action === "skip_existing" ? 0 : stats.existing) ===
-                  0
+                parsing ||
+                loadingExisting ||
+                existingError ||
+                doImport.isPending
               }
-              onClick={() => doImport.mutate()}
+              onClick={() => fileRef.current?.click()}
             >
-              {doImport.isPending
-                ? "Importando…"
-                : `Importar ahora (${stats.valid + (action === "skip_existing" ? 0 : stats.existing)} filas)`}
+              <Upload className="mr-2 h-4 w-4" />
+              {parsing ? "Leyendo…" : "Elegir Excel / CSV"}
             </Button>
 
-            {stats.error > 0 && (
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full rounded-xl"
-                onClick={() => void downloadImportErrors(rows)}
-              >
-                Descargar filas con error
-              </Button>
-            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (f) void onFile(f);
+              }}
+            />
+          </div>
 
-            {lastFailures.length > 0 && (
+          {existingError && (
+            <p className="text-sm text-destructive">
+              No se pudo consultar el catálogo. Vuelve a cargar la página antes
+              de elegir un archivo.
+            </p>
+          )}
+
+          {rows.length > 0 && (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Badge variant="secondary">Total {stats.total}</Badge>
+
+                <Badge className="bg-[#e8f5e9] text-[#2e7d32]">
+                  Nuevos {stats.valid}
+                </Badge>
+
+                <Badge className="bg-[#e8f0fe] text-[#1a73e8]">
+                  Existentes {stats.existing}
+                </Badge>
+
+                {stats.error > 0 && (
+                  <Badge className="bg-[#fce4ec] text-[#c2185b]">
+                    Errores {stats.error}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="space-y-2 text-sm">
+                <p>
+                  <strong>Campos detectados:</strong>{" "}
+                  {detected.join(", ") || "Ninguno"}
+                </p>
+
+                {unsupported.length > 0 && (
+                  <p className="text-destructive">
+                    <strong>No se importarán:</strong>{" "}
+                    {unsupported.join(", ")}. No existe equivalencia en este
+                    flujo; las filas con variantes se rechazan.
+                  </p>
+                )}
+
+                <p className="text-muted-foreground">
+                  Stock = existencia final de la sucursal seleccionada. Los
+                  campos vacíos conservan los valores existentes cuando la
+                  función SQL admite esa regla. Este flujo no importa unidad ni
+                  imagen; las filas con variantes se rechazan.
+                </p>
+
+                <div className="max-h-64 overflow-auto border border-border rounded-lg">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr>
+                        <th className="p-2">Fila</th>
+                        <th className="p-2">Producto</th>
+                        <th className="p-2">Estado / error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.slice(0, 100).map((row) => (
+                        <tr
+                          key={row.row}
+                          className="border-t border-border"
+                        >
+                          <td className="p-2">{row.row}</td>
+                          <td className="p-2 break-words">
+                            {row.nombre || row.sku || row.codigo_barras}
+                          </td>
+                          <td className="p-2 break-words">
+                            {row.error ??
+                              (row.status === "existing"
+                                ? "Existente"
+                                : "Nuevo")}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {rows.length > 100 && (
+                  <p>
+                    Vista previa: primeras 100 de {rows.length} filas. El
+                    reporte contiene todas las filas con error.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Acción sobre existentes</Label>
+
+                <Select
+                  value={action}
+                  onValueChange={(v) => setAction(v as ImportAction)}
+                >
+                  <SelectTrigger className="h-11 rounded-xl">
+                    <SelectValue />
+                  </SelectTrigger>
+
+                  <SelectContent>
+                    <SelectItem value="update_all">
+                      Actualizar todo (datos + precio + stock)
+                    </SelectItem>
+
+                    <SelectItem value="update_stock">
+                      Solo stock
+                    </SelectItem>
+
+                    <SelectItem value="update_price_cost">
+                      Solo precio y costo
+                    </SelectItem>
+
+                    <SelectItem value="update_data">
+                      Solo datos (nombre, código, categoría)
+                    </SelectItem>
+
+                    <SelectItem value="skip_existing">
+                      Saltar existentes
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {phase && (
+                <p className="text-sm font-medium text-[#1a73e8]">
+                  {phase}
+                </p>
+              )}
+
+              {progress.total > 0 && (
+                <p className="text-xs text-[#757575]">
+                  Lote {progress.current} / {progress.total}
+                </p>
+              )}
+
               <Button
                 type="button"
-                variant="outline"
-                className="w-full rounded-xl"
-                onClick={() => void downloadImportFailures(lastFailures)}
+                className="min-h-12 w-full rounded-xl bg-[#34a853] text-[15px] font-bold text-white hover:bg-[#2d8f47]"
+                disabled={
+                  doImport.isPending ||
+                  !branchId ||
+                  stats.valid +
+                    (action === "skip_existing" ? 0 : stats.existing) ===
+                    0
+                }
+                onClick={() => doImport.mutate()}
               >
-                Descargar fallas del último import
+                {doImport.isPending
+                  ? "Importando…"
+                  : `Importar ahora (${stats.valid + (action === "skip_existing" ? 0 : stats.existing)} filas)`}
               </Button>
-            )}
-          </>
-        )}
-      </CardContent>
-    </Card>
+
+              {stats.error > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  onClick={() => void downloadImportErrors(rows)}
+                >
+                  Descargar filas con error
+                </Button>
+              )}
+
+              {lastFailures.length > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl"
+                  onClick={() => void downloadImportFailures(lastFailures)}
+                >
+                  Descargar fallas del último import
+                </Button>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      {isAdmin && (
+        <>
+          <Card className="mt-4 border-red-200 bg-white">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-red-700">
+                <Trash2 className="h-5 w-5" />
+                Vaciar inventario
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">
+                Elimina productos y existencias relacionadas, sin borrar la estructura
+                del sistema.
+              </p>
+            </CardHeader>
+
+            <CardContent className="space-y-3">
+              <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                También se eliminan los detalles de compras y conteos vinculados,
+                además de movimientos y solicitudes relacionados. Las ventas y los
+                encabezados de compras y conteos se conservan.
+              </div>
+
+              <p className="text-sm">
+                {loadingProductCount
+                  ? "Consultando productos..."
+                  : productCountError
+                    ? "No se pudo consultar el inventario."
+                    : `Productos registrados: ${productCount.toLocaleString("es-MX")}`}
+              </p>
+
+              <Button
+                type="button"
+                variant="destructive"
+                className="w-full"
+                disabled={
+                  loadingProductCount ||
+                  productCountError ||
+                  productCount === 0 ||
+                  clearCatalog.isPending
+                }
+                onClick={() => {
+                  setClearConfirmation("");
+                  setClearDialogOpen(true);
+                }}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Vaciar todos los productos
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Dialog
+            open={clearDialogOpen}
+            onOpenChange={(open) => {
+              if (!clearCatalog.isPending) setClearDialogOpen(open);
+            }}
+          >
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="text-red-700">
+                  ¿Vaciar todo el inventario?
+                </DialogTitle>
+                <DialogDescription>
+                  Se eliminarán {productCount.toLocaleString("es-MX")} productos.
+                  Esta acción no se puede deshacer.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-2">
+                <Label>Escribe BORRAR INVENTARIO para confirmar</Label>
+                <Input
+                  value={clearConfirmation}
+                  onChange={(event) => setClearConfirmation(event.target.value)}
+                  placeholder="BORRAR INVENTARIO"
+                  disabled={clearCatalog.isPending}
+                />
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={clearCatalog.isPending}
+                  onClick={() => setClearDialogOpen(false)}
+                >
+                  Cancelar
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={
+                    clearConfirmation.trim() !== "BORRAR INVENTARIO" ||
+                    clearCatalog.isPending
+                  }
+                  onClick={() => clearCatalog.mutate()}
+                >
+                  {clearCatalog.isPending ? "Eliminando..." : "Sí, borrar inventario"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </>
+      )}
+    </>
   );
 }
