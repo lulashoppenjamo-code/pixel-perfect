@@ -1,4 +1,4 @@
-
+lo
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -688,6 +688,7 @@ body [class~="text-rose-500"] {
 body [class~="text-rose-300"] {
   color: #8A2854 !important;
 }
+`}</style>
 
       <StoreHeader
         search={search}
