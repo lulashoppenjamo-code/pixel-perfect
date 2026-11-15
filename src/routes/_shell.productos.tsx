@@ -41,7 +41,7 @@ import {
   type SharedInventoryRow,
 } from "@/lib/sharedInventory";
 import { getOperationalInventory } from "@/lib/inventoryData";
-import { INVENTORY_WRITE_BLOCKED, requireInventoryBranch } from "@/lib/inventoryModel";
+import { requireInventoryBranch } from "@/lib/inventoryModel";
 import { money } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
@@ -1187,7 +1187,6 @@ export function ProductosPage({
   
   const adjustProductStock = useMutation({
     mutationFn: async () => {
-      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!canAdjustStock) {
         throw new Error("Solo un administrador puede ajustar existencias.");
       }
@@ -2143,7 +2142,6 @@ export function ProductosPage({
                               </Button>
                             </div>
                             <p className="text-[10px] text-[#9e9e9e]">
-                              {INVENTORY_WRITE_BLOCKED}
                             </p>
                           </div>
                         ) : (
