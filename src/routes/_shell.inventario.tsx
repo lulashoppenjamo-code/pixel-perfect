@@ -26,7 +26,7 @@ import {
   setSharedInventoryLimits,
 } from "@/lib/sharedInventory";
 import { getOperationalInventory } from "@/lib/inventoryData";
-import { INVENTORY_WRITE_BLOCKED, requireInventoryBranch } from "@/lib/inventoryModel";
+import { requireInventoryBranch } from "@/lib/inventoryModel";
 import { money, shortDate } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
@@ -78,9 +78,9 @@ import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgr
 import { ProductosPage } from "./_shell.productos";
 
 /**
- * BLOQUE 4 — Visual Inventario.
- * Solo presentación. NO toca inventario compartido, RPCs ni arquitectura.
- * Productos (catálogo) integrado como pestaña; aquí también stock, ajustes, límites, conteo e historial.
+ * Inventario — lecturas y escrituras sobre shared_inventory.
+ * Productos (catálogo) integrado como pestaña; stock, ajustes, límites, conteo e historial.
+ * Escrituras autorizadas (2026-11-15): adjust_stock / start|complete_inventory_count / set_shared_inventory_limits.
  */
 
 export const Route = createFileRoute("/_shell/inventario")({
@@ -447,7 +447,6 @@ function InventarioPage() {
 
   const startCount = useMutation({
     mutationFn: async () => {
-      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para iniciar un inventario físico.",
@@ -556,7 +555,6 @@ function InventarioPage() {
 
   const completeCount = useMutation({
     mutationFn: async () => {
-      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para cerrar el inventario físico.",
@@ -606,7 +604,6 @@ function InventarioPage() {
 
   const adjustInventory = useMutation({
     mutationFn: async () => {
-      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para ajustar inventario.",
@@ -680,7 +677,6 @@ function InventarioPage() {
 
   const updateLimits = useMutation({
     mutationFn: async () => {
-      throw new Error(INVENTORY_WRITE_BLOCKED);
       if (!isManager) {
         throw new Error(
           "No tienes permisos para modificar límites.",
@@ -791,7 +787,6 @@ function InventarioPage() {
         </Card>
       )}
 
-      <p role="status" className="mb-3 text-sm text-destructive">{INVENTORY_WRITE_BLOCKED}</p>
       <Tabs defaultValue={canViewProducts ? "productos" : "existencias"}>
         <div className="-mx-1 overflow-x-auto px-1 pb-1">
           <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
