@@ -2914,4 +2914,4 @@ export function ProductosPage({
   }
 
   return <PageShell>{content}</PageShell>;
-}
+} 
