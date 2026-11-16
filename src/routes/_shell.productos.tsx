@@ -1016,8 +1016,6 @@ export function ProductosPage({
 
     onError: (e: Error) => toast.error(e.message),
   });
-
-```tsx
   const saveVariant = useMutation({
     mutationFn: async () => {
       if (!form.id) {
