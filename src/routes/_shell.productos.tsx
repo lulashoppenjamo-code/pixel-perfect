@@ -1,4 +1,3 @@
-
 /**
  * Productos y categorías — LULA OS
  * Ruta: src/routes/_shell.productos.tsx
@@ -643,27 +642,40 @@ export function ProductosPage({
     queryKey: ["products"],
     staleTime: 20_000,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("products")
-        .select(`
-          id,
-          sku,
-          barcode,
-          name,
-          description,
-          category_id,
-          price,
-          cost,
-          tax_rate,
-          emoji,
-          image_url,
-          is_active,
-          categories(name)
-        `)
-        .order("name");
+      const pageSize = 500;
+      const allProducts: ProductRow[] = [];
 
-      if (error) throw error;
-      return (data ?? []) as ProductRow[];
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("products")
+          .select(`
+            id,
+            sku,
+            barcode,
+            name,
+            description,
+            category_id,
+            price,
+            cost,
+            tax_rate,
+            emoji,
+            image_url,
+            is_active,
+            categories(name)
+          `)
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        const page = (data ?? []) as ProductRow[];
+        allProducts.push(...page);
+
+        if (page.length < pageSize) break;
+      }
+
+      return allProducts;
     },
   });
 
@@ -1005,7 +1017,7 @@ export function ProductosPage({
     onError: (e: Error) => toast.error(e.message),
   });
 
-
+```tsx
   const saveVariant = useMutation({
     mutationFn: async () => {
       if (!form.id) {
@@ -1184,7 +1196,7 @@ export function ProductosPage({
   });
 
 
-  
+
   const adjustProductStock = useMutation({
     mutationFn: async () => {
       if (!canAdjustStock) {
