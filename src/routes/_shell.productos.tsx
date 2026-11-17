@@ -1569,14 +1569,9 @@ export function ProductosPage({
                       {/* Contenido principal */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <p className="truncate text-[15px] font-semibold leading-snug text-[#212121]">
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words text-[15px] font-semibold leading-snug text-[#212121]">
                               {p.name}
-                              {p.sku ? (
-                                <span className="ml-1 font-normal text-[#757575]">
-                                  {p.sku}
-                                </span>
-                              ) : null}
                             </p>
                             <p className="mt-0.5 text-[15px] font-bold text-[#1a73e8]">
                               {money(Number(p.price))}
