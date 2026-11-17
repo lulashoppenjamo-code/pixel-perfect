@@ -448,6 +448,8 @@ export function ImportExportPanel() {
             : ""),
       );
 
+      // Refrescar inventario operativo (pantalla Inventario / Productos)
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["categories"] });
@@ -461,6 +463,8 @@ export function ImportExportPanel() {
       setPhase("");
       toast.error(error.message);
 
+      // Refrescar inventario operativo por si el lote parcial sí escribió stock
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["categories"] });
