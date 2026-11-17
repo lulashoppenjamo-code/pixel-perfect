@@ -50,32 +50,29 @@ export type SharedProductStock = {
 export async function getSharedInventory(): Promise<
   SharedInventoryRow[]
 > {
-  const pageSize = 500;
-  const allRows: SharedInventoryRow[] = [];
-  let offset = 0;
+  // RPC SECURITY DEFINER: una sola llamada (sin .order/.range encadenados,
+  // que en PostgREST no paginan el resultado del RPC de forma fiable).
+  const { data, error } = await (supabase as any).rpc("get_shared_inventory");
 
-  while (true) {
-    const { data, error } = await (supabase as any)
-      .rpc("get_shared_inventory")
-      .order("id", { ascending: true })
-      .range(offset, offset + pageSize - 1);
-
-    if (error) {
-      throw error;
-    }
-
-    const page = (data ?? []) as SharedInventoryRow[];
-
-    allRows.push(...page);
-
-    if (page.length < pageSize) {
-      break;
-    }
-
-    offset += pageSize;
+  if (error) {
+    throw error;
   }
 
-  return allRows;
+  const rows = (data ?? []) as SharedInventoryRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    stock: Number(row.stock ?? 0),
+    reserved_stock: Number(row.reserved_stock ?? 0),
+    available_stock: Number(
+      row.available_stock ??
+        Math.max(Number(row.stock ?? 0) - Number(row.reserved_stock ?? 0), 0),
+    ),
+    min_stock: Number(row.min_stock ?? 0),
+    max_stock: row.max_stock == null ? null : Number(row.max_stock),
+    price: Number(row.price ?? 0),
+    cost: Number(row.cost ?? 0),
+  }));
 }
 
 export async function getSharedProductStock(
