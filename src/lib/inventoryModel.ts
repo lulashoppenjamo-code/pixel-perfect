@@ -107,10 +107,9 @@ export function buildInventoryRows(
   for (const stock of stocks) {
     const product = byProduct.get(stock.product_id);
 
+    // No tumbar toda la pantalla por una fila huérfana: se omite.
     if (!product) {
-      throw new Error(
-        `Existencia sin producto accesible: ${stock.product_id}`,
-      );
+      continue;
     }
 
     const variant = stock.variant_id
@@ -121,9 +120,7 @@ export function buildInventoryRows(
       stock.variant_id &&
       (!variant || variant.product_id !== product.id)
     ) {
-      throw new Error(
-        `Existencia con variante incompatible: ${stock.variant_id}`,
-      );
+      continue;
     }
 
     add(product, variant, stock);
