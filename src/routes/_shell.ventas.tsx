@@ -58,6 +58,11 @@ import {
   TicketModal,
   type TicketData,
 } from "@/components/pos/TicketModal";
+import {
+  normalizeTicketLayout,
+  printTicketBluetooth,
+  type TicketPrintLayout,
+} from "@/lib/bluetoothPrinter";
 
 export const Route = createFileRoute(
   "/_shell/ventas",
@@ -259,6 +264,9 @@ function VentasPage() {
     useState<TicketData | null>(
       null,
     );
+
+  const [activeTicketLayout, setActiveTicketLayout] =
+    useState<Partial<TicketPrintLayout>>({});
 
   const [
     ticketOpen,
@@ -639,6 +647,15 @@ function VentasPage() {
               "¡Gracias por su compra!",
             );
 
+          const ticketLayout = normalizeTicketLayout(
+            readSettingValue(
+              settings,
+              "ticket_layout",
+              sale.branch_id,
+              "",
+            ),
+          );
+
           const branchName =
             branchResult.data
               ?.name ??
@@ -654,6 +671,7 @@ function VentasPage() {
             items:
               itemsResult.data ??
               [],
+            ticketLayout,
             customerName:
               customerResult
                 .data
@@ -672,7 +690,9 @@ function VentasPage() {
         companyName,
         branchName,
         footer,
+        ticketLayout,
       }) => {
+        setActiveTicketLayout(ticketLayout);
         setTicket({
           companyName,
 
@@ -1080,6 +1100,14 @@ function VentasPage() {
 
       <TicketModal
         open={ticketOpen}
+        layout={activeTicketLayout}
+        onPrint={async (ticketToPrint) => {
+          await printTicketBluetooth(
+            ticketToPrint,
+            activeTicketLayout,
+            { openDrawer: false },
+          );
+        }}
         onOpenChange={(open) => {
           setTicketOpen(open);
           if (!open) {
