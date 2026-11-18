@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
   useMutation,
@@ -164,6 +164,25 @@ function InventarioPage() {
   );
 
   const [adjustProduct, setAdjustProduct] = useState("");
+  const [topChromeHidden, setTopChromeHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop;
+      const dy = y - lastScrollYRef.current;
+      lastScrollYRef.current = y;
+      if (y < 24) {
+        setTopChromeHidden(false);
+        return;
+      }
+      if (dy > 12) setTopChromeHidden(true);
+      else if (dy < -12) setTopChromeHidden(false);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const [adjustQuantity, setAdjustQuantity] = useState("");
   const [adjustNotes, setAdjustNotes] = useState("");
   const [adjustDirection, setAdjustDirection] =
@@ -761,22 +780,31 @@ function InventarioPage() {
 
   return (
     <PageShell>
-      <PageHeader
-        icon={Boxes}
-        title="Inventario"
-        description="Centro de control de productos, existencias y movimientos de Lula Shop."
-        action={
-          lowStock.length > 0 ? (
-            <Badge
-              variant="destructive"
-              className="min-h-8 gap-1 rounded-full px-3"
-            >
-              <AlertTriangle className="h-3.5 w-3.5" />
-              {lowStock.length} bajo mínimo
-            </Badge>
-          ) : undefined
+      <div
+        className={
+          "overflow-hidden transition-all duration-300 ease-out " +
+          (topChromeHidden
+            ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none"
+            : "max-h-[280px] opacity-100 translate-y-0")
         }
-      />
+      >
+        <PageHeader
+          icon={Boxes}
+          title="Inventario"
+          description="Centro de control de productos, existencias y movimientos de Lula Shop."
+          action={
+            lowStock.length > 0 ? (
+              <Badge
+                variant="destructive"
+                className="min-h-8 gap-1 rounded-full px-3"
+              >
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {lowStock.length} bajo mínimo
+              </Badge>
+            ) : undefined
+          }
+        />
+      </div>
 
       {inventoryError && (
         <Card className="border-destructive/30">
@@ -788,7 +816,15 @@ function InventarioPage() {
       )}
 
       <Tabs defaultValue={canViewProducts ? "productos" : "existencias"}>
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+                <div
+          className={
+            "overflow-hidden transition-all duration-300 ease-out " +
+            (topChromeHidden
+              ? "max-h-0 opacity-0 pointer-events-none"
+              : "max-h-[120px] opacity-100")
+          }
+        >
+<div className="-mx-1 overflow-x-auto px-1 pb-1">
           <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
             {canViewProducts && (
               <TabsTrigger
@@ -860,6 +896,19 @@ function InventarioPage() {
             </TabsTrigger>
           </TabsList>
         </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setTopChromeHidden((v) => !v)}
+          className="mb-1 flex w-full flex-col items-center gap-0.5 py-1 text-[#9e9e9e] active:bg-[#f5f5f5]"
+          aria-label={topChromeHidden ? "Mostrar menú" : "Ocultar menú"}
+        >
+          <span className="h-1 w-10 rounded-full bg-[#cfd8dc]" />
+          <span className="text-[10px] font-medium">
+            {topChromeHidden ? "↓ Menú inventario" : "↑ Ocultar menú"}
+          </span>
+        </button>
+
 
         {canViewProducts && (
           <TabsContent value="productos" className="mt-3 sm:mt-4">
