@@ -1,19 +1,6 @@
 /**
- * Historial de ventas — LULA OS
+ * Historial de ventas — Lula OS
  * Ruta: src/routes/_shell.ventas.tsx
- *
- * Lista de tickets de la sucursal activa con filtros por fecha, método de pago
- * y estado, totales del periodo y reimpresión de ticket.
- *
- * La configuración de ticket utiliza esta prioridad:
- * 1. Configuración específica de la sucursal activa.
- * 2. Configuración global.
- * 3. Valor predeterminado.
- *
- * El punto de venta está en Caja (/caja).
- *
- * BLOQUE 5 — Visual Hoy / Historial de ventas.
- * Solo presentación. Sin tocar cancel_sale, reprint ni consultas.
  */
 
 import { useMemo, useState } from "react";
@@ -44,7 +31,6 @@ import { cn } from "@/lib/utils";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 
 import {
   Select,
@@ -67,30 +53,6 @@ import {
 export const Route = createFileRoute(
   "/_shell/ventas",
 )({
-  head: () => ({
-    meta: [
-      {
-        title:
-          "Historial de ventas — Lula OS",
-      },
-      {
-        name: "description",
-        content:
-          "Consulta y reimprime los tickets de tu sucursal.",
-      },
-      {
-        property: "og:title",
-        content:
-          "Historial de ventas — Lula OS",
-      },
-      {
-        property: "og:description",
-        content:
-          "Todos los tickets de tu sucursal, con filtros y totales.",
-      },
-    ],
-  }),
-
   component: () => (
     <RequireNavAccess navKey="ventas">
       <VentasPage />
@@ -157,16 +119,6 @@ function readSettingValue(
   branchId: string | null,
   fallback: string,
 ) {
-  /*
-   * IMPORTANTE:
-   *
-   * La configuración de sucursal tiene prioridad
-   * sobre la configuración global.
-   *
-   * Esto evita que, por ejemplo, una sucursal tenga
-   * un nombre/footer diferente y el sistema tome
-   * accidentalmente el valor global.
-   */
   const branchRow = rows.find(
     (row) =>
       row.key === key &&
@@ -194,11 +146,6 @@ function readSettingValue(
     return String(raw);
   }
 
-  /*
-   * Para JSON complejo intentamos obtener una
-   * representación legible, pero evitamos mostrar
-   * [object Object].
-   */
   if (
     raw !== null &&
     typeof raw === "object"
@@ -313,10 +260,6 @@ function VentasPage() {
         )
         .limit(300);
 
-      /*
-       * Los días se interpretan en la zona horaria
-       * del dispositivo.
-       */
       if (from) {
         q = q.gte(
           "created_at",
@@ -507,16 +450,6 @@ function VentasPage() {
       visible,
     ]);
 
-  /*
-   * Reimpresión de ticket.
-   *
-   * La venta siempre se consulta por ID y la seguridad
-   * de Supabase/RLS determina si el usuario puede verla.
-   *
-   * La configuración se consulta junto con branch_id
-   * para poder distinguir entre configuración global
-   * y configuración específica de sucursal.
-   */
   const reprint =
     useMutation({
       mutationFn:
@@ -546,6 +479,7 @@ function VentasPage() {
             customerResult,
             settingsResult,
             branchResult,
+            cashierResult,
           ] =
             await Promise.all([
               supabase
@@ -553,7 +487,7 @@ function VentasPage() {
                   "sale_items",
                 )
                 .select(
-                  "name_snapshot, quantity, unit_price, discount, total",
+                  "name_snapshot, quantity, unit_price, discount, total, sku",
                 )
                 .eq(
                   "sale_id",
@@ -581,10 +515,6 @@ function VentasPage() {
                     },
                   ),
 
-              /*
-               * RLS permite la configuración global y
-               * la configuración de la sucursal accesible.
-               */
               supabase
                 .from(
                   "settings",
@@ -605,25 +535,19 @@ function VentasPage() {
                   sale.branch_id,
                 )
                 .maybeSingle(),
+
+              sale.cashier_id
+                ? supabase
+                    .from("profiles")
+                    .select("full_name")
+                    .eq("id", sale.cashier_id)
+                    .maybeSingle()
+                : Promise.resolve({ data: null, error: null }),
             ]);
 
-          if (
-            itemsResult.error
-          ) {
-            throw itemsResult.error;
-          }
-
-          if (
-            customerResult.error
-          ) {
-            throw customerResult.error;
-          }
-
-          if (
-            settingsResult.error
-          ) {
-            throw settingsResult.error;
-          }
+          if (itemsResult.error) throw itemsResult.error;
+          if (customerResult.error) throw customerResult.error;
+          if (settingsResult.error) throw settingsResult.error;
 
           const settings =
             (
@@ -638,6 +562,20 @@ function VentasPage() {
               sale.branch_id,
               "Lula Shop",
             );
+
+          const companyAddress = readSettingValue(
+            settings,
+            "company_address",
+            sale.branch_id,
+            "",
+          );
+
+          const companyPhone = readSettingValue(
+            settings,
+            "company_phone",
+            sale.branch_id,
+            "",
+          );
 
           const footer =
             readSettingValue(
@@ -666,6 +604,8 @@ function VentasPage() {
             )?.name ??
             "";
 
+          const cashierName = cashierResult.data?.full_name ?? undefined;
+
           return {
             sale,
             items:
@@ -678,8 +618,11 @@ function VentasPage() {
                 ?.name ??
               undefined,
             companyName,
+            companyAddress,
+            companyPhone,
             branchName,
             footer,
+            cashierName,
           };
         },
 
@@ -688,81 +631,71 @@ function VentasPage() {
         items,
         customerName,
         companyName,
+        companyAddress,
+        companyPhone,
         branchName,
         footer,
         ticketLayout,
+        cashierName,
       }) => {
         setActiveTicketLayout(ticketLayout);
         setTicket({
           companyName,
-
+          companyAddress,
+          companyPhone,
           branchName,
-
           folio:
             sale.folio,
-
           date:
             new Date(
               sale.created_at,
             ).toLocaleString(
               "es-MX",
             ),
-
-          cashierName: "",
-
+          cashierName,
           customerName,
-
           paymentMethod:
             sale.payment_method,
-
           lines:
             items.map(
-              (line) => ({
+              (line: any) => ({
                 name:
                   line.name_snapshot,
-
                 quantity:
                   Number(
                     line.quantity,
                   ),
-
                 unit_price:
                   Number(
                     line.unit_price,
                   ),
-
                 discount:
                   Number(
                     line.discount,
                   ),
-
                 total:
                   Number(
                     line.total,
                   ),
+                sku: line.sku ?? null,
               }),
             ),
-
           subtotal:
             Number(
               sale.subtotal,
             ),
-
           tax:
             Number(
               sale.tax,
             ),
-
           discount:
             Number(
               sale.discount,
             ),
-
           total:
             Number(
               sale.total,
             ),
-
           cashReceived:
             sale.cash_received !=
             null
@@ -770,7 +703,6 @@ function VentasPage() {
                   sale.cash_received,
                 )
               : null,
-
           changeGiven:
             sale.change_given !=
             null
@@ -778,8 +710,8 @@ function VentasPage() {
                   sale.change_given,
                 )
               : null,
-
           footer,
+          notes: sale.notes ?? undefined,
         });
 
         setTicketOpen(
@@ -839,7 +771,6 @@ function VentasPage() {
 
   return (
     <div className="w-full max-w-none space-y-3 pb-2">
-      {/* Tabs estilo Zobaze: Recibos de TPV | Pedidos en línea */}
       <div className="flex overflow-hidden rounded-lg border border-[#e0e0e0] bg-white shadow-sm">
         <button
           type="button"
@@ -867,7 +798,6 @@ function VentasPage() {
         </button>
       </div>
 
-      {/* Filtros compactos (misma lógica, UI más ligera) */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e0e0e0] bg-white p-2.5">
         <Input
           type="date"
@@ -947,22 +877,25 @@ function VentasPage() {
         </div>
       )}
 
-      {/* Resumen del periodo (conservado) */}
       <div className="grid grid-cols-3 gap-2">
-        <Card label="Tickets" value={String(totals.tickets)} />
-        <Card label="Ventas" value={money(totals.sum)} highlight />
-        <Card label="Promedio" value={money(totals.avg)} />
+        <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm sm:p-4">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">Tickets</p>
+          <p className="mt-1 text-base font-bold text-[#212121]">{totals.tickets}</p>
+        </div>
+        <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm sm:p-4">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">Ventas</p>
+          <p className="mt-1 text-base font-bold text-[#1a73e8]">{money(totals.sum)}</p>
+        </div>
+        <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm sm:p-4">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">Promedio</p>
+          <p className="mt-1 text-base font-bold text-[#212121]">{money(totals.avg)}</p>
+        </div>
       </div>
 
-      {/* Lista estilo Zobaze */}
       {listTab === "online" ? (
         <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-4 py-14 text-center shadow-sm">
-          <p className="text-base font-bold text-[#212121]">
-            Pedidos en línea
-          </p>
-          <p className="mt-1 text-sm text-[#757575]">
-            No hay pedidos en línea por ahora
-          </p>
+          <p className="text-base font-bold text-[#212121]">Pedidos en línea</p>
+          <p className="mt-1 text-sm text-[#757575]">No hay pedidos en línea por ahora</p>
         </div>
       ) : isLoading ? (
         <div className="rounded-2xl border border-[#e0e0e0] bg-white py-12 text-center shadow-sm">
@@ -971,37 +904,23 @@ function VentasPage() {
         </div>
       ) : visible.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-6 py-14 text-center shadow-sm">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-3xl">
-            📭
-          </div>
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#e8f0fe] text-3xl">📭</div>
           <div>
-            <p className="text-base font-bold text-[#212121]">
-              No hay transacciones
-            </p>
-            <p className="mt-1 text-sm text-[#757575]">
-              Ajusta las fechas o realiza una venta en Caja
-            </p>
+            <p className="text-base font-bold text-[#212121]">No hay transacciones</p>
+            <p className="mt-1 text-sm text-[#757575]">Ajusta las fechas o realiza una venta en Caja</p>
           </div>
         </div>
       ) : (
         <div className="space-y-2">
           {visible.map((row) => {
             const open = expandedId === row.id;
-            const units =
-              row.itemCount > 0
-                ? row.itemCount
-                : 0;
+            const units = row.itemCount > 0 ? row.itemCount : 0;
             return (
-              <div
-                key={row.id}
-                className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm"
-              >
+              <div key={row.id} className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
                 <button
                   type="button"
                   className="flex w-full items-start gap-3 px-3 py-3 text-left active:bg-[#fafafa]"
-                  onClick={() =>
-                    setExpandedId(open ? null : row.id)
-                  }
+                  onClick={() => setExpandedId(open ? null : row.id)}
                 >
                   <div className="mt-0.5 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#e8f5e9] text-[#2e7d32]">
                     <Banknote className="h-5 w-5" />
@@ -1014,19 +933,10 @@ function VentasPage() {
                       por {paymentLabel(row.payment_method)}
                     </p>
                     <p className="text-xs text-[#9e9e9e]">
-                      {units}{" "}
-                      {units === 1 ? "Artículo" : "Artículos"}{" "}
-                      {timeAgo(row.created_at)}
+                      {units} {units === 1 ? "Artículo" : "Artículos"} {timeAgo(row.created_at)}
                       {row.status !== "completed" && (
                         <span className="ml-1 text-[#e5484d]">
-                          ·{" "}
-                          {row.status === "cancelled"
-                            ? "Cancelada"
-                            : row.status === "refunded"
-                              ? "Reembolsada"
-                              : row.status === "partially_refunded"
-                                ? "Parcial"
-                                : row.status}
+                          · {row.status === "cancelled" ? "Cancelada" : row.status}
                         </span>
                       )}
                     </p>
@@ -1035,11 +945,7 @@ function VentasPage() {
                     <span className="text-base font-bold text-[#1a73e8]">
                       {money(row.total)}
                     </span>
-                    {open ? (
-                      <ChevronUp className="h-4 w-4 text-[#9e9e9e]" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4 text-[#9e9e9e]" />
-                    )}
+                    {open ? <ChevronUp className="h-4 w-4 text-[#9e9e9e]" /> : <ChevronDown className="h-4 w-4 text-[#9e9e9e]" />}
                   </div>
                 </button>
 
@@ -1047,22 +953,13 @@ function VentasPage() {
                   <div className="border-t border-[#eeeeee] bg-white">
                     {row.items.length > 0 ? (
                       row.items.map((item, idx) => (
-                        <div
-                          key={`${row.id}-${idx}`}
-                          className="flex items-center justify-between border-b border-[#f0f0f0] px-3 py-2 last:border-b-0"
-                        >
-                          <span className="min-w-0 flex-1 truncate text-sm text-[#616161]">
-                            {item.name}
-                          </span>
-                          <span className="ml-3 shrink-0 text-sm text-[#757575]">
-                            x {item.quantity}
-                          </span>
+                        <div key={`${row.id}-${idx}`} className="flex items-center justify-between border-b border-[#f0f0f0] px-3 py-2 last:border-b-0">
+                          <span className="min-w-0 flex-1 truncate text-sm text-[#616161]">{item.name}</span>
+                          <span className="ml-3 shrink-0 text-sm text-[#757575]">x {item.quantity}</span>
                         </div>
                       ))
                     ) : (
-                      <p className="px-3 py-2 text-xs text-[#9e9e9e]">
-                        Sin detalle de artículos
-                      </p>
+                      <p className="px-3 py-2 text-xs text-[#9e9e9e]">Sin detalle de artículos</p>
                     )}
                     <div className="flex gap-2 border-t border-[#eeeeee] p-2.5">
                       <Button
@@ -1082,9 +979,7 @@ function VentasPage() {
                         size="sm"
                         variant="outline"
                         className="h-9 flex-1 rounded-lg border-[#e0e0e0] text-xs"
-                        onClick={() =>
-                          navigate({ to: "/devoluciones" })
-                        }
+                        onClick={() => navigate({ to: "/devoluciones" })}
                       >
                         <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
                         Devolver
@@ -1135,34 +1030,6 @@ function VentasPage() {
           toast.message("La edición de tickets estará disponible pronto.");
         }}
       />
-    </div>
-  );
-}
-
-function Card({
-  label,
-  value,
-  highlight = false,
-}: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm sm:p-4">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8] sm:text-[11px]">
-        {label}
-      </p>
-
-      <p
-        className={
-          highlight
-            ? "mt-1 text-base font-bold text-[#1a73e8] sm:text-lg"
-            : "mt-1 text-base font-bold text-[#212121] sm:text-lg"
-        }
-      >
-        {value}
-      </p>
     </div>
   );
 }
