@@ -1459,23 +1459,23 @@ export function ProductosPage({
           setActiveTab(value as "lista" | "form" | "categorias")
         }
       >
-        <div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm sm:w-full">
+        <div className="pb-1">
+          <TabsList className="grid h-auto w-full grid-cols-3 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1.5 shadow-sm">
             <TabsTrigger
               value="lista"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Artículos
             </TabsTrigger>
             <TabsTrigger
               value="form"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               {form.id ? "Editar" : "Nuevo"}
             </TabsTrigger>
             <TabsTrigger
               value="categorias"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Categoría
             </TabsTrigger>
