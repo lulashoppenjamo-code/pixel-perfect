@@ -816,6 +816,8 @@ export function ProductosPage({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    // Sin espacios ni guiones: facilita escanear / pegar códigos de barras
+    const qCompact = q.replace(/[\s-]/g, "");
 
     return products.filter((p) => {
       if (selectedCategoryId && p.category_id !== selectedCategoryId) {
@@ -823,12 +825,35 @@ export function ProductosPage({
       }
 
       if (q) {
-        const match =
-          p.name.toLowerCase().includes(q) ||
-          (p.sku ?? "").toLowerCase().includes(q) ||
-          (p.barcode ?? "").toLowerCase().includes(q);
+        const name = (p.name ?? "").toLowerCase();
+        const sku = (p.sku ?? "").toLowerCase();
+        const barcode = (p.barcode ?? "").toLowerCase();
+        const skuC = sku.replace(/[\s-]/g, "");
+        const barcodeC = barcode.replace(/[\s-]/g, "");
 
-        if (!match) return false;
+        const matchProduct =
+          name.includes(q) ||
+          sku.includes(q) ||
+          barcode.includes(q) ||
+          (qCompact.length > 0 &&
+            (skuC.includes(qCompact) || barcodeC.includes(qCompact)));
+
+        const matchVariant = sharedInventory.some((row) => {
+          if (row.product_id !== p.id) return false;
+          const rSku = (row.sku ?? "").toLowerCase();
+          const rBarcode = (row.barcode ?? "").toLowerCase();
+          const rName = (row.product_name ?? "").toLowerCase();
+          return (
+            rSku.includes(q) ||
+            rBarcode.includes(q) ||
+            rName.includes(q) ||
+            (qCompact.length > 0 &&
+              (rSku.replace(/[\s-]/g, "").includes(qCompact) ||
+                rBarcode.replace(/[\s-]/g, "").includes(qCompact)))
+          );
+        });
+
+        if (!matchProduct && !matchVariant) return false;
       }
 
       if (stockFilter === "all") return true;
@@ -1420,7 +1445,7 @@ export function ProductosPage({
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
-                placeholder="Buscar artículo, SKU o código…"
+                placeholder="Buscar por nombre, SKU o código de barras…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -1605,51 +1630,53 @@ export function ProductosPage({
                           </div>
                         </div>
 
-                        {/* Chips de variantes / códigos estilo Zobaze */}
-                        <div className="mt-2 flex flex-wrap gap-1.5">
+                        {/* Chips estilo captura: separador + pastillas de variante/SKU */}
+                        <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-[#eeeeee] pt-2.5">
                           {variantRows.length > 0
-                            ? variantRows.slice(0, 6).map((row) => (
-                                <span
-                                  key={row.id}
-                                  className="inline-flex max-w-[140px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white"
-                                  title={
-                                    row.sku ||
-                                    row.barcode ||
-                                    row.product_name
-                                  }
-                                >
-                                  {row.sku ||
-                                    row.barcode ||
-                                    "Var"}
-                                </span>
-                              ))
+                            ? variantRows.slice(0, 8).map((row, index) => {
+                                const fromName =
+                                  row.product_name &&
+                                  row.product_name.includes("—")
+                                    ? row.product_name
+                                        .split("—")
+                                        .pop()
+                                        ?.trim()
+                                    : null;
+                                const label =
+                                  fromName ||
+                                  row.sku ||
+                                  row.barcode ||
+                                  "Var";
+                                return (
+                                  <span
+                                    key={row.id}
+                                    className={
+                                      index === 0
+                                        ? "inline-flex max-w-[160px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white"
+                                        : "inline-flex max-w-[160px] truncate rounded-md bg-[#f1f3f4] px-2.5 py-1 text-[11px] font-semibold text-[#5f6368]"
+                                    }
+                                    title={
+                                      [row.sku, row.barcode, row.product_name]
+                                        .filter(Boolean)
+                                        .join(" · ")
+                                    }
+                                  >
+                                    {label}
+                                  </span>
+                                );
+                              })
                             : (p.sku || p.barcode) && (
-                                <span className="inline-flex max-w-[140px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white">
+                                <span className="inline-flex max-w-[160px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white">
                                   {p.sku || p.barcode}
                                 </span>
                               )}
-                          {hasVariants &&
-                            variantRows.length > 6 && (
-                              <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
-                                +{variantRows.length - 6}
-                              </span>
-                            )}
+                          {hasVariants && variantRows.length > 8 && (
+                            <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
+                              +{variantRows.length - 8}
+                            </span>
+                          )}
                         </div>
                       </div>
-
-                      {canDelete && p.is_active && (
-                        <button
-                          type="button"
-                          className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-destructive hover:bg-red-50"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeProduct.mutate(p.id);
-                          }}
-                          aria-label={`Desactivar ${p.name}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
                     </div>
                   </div>
                 );
