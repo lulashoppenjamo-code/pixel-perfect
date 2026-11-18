@@ -246,6 +246,8 @@ export function POSPanel({
   const [mobileStep, setMobileStep] = useState<
     "shop" | "cart" | "pay" | "cash" | "mixed" | "success"
   >("shop");
+  const mobileStepRef = useRef(mobileStep);
+  mobileStepRef.current = mobileStep;
   const [lastSaleTotal, setLastSaleTotal] = useState(0);
   const [lastSaleFolio, setLastSaleFolio] = useState<string | number>("");
 
@@ -650,23 +652,114 @@ export function POSPanel({
    * =========================================================
    */
 
+  type PosCustomer = {
+    id: string;
+    name: string;
+    phone: string | null;
+    email: string | null;
+    notes: string | null;
+    barcode?: string | null;
+  };
+
   const {
     data: customers = [],
   } = useQuery({
     queryKey: ["pos-customers"],
 
     queryFn: async () => {
-      const { data, error } =
-        await supabase
-          .from("customers")
-          .select("id, name")
-          .order("name");
+      const { data, error } = await supabase
+        .from("customers")
+        .select("id, name, phone, email, notes")
+        .order("name");
 
       if (error) throw error;
 
-      return data ?? [];
+      const rows = (data ?? []) as PosCustomer[];
+
+      try {
+        const extra = await (supabase as any)
+          .from("customers")
+          .select("id, barcode")
+          .limit(5000);
+        if (!extra.error && Array.isArray(extra.data)) {
+          const map = new Map(
+            extra.data.map((r: { id: string; barcode?: string | null }) => [
+              r.id,
+              r.barcode ?? null,
+            ]),
+          );
+          for (const row of rows) {
+            row.barcode = map.get(row.id) ?? null;
+          }
+        }
+      } catch {
+        // Columna barcode opcional
+      }
+
+      return rows;
     },
   });
+
+  const [customerSearch, setCustomerSearch] = useState("");
+
+  const filteredCustomers = useMemo(() => {
+    const q = customerSearch.trim().toLowerCase();
+    const qDigits = q.replace(/\D/g, "");
+    if (!q) return customers.slice(0, 40);
+    return customers
+      .filter((c) => {
+        const name = (c.name ?? "").toLowerCase();
+        const phone = (c.phone ?? "").toLowerCase();
+        const phoneDigits = (c.phone ?? "").replace(/\D/g, "");
+        const notes = (c.notes ?? "").toLowerCase();
+        const barcode = String(c.barcode ?? "").toLowerCase();
+        const barcodeDigits = barcode.replace(/\D/g, "");
+        return (
+          name.includes(q) ||
+          phone.includes(q) ||
+          notes.includes(q) ||
+          barcode.includes(q) ||
+          (qDigits.length > 0 &&
+            (phoneDigits.includes(qDigits) ||
+              barcodeDigits.includes(qDigits) ||
+              phoneDigits === qDigits ||
+              barcodeDigits === qDigits))
+        );
+      })
+      .slice(0, 40);
+  }, [customers, customerSearch]);
+
+  const selectCustomerByCode = (raw: string) => {
+    const code = raw.trim();
+    if (!code) return false;
+    const digits = code.replace(/\D/g, "");
+    const lower = code.toLowerCase();
+
+    const match = customers.find((c) => {
+      const barcode = String(c.barcode ?? "").trim();
+      const phoneDigits = (c.phone ?? "").replace(/\D/g, "");
+      const notes = (c.notes ?? "").trim().toLowerCase();
+      return (
+        (barcode &&
+          (barcode === code ||
+            barcode.toLowerCase() === lower ||
+            barcode.replace(/\D/g, "") === digits)) ||
+        (phoneDigits && digits && phoneDigits === digits) ||
+        (notes && (notes === lower || notes.includes(lower))) ||
+        (c.name ?? "").toLowerCase() === lower
+      );
+    });
+
+    if (!match) {
+      return false;
+    }
+
+    setCustomerId(match.id);
+    setCustomerSearch(match.name);
+    toast.success(`Cliente: ${match.name}`);
+    return true;
+  };
+
 
   /*
    * =========================================================
@@ -1160,6 +1253,17 @@ export function POSPanel({
 
   useEffect(() => {
     const tryAdd = (code: string) => {
+      // En pantalla de cobro: el escaneo enlaza cliente, no producto
+      if (mobileStepRef.current === "pay") {
+        const linked = selectCustomerByCode(code);
+        if (linked) {
+          setScannerOpen(false);
+        } else {
+          toast.error("Cliente no encontrado con ese código");
+        }
+        return;
+      }
+
       const ok = resolveAndAddByCode(code);
       if (ok) {
         if (sequential) {
@@ -1167,6 +1271,11 @@ export function POSPanel({
         }
         toast.success("Producto agregado por código");
       } else {
+        // Fallback: tal vez es tarjeta de cliente
+        if (selectCustomerByCode(code)) {
+          if (sequential) setMobileStep("pay");
+          return;
+        }
         toast.error(`No se encontró el código: ${code}`);
       }
     };
@@ -1196,7 +1305,7 @@ export function POSPanel({
       window.removeEventListener(BARCODE_EVENT, onScan as EventListener);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [products, sequential, allVariants]);
+  }, [products, sequential, allVariants, customers]);
 
   const handleSearchKey = (
     event: React.KeyboardEvent<HTMLInputElement>,
@@ -3795,20 +3904,116 @@ export function POSPanel({
           </div>
 
           <div className="space-y-3 overflow-y-auto p-3 pb-8">
-            <div className="rounded-xl border border-[#e0e0e0] bg-white p-4 shadow-sm">
-              <Select value={customerId} onValueChange={setCustomerId}>
-                <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
-                  <SelectValue placeholder="Cliente (opcional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Público general</SelectItem>
-                  {customers.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
+            <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm">
+              <p className="mb-2 text-xs font-medium text-[#757575]">
+                Buscar cliente por nombre, teléfono o código
+              </p>
+              <div className="flex gap-2">
+                <div className="relative min-w-0 flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
+                  <Input
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      if (selectCustomerByCode(customerSearch)) return;
+                      if (filteredCustomers.length === 1) {
+                        const only = filteredCustomers[0]!;
+                        setCustomerId(only.id);
+                        setCustomerSearch(only.name);
+                        toast.success(`Cliente: ${only.name}`);
+                      }
+                    }}
+                    placeholder="Nombre, teléfono o escanear tarjeta…"
+                    className="h-11 rounded-xl border-[#e0e0e0] pl-9"
+                    autoComplete="off"
+                    enterKeyHint="search"
+                  />
+                </div>
+                <button
+                  type="button"
+                  title="Escanear tarjeta del cliente"
+                  onClick={() => setScannerOpen(true)}
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e0e0e0] bg-white text-[#1a73e8]"
+                >
+                  <ScanBarcode className="h-5 w-5" strokeWidth={1.75} />
+                </button>
+              </div>
+
+              {customerId !== "none" && (
+                <div className="mt-2 flex items-center justify-between rounded-lg bg-[#e8f0fe] px-3 py-2">
+                  <span className="text-sm font-semibold text-[#1a73e8]">
+                    {customers.find((c) => c.id === customerId)?.name ??
+                      "Cliente seleccionado"}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-[#e53935]"
+                    onClick={() => {
+                      setCustomerId("none");
+                      setCustomerSearch("");
+                    }}
+                  >
+                    Quitar
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-[#eeeeee]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCustomerId("none");
+                    setCustomerSearch("");
+                  }}
+                  className={
+                    "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm " +
+                    (customerId === "none"
+                      ? "bg-[#e8f0fe] font-semibold text-[#1a73e8]"
+                      : "text-[#212121] active:bg-[#f5f5f5]")
+                  }
+                >
+                  Público general
+                  {customerId === "none" ? <span>✓</span> : null}
+                </button>
+                {filteredCustomers.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setCustomerId(c.id);
+                      setCustomerSearch(c.name);
+                    }}
+                    className={
+                      "flex w-full flex-col border-t border-[#f0f0f0] px-3 py-2.5 text-left active:bg-[#f5f5f5] " +
+                      (customerId === c.id ? "bg-[#e8f0fe]" : "")
+                    }
+                  >
+                    <span
+                      className={
+                        "text-sm " +
+                        (customerId === c.id
+                          ? "font-semibold text-[#1a73e8]"
+                          : "font-medium text-[#212121]")
+                      }
+                    >
                       {c.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </span>
+                    {(c.phone || c.barcode) && (
+                      <span className="text-[11px] text-[#9e9e9e]">
+                        {[c.phone, c.barcode].filter(Boolean).join(" · ")}
+                      </span>
+                    )}
+                  </button>
+                ))}
+                {customerSearch.trim() && filteredCustomers.length === 0 && (
+                  <p className="border-t border-[#f0f0f0] px-3 py-3 text-center text-xs text-[#9e9e9e]">
+                    Sin coincidencias. Prueba nombre, teléfono o código de la
+                    tarjeta.
+                  </p>
+                )}
+              </div>
             </div>
 
             <p className="px-1 text-center text-sm font-semibold text-[#1a73e8]">
