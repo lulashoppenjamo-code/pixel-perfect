@@ -603,6 +603,26 @@ export function ProductosPage({
   const [catName, setCatName] = useState("");
   const [catParent, setCatParent] = useState("none");
   const [search, setSearch] = useState("");
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const lastScrollYRef = useRef(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const y = window.scrollY || document.documentElement.scrollTop;
+      const last = lastScrollYRef.current;
+      const dy = y - last;
+      lastScrollYRef.current = y;
+      if (y < 24) {
+        setChromeHidden(false);
+        return;
+      }
+      if (dy > 12) setChromeHidden(true);
+      else if (dy < -12) setChromeHidden(false);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
   const [stockFilter, setStockFilter] =
     useState<"all" | "low" | "out">("all");
   const [activeTab, setActiveTab] =
@@ -1364,6 +1384,15 @@ export function ProductosPage({
         />
       )}
 
+      {/* Chrome colapsable: stats + pestañas + buscador */}
+      <div
+        className={
+          "overflow-hidden transition-all duration-300 ease-out " +
+          (chromeHidden
+            ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none"
+            : "max-h-[900px] opacity-100 translate-y-0")
+        }
+      >
       <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
         <Card className="border-[#e0e0e0] shadow-sm">
           <CardContent className="p-3 sm:p-4">
@@ -1462,6 +1491,22 @@ export function ProductosPage({
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
+
+
+      </div>
+
+      {/* Tirador: jala / toca para mostrar u ocultar el menú superior */}
+      <button
+        type="button"
+        onClick={() => setChromeHidden((v) => !v)}
+        className="mb-2 flex w-full flex-col items-center gap-0.5 py-1 text-[#9e9e9e] active:bg-[#f5f5f5]"
+        aria-label={chromeHidden ? "Mostrar menú de inventario" : "Ocultar menú de inventario"}
+      >
+        <span className="h-1 w-10 rounded-full bg-[#cfd8dc]" />
+        <span className="text-[10px] font-medium tracking-wide">
+          {chromeHidden ? "↓ Desliza o toca para ver menú" : "↑ Ocultar menú"}
+        </span>
+      </button>
 
           <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
             {(
