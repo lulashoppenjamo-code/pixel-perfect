@@ -831,6 +831,25 @@ export function POSPanel({
    * =========================================================
    */
 
+  /** Quita 1 unidad del carrito para este producto (sin variante). */
+  const decreaseProduct = (product: ProductRow) => {
+    setCart((previous) => {
+      const index = previous.findIndex(
+        (line) => line.product_id === product.id && !line.variant_id,
+      );
+      if (index < 0) return previous;
+      const next = [...previous];
+      const line = { ...next[index]! };
+      if (line.quantity <= 1) {
+        next.splice(index, 1);
+        return next;
+      }
+      line.quantity -= 1;
+      next[index] = line;
+      return next;
+    });
+  };
+
   const addProduct = (
     product: ProductRow,
   ) => {
@@ -846,7 +865,7 @@ export function POSPanel({
       product.stock <= 0
     ) {
       toast.error(
-        "Sin stock disponible",
+        "Agregue stock o permita ventas sin stock para vender",
       );
       return;
     }
@@ -875,7 +894,7 @@ export function POSPanel({
             product.stock
         ) {
           toast.error(
-            "Stock insuficiente",
+            "Agregue stock o permita ventas sin stock para vender",
           );
 
           return previous;
@@ -930,7 +949,11 @@ export function POSPanel({
 
     setSearch("");
     searchRef.current?.focus();
-    setMobileStep("cart");
+    // Quedarse en la grilla para seguir sumando/quitando cantidades.
+    // El botón "Ir al mostrador" lleva al carrito.
+    if (sequential) {
+      setMobileStep("shop");
+    }
   };
 
   /*
@@ -991,7 +1014,7 @@ export function POSPanel({
             variantStock
         ) {
           toast.error(
-            "Stock insuficiente",
+            "Agregue stock o permita ventas sin stock para vender",
           );
 
           return previous;
@@ -1125,7 +1148,7 @@ export function POSPanel({
       const ok = resolveAndAddByCode(code);
       if (ok) {
         if (sequential) {
-          setMobileStep("cart");
+          setMobileStep("shop");
         }
         toast.success("Producto agregado por código");
       } else {
@@ -1405,7 +1428,7 @@ export function POSPanel({
               line.stock
           ) {
             toast.error(
-              "Stock insuficiente",
+              "Agregue stock o permita ventas sin stock para vender",
             );
 
             return line;
@@ -1460,7 +1483,7 @@ export function POSPanel({
               line.stock
           ) {
             toast.error(
-              "Stock insuficiente",
+              "Agregue stock o permita ventas sin stock para vender",
             );
 
             return line;
@@ -2679,27 +2702,39 @@ export function POSPanel({
                 const cartQty = cart
                   .filter((line) => line.product_id === product.id)
                   .reduce((sum, line) => sum + line.quantity, 0);
+                const blocked =
+                  !canSell ||
+                  (Boolean(settings?.blockWithoutStock) && outOfStock);
 
                 return (
-                  <button
+                  <div
                     key={product.id}
-                    type="button"
-                    disabled={
-                      !canSell ||
-                      (settings?.blockWithoutStock && outOfStock)
+                    className={
+                      "group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition " +
+                      (blocked ? "opacity-55" : "")
                     }
-                    onClick={() => addProduct(product)}
-                    className="group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-55"
                   >
-                    <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
+                    <button
+                      type="button"
+                      disabled={blocked}
+                      onClick={() => addProduct(product)}
+                      className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa] active:scale-[0.98] disabled:cursor-not-allowed"
+                    >
+                      {/* Badge stock disponible (como la captura) */}
+                      {!outOfStock && cartQty === 0 && (
+                        <span className="absolute left-1/2 top-1.5 z-10 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-white/90 text-[12px] font-bold text-[#212121] shadow-sm ring-1 ring-[#e0e0e0]">
+                          {product.stock > 99 ? "99+" : product.stock}
+                        </span>
+                      )}
                       {outOfStock && (
-                        <span className="absolute left-1.5 top-1.5 z-10 rounded-full bg-[#fce4ec] px-1.5 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
+                        <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-[#fce4ec] px-1.5 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
                           Agotado
                         </span>
                       )}
+                      {/* Overlay cantidad seleccionada xN */}
                       {cartQty > 0 && (
-                        <span className="absolute right-1.5 top-1.5 z-10 rounded-full bg-[#1a73e8] px-1.5 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                          +{cartQty}
+                        <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 text-[28px] font-bold tracking-tight text-white">
+                          x{cartQty}
                         </span>
                       )}
                       <div className="flex h-full w-full items-center justify-center p-2 text-3xl leading-none">
@@ -2710,17 +2745,51 @@ export function POSPanel({
                           className="h-full w-full object-contain"
                         />
                       </div>
-                    </div>
+                    </button>
 
-                    <div className="flex min-h-[3.75rem] flex-1 flex-col justify-between px-1.5 pb-1.5 pt-1">
+                    {/* Controles +/- cuando ya hay cantidad */}
+                    {cartQty > 0 && !product.has_variants && (
+                      <div className="absolute bottom-[3.6rem] left-0 right-0 z-20 flex items-center justify-center gap-2 px-1">
+                        <button
+                          type="button"
+                          aria-label="Quitar uno"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            decreaseProduct(product);
+                          }}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg font-bold text-[#e53935] shadow-md active:scale-95"
+                        >
+                          −
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Agregar uno"
+                          disabled={blocked}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            addProduct(product);
+                          }}
+                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a73e8] text-lg font-bold text-white shadow-md active:scale-95 disabled:opacity-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={blocked}
+                      onClick={() => addProduct(product)}
+                      className="flex min-h-[3.75rem] flex-1 flex-col justify-between px-1.5 pb-1.5 pt-1 disabled:cursor-not-allowed"
+                    >
                       <p className="line-clamp-2 text-center text-[11px] font-bold leading-snug text-[#212121]">
                         {product.name}
                       </p>
                       <p className="mt-0.5 text-center text-[13px] font-bold leading-none text-[#1a73e8]">
                         {money(product.price)}
                       </p>
-                    </div>
-                  </button>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -2734,7 +2803,7 @@ export function POSPanel({
               onClick={() => setMobileStep("cart")}
               className="flex h-12 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#34a853] text-[15px] font-bold tracking-wide text-white shadow-md active:scale-[0.98]"
             >
-              Ir al mostrador · {cart.reduce((s, l) => s + l.quantity, 0)} art.
+              Ir al mostrador
             </button>
           </div>
         )}
