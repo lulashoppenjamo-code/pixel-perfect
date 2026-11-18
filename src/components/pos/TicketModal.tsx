@@ -43,15 +43,7 @@ export type TicketData = {
   companyName?: string | undefined;
   companyAddress?: string | undefined;
   companyPhone?: string | undefined;
-
-  /**
-   * Logo del ticket en formato data URL.
-   *
-   * Es opcional para no romper tickets históricos
-   * ni tickets generados antes de configurar el logo.
-   */
   logoDataUrl?: string | undefined;
-
   branchName?: string | undefined;
 
   folio: number | string;
@@ -73,6 +65,7 @@ export type TicketData = {
   changeGiven?: number | null | undefined;
 
   footer?: string | undefined;
+  notes?: string | undefined;
 };
 
 const PAYMENT_LABEL: Record<string, string> = {
@@ -197,62 +190,22 @@ export function TicketModal({
 <html>
 <head>
   <title>Ticket ${ticket.folio}</title>
-
   <style>
     body {
-      font-family:
-        ui-monospace,
-        SFMono-Regular,
-        Menlo,
-        Monaco,
-        Consolas,
-        monospace;
-
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
       font-size: 12px;
       margin: 8px;
       color: #000;
       background: #fff;
     }
-
-    .center {
-      text-align: center;
-    }
-
-    .row {
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-    }
-
-    .line {
-      border-top: 1px dashed #333;
-      margin: 6px 0;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-
-    td {
-      vertical-align: top;
-      padding: 2px 0;
-    }
-
-    td.qty {
-      width: 28px;
-    }
-
-    td.price {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    h1 {
-      font-size: 14px;
-      margin: 0 0 4px;
-    }
-
+    .center { text-align: center; }
+    .row { display: flex; justify-content: space-between; gap: 8px; }
+    .line { border-top: 1px dashed #333; margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td { vertical-align: top; padding: 2px 0; }
+    td.qty { width: 28px; }
+    td.price { text-align: right; white-space: nowrap; }
+    h1 { font-size: 14px; margin: 0 0 4px; }
     .ticket-logo {
       display: block;
       max-width: 85%;
@@ -260,30 +213,14 @@ export function TicketModal({
       margin: 0 auto 8px;
       object-fit: contain;
     }
-
-    @media print {
-      body {
-        margin: 0;
-      }
-
-      .ticket-logo {
-        max-width: 85%;
-        max-height: 100px;
-      }
-    }
   </style>
 </head>
-
 <body>
   ${html}
-
   <script>
     window.onload = function () {
       window.print();
-
-      setTimeout(function () {
-        window.close();
-      }, 500);
+      setTimeout(function () { window.close(); }, 500);
     };
   </script>
 </body>
@@ -302,54 +239,25 @@ export function TicketModal({
           ? " — " + t.branchName
           : ""
       }`,
-
-      ...(t.companyAddress
-        ? [t.companyAddress]
-        : []),
-
-      ...(t.companyPhone
-        ? [`Tel: ${t.companyPhone}`]
-        : []),
-
+      ...(t.companyAddress ? [t.companyAddress] : []),
+      ...(t.companyPhone ? [`Tel: ${t.companyPhone}`] : []),
       `Folio: ${t.folio}`,
-
       t.date,
-
       "",
-
       ...t.lines.map((l) => {
         const skuPart =
           layout.showSku && l.sku
             ? ` [SKU: ${l.sku}]`
             : "";
-
-        return `${l.quantity} x ${l.name}${skuPart} — ${money(
-          l.total,
-        )}`;
+        return `${l.quantity} x ${l.name}${skuPart} — ${money(l.total)}`;
       }),
-
       "",
-
       `Subtotal: ${money(t.subtotal)}`,
-
-      ...(layout.showTaxes
-        ? [`Impuestos: ${money(t.tax)}`]
-        : []),
-
-      ...(layout.showDiscounts &&
-      t.discount > 0
-        ? [
-            `Descuento: -${money(
-              t.discount,
-            )}`,
-          ]
-        : []),
-
+      ...(layout.showTaxes ? [`Impuestos: ${money(t.tax)}`] : []),
+      ...(layout.showDiscounts && t.discount > 0 ? [`Descuento: -${money(t.discount)}`] : []),
       `TOTAL: ${money(t.total)}`,
-
-      ...(t.footer
-        ? ["", t.footer]
-        : []),
+      ...(t.notes ? ["", `Notas: ${t.notes}`] : []),
+      ...(t.footer ? ["", t.footer] : []),
     ];
 
     return lines.join("\n");
@@ -357,10 +265,7 @@ export function TicketModal({
 
   const handleShare = async () => {
     if (!ticket) return;
-
-    const text =
-      buildShareText(ticket);
-
+    const text = buildShareText(ticket);
     if (navigator.share) {
       try {
         await navigator.share({
@@ -368,34 +273,19 @@ export function TicketModal({
           text,
         });
       } catch {
-        // El usuario canceló el share.
+        // Cancelado por el usuario
       }
-
       return;
     }
-
-    const url =
-      `https://wa.me/?text=${encodeURIComponent(
-        text,
-      )}`;
-
-    window.open(
-      url,
-      "_blank",
-    );
-
-    toast.info(
-      "Abriendo WhatsApp para compartir el ticket",
-    );
+    const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank");
+    toast.info("Abriendo WhatsApp para compartir el ticket");
   };
 
   const handleWhatsApp = () => {
     if (!ticket) return;
     const text = buildShareText(ticket);
-    window.open(
-      `https://wa.me/?text=${encodeURIComponent(text)}`,
-      "_blank",
-    );
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   };
 
   const handleDownload = () => {
@@ -432,245 +322,148 @@ export function TicketModal({
     PAYMENT_LABEL[ticket.paymentMethod] ?? ticket.paymentMethod;
 
   const ticketBody = (
-        <div
-          ref={printRef}
-          className={
-            variant === "fullscreen"
-              ? "bg-white p-4 text-black"
-              : "rounded-md border bg-white p-4 text-black"
-          }
-        >
-          <div className="center space-y-1">
+    <div
+      ref={printRef}
+      className={
+        variant === "fullscreen"
+          ? "bg-white p-4 text-black"
+          : "rounded-md border bg-white p-4 text-black"
+      }
+    >
+      <div className="center space-y-1">
+        {resolvedLogo ? (
+          <img
+            src={resolvedLogo}
+            alt="Lula Shop"
+            className="ticket-logo mx-auto mb-2 max-h-28 max-w-[85%] object-contain"
+          />
+        ) : null}
 
-            {resolvedLogo ? (
-              <img
-                src={resolvedLogo}
-                alt="Lula Shop"
-                className="ticket-logo mx-auto mb-2 max-h-28 max-w-[85%] object-contain"
-              />
-            ) : null}
+        <h1 className="font-bold">
+          {ticket.companyName ?? "Lula Shop"}
+        </h1>
 
-            <h1 className="font-bold">
-              {ticket.companyName ??
-                "Lula Shop"}
-            </h1>
+        {ticket.companyAddress ? (
+          <p className="text-xs">{ticket.companyAddress}</p>
+        ) : null}
 
-            {ticket.companyAddress ? (
-              <p className="text-xs">
-                {ticket.companyAddress}
-              </p>
-            ) : null}
+        {ticket.companyPhone ? (
+          <p className="text-xs">Tel: {ticket.companyPhone}</p>
+        ) : null}
 
-            {ticket.companyPhone ? (
-              <p className="text-xs">
-                Tel: {ticket.companyPhone}
-              </p>
-            ) : null}
+        {layout.showBranch && ticket.branchName ? (
+          <p className="text-xs">{ticket.branchName}</p>
+        ) : null}
 
-            {layout.showBranch &&
-            ticket.branchName ? (
-              <p className="text-xs">
-                {ticket.branchName}
-              </p>
-            ) : null}
+        <p className="text-xs">{ticket.date}</p>
+        <p className="text-xs font-semibold">Folio: {ticket.folio}</p>
+      </div>
 
-            <p className="text-xs">
-              {ticket.date}
-            </p>
+      <div className="line" />
 
-            <p className="text-xs font-semibold">
-              Folio: {ticket.folio}
-            </p>
+      <div className="space-y-0.5 text-xs">
+        {layout.showCashier && ticket.cashierName ? (
+          <div className="row">
+            <span>Cajero:</span>
+            <span>{ticket.cashierName}</span>
           </div>
+        ) : null}
 
-          <div className="line" />
-
-          <div className="space-y-0.5 text-xs">
-
-            {layout.showCashier &&
-            ticket.cashierName ? (
-              <div className="row">
-                <span>
-                  Cajero:
-                </span>
-
-                <span>
-                  {ticket.cashierName}
-                </span>
-              </div>
-            ) : null}
-
-            {layout.showCustomer &&
-            ticket.customerName ? (
-              <div className="row">
-                <span>
-                  Cliente:
-                </span>
-
-                <span>
-                  {ticket.customerName}
-                </span>
-              </div>
-            ) : null}
-
-            <div className="row">
-              <span>
-                Pago:
-              </span>
-
-              <span>
-                {PAYMENT_LABEL[
-                  ticket.paymentMethod
-                ] ??
-                  ticket.paymentMethod}
-              </span>
-            </div>
+        {layout.showCustomer && ticket.customerName ? (
+          <div className="row">
+            <span>Cliente:</span>
+            <span>{ticket.customerName}</span>
           </div>
+        ) : null}
 
-          <div className="line" />
-
-          <table>
-            <tbody>
-              {ticket.lines.map(
-                (l, i) => (
-                  <tr key={i}>
-                    <td className="qty">
-                      {l.quantity}
-                    </td>
-
-                    <td>
-                      <div>
-                        {l.name}
-                      </div>
-
-                      {layout.showSku &&
-                      l.sku ? (
-                        <div className="text-[10px] text-gray-600">
-                          SKU: {l.sku}
-                        </div>
-                      ) : null}
-
-                      {layout.showDiscounts &&
-                      l.discount &&
-                      l.discount > 0 ? (
-                        <div className="text-[10px] text-gray-600">
-                          Desc.{" "}
-                          {money(
-                            l.discount,
-                          )}
-                        </div>
-                      ) : null}
-                    </td>
-
-                    <td className="price">
-                      {money(l.total)}
-                    </td>
-                  </tr>
-                ),
-              )}
-            </tbody>
-          </table>
-
-          <div className="line" />
-
-          <div className="space-y-0.5 text-xs">
-
-            <div className="row">
-              <span>
-                Subtotal
-              </span>
-
-              <span>
-                {money(
-                  ticket.subtotal,
-                )}
-              </span>
-            </div>
-
-            {layout.showTaxes ? (
-              <div className="row">
-                <span>
-                  Impuestos
-                </span>
-
-                <span>
-                  {money(
-                    ticket.tax,
-                  )}
-                </span>
-              </div>
-            ) : null}
-
-            {layout.showDiscounts &&
-            ticket.discount > 0 ? (
-              <div className="row">
-                <span>
-                  Descuento
-                </span>
-
-                <span>
-                  -
-                  {money(
-                    ticket.discount,
-                  )}
-                </span>
-              </div>
-            ) : null}
-
-            <div className="row text-sm font-bold">
-              <span>
-                TOTAL
-              </span>
-
-              <span>
-                {money(
-                  ticket.total,
-                )}
-              </span>
-            </div>
-
-            {layout.showCashReceived &&
-            ticket.cashReceived != null ? (
-              <div className="row">
-                <span>
-                  Recibido
-                </span>
-
-                <span>
-                  {money(
-                    ticket.cashReceived,
-                  )}
-                </span>
-              </div>
-            ) : null}
-
-            {layout.showChange &&
-            ticket.cashReceived != null ? (
-              <div className="row">
-                <span>
-                  Cambio
-                </span>
-
-                <span>
-                  {money(
-                    ticket.changeGiven ??
-                      0,
-                  )}
-                </span>
-              </div>
-            ) : null}
-          </div>
-
-          {ticket.footer ? (
-            <>
-              <div className="line" />
-
-              <p className="center text-xs">
-                {ticket.footer}
-              </p>
-            </>
-          ) : null}
+        <div className="row">
+          <span>Pago:</span>
+          <span>{payLabel}</span>
         </div>
+      </div>
+
+      <div className="line" />
+
+      <table>
+        <tbody>
+          {ticket.lines.map((l, i) => (
+            <tr key={i}>
+              <td className="qty">{l.quantity}</td>
+              <td>
+                <div>{l.name}</div>
+                {layout.showSku && l.sku ? (
+                  <div className="text-[10px] text-gray-600">SKU: {l.sku}</div>
+                ) : null}
+                {layout.showDiscounts && l.discount && l.discount > 0 ? (
+                  <div className="text-[10px] text-gray-600">
+                    Desc. {money(l.discount)}
+                  </div>
+                ) : null}
+              </td>
+              <td className="price">{money(l.total)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div className="line" />
+
+      <div className="space-y-0.5 text-xs">
+        <div className="row">
+          <span>Subtotal</span>
+          <span>{money(ticket.subtotal)}</span>
+        </div>
+
+        {layout.showTaxes ? (
+          <div className="row">
+            <span>Impuestos</span>
+            <span>{money(ticket.tax)}</span>
+          </div>
+        ) : null}
+
+        {layout.showDiscounts && ticket.discount > 0 ? (
+          <div className="row">
+            <span>Descuento</span>
+            <span>-{money(ticket.discount)}</span>
+          </div>
+        ) : null}
+
+        <div className="row text-sm font-bold">
+          <span>TOTAL</span>
+          <span>{money(ticket.total)}</span>
+        </div>
+
+        {layout.showCashReceived && ticket.cashReceived != null ? (
+          <div className="row">
+            <span>Recibido</span>
+            <span>{money(ticket.cashReceived)}</span>
+          </div>
+        ) : null}
+
+        {layout.showChange && ticket.cashReceived != null ? (
+          <div className="row">
+            <span>Cambio</span>
+            <span>{money(ticket.changeGiven ?? 0)}</span>
+          </div>
+        ) : null}
+      </div>
+
+      {ticket.notes ? (
+        <>
+          <div className="line" />
+          <p className="text-xs">
+            <strong>Notas:</strong> {ticket.notes}
+          </p>
+        </>
+      ) : null}
+
+      {ticket.footer ? (
+        <>
+          <div className="line" />
+          <p className="center text-xs">{ticket.footer}</p>
+        </>
+      ) : null}
+    </div>
   );
 
   if (variant === "fullscreen") {
@@ -678,7 +471,6 @@ export function TicketModal({
 
     return (
       <div className="fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]">
-        {/* Barra superior acciones */}
         <div className="flex shrink-0 items-center gap-1 border-b border-[#e0e0e0] bg-white px-2 py-2">
           <button
             type="button"
@@ -702,10 +494,7 @@ export function TicketModal({
             onClick={() => {
               if (!ticket) return;
               const text = buildShareText(ticket);
-              window.open(
-                `sms:?body=${encodeURIComponent(text)}`,
-                "_self",
-              );
+              window.open(`sms:?body=${encodeURIComponent(text)}`, "_self");
             }}
             className="flex h-10 w-10 items-center justify-center rounded-full text-[#1a73e8]"
             title="SMS"
@@ -746,7 +535,6 @@ export function TicketModal({
           </button>
         </div>
 
-        {/* DEVOLVER | BORRAR | EDITAR */}
         <div className="flex shrink-0 justify-end gap-2 bg-[#f5f5f5] px-3 py-2">
           <button
             type="button"
@@ -776,10 +564,8 @@ export function TicketModal({
           </button>
         </div>
 
-        {/* Contenido ticket estilo Zobaze */}
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-6">
           <div className="mx-auto max-w-md overflow-hidden rounded-lg border border-[#e0e0e0] bg-white shadow-sm">
-            {/* Encabezado visual */}
             <div className="space-y-2 px-4 pb-3 pt-5 text-center">
               {resolvedLogo ? (
                 <img
@@ -806,14 +592,10 @@ export function TicketModal({
                 </p>
               ) : null}
               {ticket.companyPhone ? (
-                <p className="text-xs text-[#616161]">
-                  {ticket.companyPhone}
-                </p>
+                <p className="text-xs text-[#616161]">{ticket.companyPhone}</p>
               ) : null}
               {layout.showBranch && ticket.branchName ? (
-                <p className="text-xs text-[#9e9e9e]">
-                  Por : {ticket.branchName}
-                </p>
+                <p className="text-xs text-[#9e9e9e]">Por : {ticket.branchName}</p>
               ) : null}
             </div>
 
@@ -824,7 +606,6 @@ export function TicketModal({
               <p>Fecha : {ticket.date}</p>
             </div>
 
-            {/* Resumen pago */}
             <div className="overflow-x-auto px-2">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -848,7 +629,6 @@ export function TicketModal({
               </table>
             </div>
 
-            {/* Líneas */}
             <div className="overflow-x-auto px-2 pb-4 pt-2">
               <table className="w-full text-left text-xs">
                 <thead>
@@ -878,7 +658,6 @@ export function TicketModal({
               </table>
             </div>
 
-            {/* Copia oculta para impresión clásica */}
             <div className="hidden">{ticketBody}</div>
           </div>
         </div>
@@ -886,7 +665,6 @@ export function TicketModal({
     );
   }
 
-  /* Dialog POS post-venta / recibo — más ancho y acciones tipo Zobaze */
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-md flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
@@ -903,7 +681,6 @@ export function TicketModal({
           {ticketBody}
         </div>
 
-        {/* Acciones rápidas estilo Zobaze */}
         <div className="flex shrink-0 items-center justify-center gap-2 border-t border-[#e0e0e0] bg-[#f8f9fa] px-3 py-2">
           <button
             type="button"
