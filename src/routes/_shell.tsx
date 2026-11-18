@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import {
   createFileRoute,
@@ -9,7 +10,6 @@ import {
 
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
-import { autoConnectBluetoothPrinter } from "@/lib/bluetoothPrinter";
 import {
   startGlobalBarcodeListener,
   setPendingBarcode,
@@ -34,7 +34,6 @@ import { BluetoothPrinterGlobalButton } from "@/components/BluetoothPrinterGloba
 import {
   ShoppingBag,
   Receipt,
-  Package,
   Boxes,
   Users,
   Truck,
@@ -52,9 +51,27 @@ import {
   BarChart3,
   Crown,
   ChevronLeft,
-  LayoutGrid,
   Store,
 } from "lucide-react";
+
+/**
+ * Rutas permitidas de la aplicación.
+ * Mantenerlas tipadas evita pasar rutas desconocidas
+ * a TanStack Router.
+ */
+type AppPath =
+  | "/caja"
+  | "/ventas"
+  | "/inventario"
+  | "/reposicion"
+  | "/compras"
+  | "/clientes"
+  | "/devoluciones"
+  | "/gastos"
+  | "/pedidos"
+  | "/reportes"
+  | "/ceo"
+  | "/ajustes";
 
 export const Route = createFileRoute("/_shell")({
   component: ShellLayout,
@@ -115,49 +132,31 @@ function ShellLayout() {
     branches,
   } = useBranch();
 
-  // Conectar impresora Bluetooth en segundo plano al abrir la app
-  useEffect(() => {
-    let cancelled = false;
-
-    const tryConnect = () => {
-      if (cancelled) return;
-      void autoConnectBluetoothPrinter();
-    };
-
-    tryConnect();
-
-    const onVisible = () => {
-      if (document.visibilityState === "visible") {
-        tryConnect();
-      }
-    };
-
-    document.addEventListener("visibilitychange", onVisible);
-    const t = window.setTimeout(tryConnect, 3000);
-
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onVisible);
-      window.clearTimeout(t);
-    };
-  }, []);
-
   const navigate = useNavigate();
   const location = useLocation();
   const router = useRouter();
 
+  /**
+   * Lector global de códigos de barras.
+   * Se conserva el comportamiento original.
+   */
   useEffect(() => {
     const stop = startGlobalBarcodeListener((code) => {
       setPendingBarcode(code);
       dispatchBarcode(code);
+
       if (!location.pathname.startsWith("/caja")) {
         navigate({ to: "/caja" });
       }
     });
+
     return stop;
   }, [navigate, location.pathname]);
 
-  const preloadRoute = (path: string) => {
+  /**
+   * Precarga de rutas.
+   */
+  const preloadRoute = (path: AppPath) => {
     void router
       .preloadRoute({
         to: path,
@@ -167,7 +166,7 @@ function ShellLayout() {
 
   const allNavItems: {
     label: string;
-    path: string;
+    path: AppPath;
     icon: typeof ShoppingBag;
     key: NavKey;
   }[] = [
@@ -258,25 +257,25 @@ function ShellLayout() {
   const bottomNavItems = [
     {
       label: "Informes",
-      path: "/reportes",
+      path: "/reportes" as AppPath,
       icon: BarChart3,
       key: "reportes" as NavKey,
     },
     {
       label: "Hoy",
-      path: "/ventas",
+      path: "/ventas" as AppPath,
       icon: Receipt,
       key: "ventas" as NavKey,
     },
     {
       label: "Caja",
-      path: "/caja",
+      path: "/caja" as AppPath,
       icon: Store,
       key: "caja" as NavKey,
     },
     {
       label: "Inventario",
-      path: "/inventario",
+      path: "/inventario" as AppPath,
       icon: Boxes,
       key: "inventario" as NavKey,
     },
@@ -286,12 +285,15 @@ function ShellLayout() {
 
   const moreItems = navItems.filter(
     (item) =>
-      !["reportes", "ventas", "caja", "inventario"].includes(
-        item.key,
-      ),
+      ![
+        "reportes",
+        "ventas",
+        "caja",
+        "inventario",
+      ].includes(item.key),
   );
 
-  const goTo = (path: string) => {
+  const goTo = (path: AppPath) => {
     setMoreOpen(false);
     setSidebarOpen(false);
     navigate({ to: path });
@@ -369,6 +371,7 @@ function ShellLayout() {
                     Punto de Venta
                   </p>
                 </div>
+
                 <div className="shrink-0">
                   <InventoryAlerts
                     compact
@@ -436,6 +439,7 @@ function ShellLayout() {
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                 Sucursal Activa
               </label>
+
               <select
                 value={branchId ?? ""}
                 onChange={(event) =>
@@ -536,7 +540,7 @@ function ShellLayout() {
 
       {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* BARRA SUPERIOR (Incluye el Botón Global Bluetooth) */}
+        {/* BARRA SUPERIOR */}
         <header
           className="pixel-topbar zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden"
           style={{
@@ -577,6 +581,7 @@ function ShellLayout() {
 
           <div className="flex shrink-0 items-center gap-1">
             <BluetoothPrinterGlobalButton />
+
             <InventoryAlerts
               compact
               onOpenInventory={openInventory}
@@ -626,6 +631,7 @@ function ShellLayout() {
                 }`}
                 strokeWidth={isActive ? 2.25 : 1.75}
               />
+
               <span className="max-w-[72px] truncate leading-tight">
                 {item.label}
               </span>
@@ -639,7 +645,10 @@ function ShellLayout() {
             onClick={() => setMoreOpen(true)}
             className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
           >
-            <MoreHorizontal className="h-6 w-6" strokeWidth={1.75} />
+            <MoreHorizontal
+              className="h-6 w-6"
+              strokeWidth={1.75}
+            />
             <span className="leading-tight">Más</span>
           </button>
         )}
@@ -679,6 +688,7 @@ function ShellLayout() {
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Sucursal Activa
                 </label>
+
                 <select
                   value={branchId ?? ""}
                   onChange={(event) =>
@@ -723,6 +733,7 @@ function ShellLayout() {
                     }`}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
+
                     <span className="min-w-0 truncate">
                       {item.label}
                     </span>
@@ -735,9 +746,11 @@ function ShellLayout() {
               <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
+
               <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
+
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
@@ -765,6 +778,7 @@ function ShellLayout() {
             <h2 className="mb-4 text-lg font-bold text-[#212121]">
               Más opciones
             </h2>
+
             {/* Opciones del menú Más */}
           </div>
         </SheetContent>
