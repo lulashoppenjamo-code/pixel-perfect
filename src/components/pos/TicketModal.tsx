@@ -100,6 +100,9 @@ type Props = {
   onOpenChange: (open: boolean) => void;
   ticket: TicketData | null;
 
+  /** Impresión personalizada, como la impresora Bluetooth. */
+  onPrint?: ((ticket: TicketData) => Promise<void> | void) | undefined;
+
   /**
    * Opcional.
    * Si no se pasa, usa el layout cacheado de settings.
@@ -132,6 +135,7 @@ export function TicketModal({
   open,
   onOpenChange,
   ticket,
+  onPrint,
   layout: layoutProp,
   variant = "dialog",
   onReturn,
@@ -152,8 +156,25 @@ export function TicketModal({
     getCachedTicketLogo() ||
     "";
 
-  const handlePrint = () => {
-    if (!printRef.current || !ticket) return;
+  const handlePrint = async () => {
+    if (!ticket) return;
+
+    // Usar impresión Bluetooth cuando la pantalla la proporcione.
+    if (onPrint) {
+      try {
+        await onPrint(ticket);
+        toast.success("Ticket enviado a la impresora.");
+      } catch (error) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "No se pudo imprimir el ticket.",
+        );
+      }
+      return;
+    }
+
+    if (!printRef.current) return;
 
     const html =
       printRef.current.innerHTML;
