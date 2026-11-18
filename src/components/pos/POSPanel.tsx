@@ -163,6 +163,8 @@ export function POSPanel({
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const scanRafRef = useRef<number | null>(null);
+  const longPressTimerRef = useRef<number | null>(null);
+  const longPressFiredRef = useRef(false);
 
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
@@ -215,7 +217,22 @@ export function POSPanel({
   const [editPrice, setEditPrice] =
     useState("");
 
+  const [editQty, setEditQty] =
+    useState("1");
+
   const [editDiscount, setEditDiscount] =
+    useState("");
+
+  const [editOfferOn, setEditOfferOn] =
+    useState(false);
+
+  const [editOfferMode, setEditOfferMode] =
+    useState<"discount" | "free">("discount");
+
+  const [editPct, setEditPct] =
+    useState("");
+
+  const [editAmount, setEditAmount] =
     useState("");
 
   const [ticket, setTicket] =
@@ -948,7 +965,6 @@ export function POSPanel({
     });
 
     setSearch("");
-    searchRef.current?.focus();
     // Quedarse en la grilla para seguir sumando/quitando cantidades.
     // El botón "Ir al mostrador" lleva al carrito.
     if (sequential) {
@@ -1075,7 +1091,6 @@ export function POSPanel({
     );
 
     setSearch("");
-    searchRef.current?.focus();
   };
 
   /*
@@ -1524,21 +1539,39 @@ export function POSPanel({
   const openEditLine = (
     line: CartLine,
   ) => {
-    setEditLineKey(
-      line.key,
+    setEditLineKey(line.key);
+    setEditPrice(String(line.unit_price));
+    setEditQty(String(line.quantity));
+    setEditDiscount(String(line.discount));
+    const hasDisc = Number(line.discount) > 0;
+    setEditOfferOn(hasDisc);
+    setEditOfferMode(
+      hasDisc &&
+        Number(line.discount) >=
+          Number(line.unit_price) * Number(line.quantity) - 0.001
+        ? "free"
+        : "discount",
     );
-
-    setEditPrice(
-      String(
-        line.unit_price,
-      ),
-    );
-
-    setEditDiscount(
-      String(
-        line.discount,
-      ),
-    );
+    // Recuperar % si el descuento parece porcentaje redondo
+    const lineTotal = Number(line.unit_price) * Number(line.quantity);
+    if (hasDisc && lineTotal > 0) {
+      const pct = (Number(line.discount) / lineTotal) * 100;
+      if (Math.abs(pct - Math.round(pct)) < 0.05) {
+        setEditPct(String(Math.round(pct)));
+        setEditAmount("");
+      } else {
+        setEditPct("");
+        setEditAmount(
+          String(
+            Math.round((Number(line.discount) / Number(line.quantity)) * 100) /
+              100,
+          ),
+        );
+      }
+    } else {
+      setEditPct("");
+      setEditAmount("");
+    }
   };
 
   const applyEditLine = () => {
@@ -1546,75 +1579,67 @@ export function POSPanel({
       return;
     }
 
-    const price =
-      Number(editPrice);
+    const price = Number(editPrice);
+    let quantity = Number(editQty);
 
-    const discount =
-      Number(
-        editDiscount,
-      ) || 0;
-
-    if (
-      Number.isNaN(price) ||
-      price < 0
-    ) {
-      toast.error(
-        "Precio inválido",
-      );
-
+    if (Number.isNaN(price) || price < 0) {
+      toast.error("Precio inválido");
       return;
     }
 
-    if (
-      discount < 0
-    ) {
-      toast.error(
-        "Descuento inválido",
-      );
-
+    if (Number.isNaN(quantity) || quantity <= 0) {
+      toast.error("Cantidad inválida");
       return;
     }
+
+    quantity = Math.round(quantity * 1000) / 1000;
 
     setCart((previous) =>
-      previous.map(
-        (line) => {
-          if (
-            line.key !==
-            editLineKey
-          ) {
-            return line;
+      previous.map((line) => {
+        if (line.key !== editLineKey) {
+          return line;
+        }
+
+        if (
+          settings?.blockWithoutStock &&
+          quantity > line.stock
+        ) {
+          toast.error(
+            "Agregue stock o permita ventas sin stock para vender",
+          );
+          return line;
+        }
+
+        const nextPrice = isManager ? price : line.unit_price;
+        if (!isManager && price !== line.unit_price) {
+          toast.error("Sin permiso para cambiar precio");
+        }
+
+        let discount = 0;
+        if (editOfferOn) {
+          if (editOfferMode === "free") {
+            discount = nextPrice * quantity;
+          } else {
+            const pct = Number(editPct) || 0;
+            const amount = Number(editAmount) || 0;
+            const fromPct = nextPrice * quantity * (pct / 100);
+            const fromAmount = amount * quantity;
+            discount = Math.max(fromPct, fromAmount);
           }
+        }
 
-          const nextPrice =
-            isManager
-              ? price
-              : line.unit_price;
+        discount = Math.min(
+          Math.max(0, discount),
+          nextPrice * quantity,
+        );
 
-          if (
-            !isManager &&
-            price !==
-              line.unit_price
-          ) {
-            toast.error(
-              "Sin permiso para cambiar precio",
-            );
-          }
-
-          return {
-            ...line,
-
-            unit_price:
-              nextPrice,
-
-            discount:
-              Math.min(
-                discount,
-                nextPrice *
-                  line.quantity,
-              ),
-          };
-        },
-      ),
+        return {
+          ...line,
+          unit_price: nextPrice,
+          quantity,
+          discount,
+        };
+      }),
     );
 
     setEditLineKey(null);
@@ -2228,8 +2253,6 @@ export function POSPanel({
         toast.success(
           `Venta #${sale.folio} registrada`,
         );
-
-        searchRef.current?.focus();
       },
 
     onError:
@@ -2612,6 +2635,8 @@ export function POSPanel({
                 placeholder="Quiero vender..."
                 className="h-10 rounded-lg border-0 bg-white pl-10 text-[15px] text-[#212121] shadow-none placeholder:text-[#9e9e9e] focus-visible:ring-0"
                 autoComplete="off"
+                enterKeyHint="search"
+                inputMode="search"
               />
             </div>
             <button
@@ -2706,32 +2731,63 @@ export function POSPanel({
                   !canSell ||
                   (Boolean(settings?.blockWithoutStock) && outOfStock);
 
+                const clearLongPress = () => {
+                  if (longPressTimerRef.current != null) {
+                    window.clearTimeout(longPressTimerRef.current);
+                    longPressTimerRef.current = null;
+                  }
+                };
+
                 return (
-                  <div
+                  <button
                     key={product.id}
+                    type="button"
+                    disabled={blocked && cartQty === 0}
+                    onPointerDown={(e) => {
+                      if (blocked && cartQty === 0) return;
+                      if (e.button != null && e.button !== 0) return;
+                      longPressFiredRef.current = false;
+                      clearLongPress();
+                      longPressTimerRef.current = window.setTimeout(() => {
+                        longPressFiredRef.current = true;
+                        if (cartQty > 0 && !product.has_variants) {
+                          decreaseProduct(product);
+                        }
+                      }, 420);
+                    }}
+                    onPointerUp={() => {
+                      clearLongPress();
+                    }}
+                    onPointerLeave={() => {
+                      clearLongPress();
+                    }}
+                    onPointerCancel={() => {
+                      clearLongPress();
+                    }}
+                    onClick={() => {
+                      if (longPressFiredRef.current) {
+                        longPressFiredRef.current = false;
+                        return;
+                      }
+                      if (blocked && cartQty === 0) {
+                        toast.error(
+                          "Agregue stock o permita ventas sin stock para vender",
+                        );
+                        return;
+                      }
+                      addProduct(product);
+                    }}
                     className={
-                      "group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition " +
-                      (blocked ? "opacity-55" : "")
+                      "group relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-[#eeeeee] bg-white text-left shadow-sm transition active:scale-[0.98] " +
+                      (blocked && cartQty === 0 ? "opacity-55" : "")
                     }
                   >
-                    <button
-                      type="button"
-                      disabled={blocked}
-                      onClick={() => addProduct(product)}
-                      className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa] active:scale-[0.98] disabled:cursor-not-allowed"
-                    >
-                      {/* Badge stock disponible (como la captura) */}
-                      {!outOfStock && cartQty === 0 && (
-                        <span className="absolute left-1/2 top-1.5 z-10 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-full bg-white/90 text-[12px] font-bold text-[#212121] shadow-sm ring-1 ring-[#e0e0e0]">
-                          {product.stock > 99 ? "99+" : product.stock}
-                        </span>
-                      )}
+                    <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden bg-[#fafafa]">
                       {outOfStock && (
                         <span className="absolute left-1.5 top-1.5 z-10 rounded-md bg-[#fce4ec] px-1.5 py-0.5 text-[10px] font-bold text-[#c2185b] shadow-sm">
                           Agotado
                         </span>
                       )}
-                      {/* Overlay cantidad seleccionada xN */}
                       {cartQty > 0 && (
                         <span className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 text-[28px] font-bold tracking-tight text-white">
                           x{cartQty}
@@ -2745,51 +2801,17 @@ export function POSPanel({
                           className="h-full w-full object-contain"
                         />
                       </div>
-                    </button>
+                    </div>
 
-                    {/* Controles +/- cuando ya hay cantidad */}
-                    {cartQty > 0 && !product.has_variants && (
-                      <div className="absolute bottom-[3.6rem] left-0 right-0 z-20 flex items-center justify-center gap-2 px-1">
-                        <button
-                          type="button"
-                          aria-label="Quitar uno"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            decreaseProduct(product);
-                          }}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-white text-lg font-bold text-[#e53935] shadow-md active:scale-95"
-                        >
-                          −
-                        </button>
-                        <button
-                          type="button"
-                          aria-label="Agregar uno"
-                          disabled={blocked}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            addProduct(product);
-                          }}
-                          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#1a73e8] text-lg font-bold text-white shadow-md active:scale-95 disabled:opacity-50"
-                        >
-                          +
-                        </button>
-                      </div>
-                    )}
-
-                    <button
-                      type="button"
-                      disabled={blocked}
-                      onClick={() => addProduct(product)}
-                      className="flex min-h-[3.75rem] flex-1 flex-col justify-between px-1.5 pb-1.5 pt-1 disabled:cursor-not-allowed"
-                    >
+                    <div className="flex min-h-[3.75rem] flex-1 flex-col justify-between px-1.5 pb-1.5 pt-1">
                       <p className="line-clamp-2 text-center text-[11px] font-bold leading-snug text-[#212121]">
                         {product.name}
                       </p>
                       <p className="mt-0.5 text-center text-[13px] font-bold leading-none text-[#1a73e8]">
                         {money(product.price)}
                       </p>
-                    </button>
-                  </div>
+                    </div>
+                  </button>
                 );
               })}
             </div>
@@ -2882,39 +2904,59 @@ export function POSPanel({
             </div>
           ) : sequential ? (
             <div className="space-y-2">
-              {cart.map((line) => (
-                <div
-                  key={line.key}
-                  className="flex items-center gap-2 rounded-lg border border-[#e0e0e0] bg-white px-3 py-2.5"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-[#212121]">
-                      {line.name}
-                    </p>
-                    <p className="text-sm font-medium text-[#34a853]">
-                      {line.quantity} x {line.unit_price % 1 === 0 ? line.unit_price : line.unit_price.toFixed(2)}
-                      {line.discount > 0 && (
-                        <span className="ml-1 text-[#e5484d]">
-                          −{money(line.discount)}
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#1a73e8]"
-                    onClick={() => openEditLine(line)}
-                    aria-label="Editar"
+              {cart.map((line) => {
+                const lineTotal =
+                  line.unit_price * line.quantity - line.discount;
+                return (
+                  <div
+                    key={line.key}
+                    className="flex items-center gap-2 rounded-lg border border-[#e0e0e0] bg-white px-3 py-2.5"
                   >
-                    <Pencil className="h-4 w-4" />
-                  </button>
-                  <p className="w-12 shrink-0 text-right text-sm font-bold text-[#212121]">
-                    {(line.unit_price * line.quantity - line.discount) % 1 === 0
-                      ? Math.round(line.unit_price * line.quantity - line.discount)
-                      : (line.unit_price * line.quantity - line.discount).toFixed(2)}
-                  </p>
-                </div>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-[#212121]">
+                        {line.name}
+                      </p>
+                      <p className="text-sm font-medium text-[#34a853]">
+                        {line.quantity} x{" "}
+                        {line.unit_price % 1 === 0
+                          ? line.unit_price
+                          : line.unit_price.toFixed(2)}
+                      </p>
+                      {line.discount > 0 && (
+                        <p className="text-xs font-medium text-[#e53935]">
+                          -
+                          {line.discount % 1 === 0
+                            ? Math.round(line.discount)
+                            : line.discount.toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[#1a73e8]"
+                      onClick={() => openEditLine(line)}
+                      aria-label="Editar"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <div className="w-14 shrink-0 text-right">
+                      <p className="text-sm font-bold text-[#212121]">
+                        {lineTotal % 1 === 0
+                          ? Math.round(lineTotal)
+                          : lineTotal.toFixed(2)}
+                      </p>
+                      {line.discount > 0 && (
+                        <p className="text-xs font-medium text-[#e53935]">
+                          -
+                          {line.discount % 1 === 0
+                            ? Math.round(line.discount)
+                            : line.discount.toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="space-y-2">
@@ -3466,56 +3508,196 @@ export function POSPanel({
           }
         }}
       >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Editar línea</DialogTitle>
-          </DialogHeader>
+        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-t-2xl border-0 p-0 sm:rounded-2xl">
+          {(() => {
+            const line = cart.find((l) => l.key === editLineKey);
+            if (!line) return null;
+            return (
+              <>
+                <div className="flex items-start gap-2 border-b border-[#eeeeee] px-4 pb-3 pt-4">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="text-lg font-bold leading-tight text-[#212121]">
+                      Editar {line.name}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-[#e53935]"
+                    aria-label="Eliminar"
+                    onClick={() => {
+                      removeLine(line.key);
+                      setEditLineKey(null);
+                    }}
+                  >
+                    🗑
+                  </button>
+                  <button
+                    type="button"
+                    className="flex h-9 w-9 items-center justify-center rounded-full text-[#757575]"
+                    aria-label="Cerrar"
+                    onClick={() => setEditLineKey(null)}
+                  >
+                    ✕
+                  </button>
+                </div>
 
-          <div className="space-y-3 py-2">
-            <div>
-              <label className="text-sm text-muted-foreground">
-                Precio unitario {!isManager && "(solo lectura)"}
-              </label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={editPrice}
-                onChange={(event) => setEditPrice(event.target.value)}
-                disabled={!isManager}
-                className="mt-1"
-              />
-              {!isManager && (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Solo managers pueden modificar el precio.
-                </p>
-              )}
-            </div>
+                <div className="space-y-4 px-4 py-4">
+                  <div>
+                    <label className="text-xs text-[#9e9e9e]">
+                      Precio de venta
+                    </label>
+                    <div className="mt-1 flex items-center rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] px-3">
+                      <span className="text-[#757575]">$</span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={editPrice}
+                        onChange={(e) => setEditPrice(e.target.value)}
+                        disabled={!isManager}
+                        className="border-0 bg-transparent text-base font-semibold shadow-none focus-visible:ring-0"
+                      />
+                    </div>
+                  </div>
 
-            <div>
-              <label className="text-sm text-muted-foreground">
-                Descuento de línea $
-              </label>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={editDiscount}
-                onChange={(event) => setEditDiscount(event.target.value)}
-                className="mt-1"
-              />
-            </div>
-          </div>
+                  <div>
+                    <label className="text-xs text-[#9e9e9e]">Cantidad</label>
+                    <div className="mt-1 flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e53935] text-2xl font-bold text-white"
+                        onClick={() => {
+                          const q = Math.max(1, (Number(editQty) || 1) - 1);
+                          setEditQty(String(q));
+                        }}
+                      >
+                        −
+                      </button>
+                      <Input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={editQty}
+                        onChange={(e) => setEditQty(e.target.value)}
+                        className="h-12 flex-1 rounded-xl border-[#e0e0e0] text-center text-lg font-semibold"
+                      />
+                      <button
+                        type="button"
+                        className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34a853] text-2xl font-bold text-white"
+                        onClick={() => {
+                          const q = (Number(editQty) || 0) + 1;
+                          setEditQty(String(q));
+                        }}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setEditLineKey(null)}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={applyEditLine}>Aplicar</Button>
-          </DialogFooter>
+                  <div className="rounded-xl border border-[#eeeeee] bg-white p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-semibold text-[#212121]">
+                        Aplicar oferta
+                      </span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={editOfferOn}
+                        onClick={() => setEditOfferOn((v) => !v)}
+                        className={
+                          "relative h-7 w-12 rounded-full transition " +
+                          (editOfferOn ? "bg-[#1a73e8]" : "bg-[#cfd8dc]")
+                        }
+                      >
+                        <span
+                          className={
+                            "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition " +
+                            (editOfferOn ? "left-5" : "left-0.5")
+                          }
+                        />
+                      </button>
+                    </div>
+
+                    {editOfferOn && (
+                      <div className="mt-3 space-y-3">
+                        <div className="flex gap-4">
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="radio"
+                              checked={editOfferMode === "discount"}
+                              onChange={() => setEditOfferMode("discount")}
+                            />
+                            Dar descuento
+                          </label>
+                          <label className="flex items-center gap-2 text-sm">
+                            <input
+                              type="radio"
+                              checked={editOfferMode === "free"}
+                              onChange={() => setEditOfferMode("free")}
+                            />
+                            Dar como gratis
+                          </label>
+                        </div>
+
+                        {editOfferMode === "discount" && (
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <div className="flex items-center rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] px-2">
+                                <span className="text-sm text-[#757575]">%</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  max="100"
+                                  value={editPct}
+                                  onChange={(e) => {
+                                    setEditPct(e.target.value);
+                                    setEditAmount("");
+                                  }}
+                                  className="border-0 bg-transparent shadow-none focus-visible:ring-0"
+                                />
+                              </div>
+                              <p className="mt-1 text-[11px] text-[#9e9e9e]">
+                                Por porcentaje
+                              </p>
+                            </div>
+                            <div>
+                              <div className="flex items-center rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] px-2">
+                                <span className="text-sm text-[#757575]">$</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  value={editAmount}
+                                  onChange={(e) => {
+                                    setEditAmount(e.target.value);
+                                    setEditPct("");
+                                  }}
+                                  className="border-0 bg-transparent shadow-none focus-visible:ring-0"
+                                />
+                              </div>
+                              <p className="mt-1 text-[11px] text-[#9e9e9e]">
+                                Por precio (por artículo)
+                              </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="border-t border-[#eeeeee] p-4">
+                  <button
+                    type="button"
+                    onClick={applyEditLine}
+                    className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-md active:scale-[0.98]"
+                  >
+                    Actualizar artículo
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
