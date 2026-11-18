@@ -487,7 +487,7 @@ function VentasPage() {
                   "sale_items",
                 )
                 .select(
-                  "name_snapshot, quantity, unit_price, discount, total, sku",
+                  "name_snapshot, quantity, unit_price, discount, total, product_id",
                 )
                 .eq(
                   "sale_id",
@@ -549,6 +549,31 @@ function VentasPage() {
           if (customerResult.error) throw customerResult.error;
           if (settingsResult.error) throw settingsResult.error;
 
+          const rawItems = itemsResult.data ?? [];
+          const productIds = Array.from(
+            new Set(
+              rawItems
+                .map((i) => i.product_id)
+                .filter((id): id is string => Boolean(id))
+            )
+          );
+
+          let productSkuMap = new Map<string, string>();
+          if (productIds.length > 0) {
+            const { data: productsData } = await supabase
+              .from("products")
+              .select("id, sku")
+              .in("id", productIds);
+
+            if (productsData) {
+              for (const p of productsData) {
+                if (p.sku) {
+                  productSkuMap.set(p.id, p.sku);
+                }
+              }
+            }
+          }
+
           const settings =
             (
               settingsResult.data ??
@@ -608,9 +633,8 @@ function VentasPage() {
 
           return {
             sale,
-            items:
-              itemsResult.data ??
-              [],
+            items: rawItems,
+            productSkuMap,
             ticketLayout,
             customerName:
               customerResult
@@ -629,6 +653,7 @@ function VentasPage() {
       onSuccess: ({
         sale,
         items,
+        productSkuMap,
         customerName,
         companyName,
         companyAddress,
@@ -677,7 +702,7 @@ function VentasPage() {
                   Number(
                     line.total,
                   ),
-                sku: line.sku ?? null,
+                sku: line.product_id ? productSkuMap.get(line.product_id) ?? null : null,
               }),
             ),
           subtotal:
