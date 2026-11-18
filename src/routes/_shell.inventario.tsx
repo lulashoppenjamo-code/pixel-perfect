@@ -821,15 +821,15 @@ function InventarioPage() {
             "overflow-hidden transition-all duration-300 ease-out " +
             (topChromeHidden
               ? "max-h-0 opacity-0 pointer-events-none"
-              : "max-h-[120px] opacity-100")
+              : "max-h-[220px] opacity-100")
           }
         >
-<div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
+<div className="px-0.5 pb-1">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1.5 shadow-sm sm:grid-cols-3 lg:grid-cols-4 xl:flex xl:flex-wrap">
             {canViewProducts && (
               <TabsTrigger
                 value="productos"
-                className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+                className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
               >
                 <Package className="mr-1 h-3.5 w-3.5" />
                 Productos
@@ -837,28 +837,28 @@ function InventarioPage() {
             )}
             <TabsTrigger
               value="existencias"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Stock actual
             </TabsTrigger>
 
             <TabsTrigger
               value="ajuste"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Ajuste
             </TabsTrigger>
 
             <TabsTrigger
               value="limites"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Límites
             </TabsTrigger>
 
             <TabsTrigger
               value="conteo"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <ClipboardList className="mr-1 h-3.5 w-3.5" />
               Inventario físico
@@ -866,7 +866,7 @@ function InventarioPage() {
 
             <TabsTrigger
               value="historial"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <History className="mr-1 h-3.5 w-3.5" />
               Historial físico
@@ -874,14 +874,14 @@ function InventarioPage() {
 
             <TabsTrigger
               value="movimientos"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               Movimientos
             </TabsTrigger>
 
             <TabsTrigger
               value="reposicion"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <ClipboardList className="mr-1 h-3.5 w-3.5" />
               Reposición
@@ -889,7 +889,7 @@ function InventarioPage() {
 
             <TabsTrigger
               value="importar"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              className="min-h-10 w-full touch-manipulation justify-center rounded-lg px-2 text-[12px] data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
               <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
               Importar / Exportar
