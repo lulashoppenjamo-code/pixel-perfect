@@ -1056,15 +1056,15 @@ function ClientesPage() {
         </Card>
       )}
 
-      <div className="mb-3 flex gap-2">
+      <div className="mb-3 grid grid-cols-2 gap-2 rounded-2xl border border-[#e0e0e0] bg-white p-1.5 shadow-sm">
         <button
           type="button"
           onClick={() => setSection("clientes")}
           className={
-            "rounded-full px-4 py-2 text-sm font-semibold " +
+            "rounded-xl px-3 py-2.5 text-center text-sm font-semibold transition " +
             (section === "clientes"
-              ? "bg-[#1a73e8] text-white"
-              : "bg-[#eeeeee] text-[#616161]")
+              ? "bg-[#1a73e8] text-white shadow-sm"
+              : "bg-transparent text-[#616161]")
           }
         >
           Clientes
@@ -1073,13 +1073,13 @@ function ClientesPage() {
           type="button"
           onClick={() => setSection("escuelas")}
           className={
-            "rounded-full px-4 py-2 text-sm font-semibold " +
+            "rounded-xl px-3 py-2.5 text-center text-sm font-semibold transition " +
             (section === "escuelas"
-              ? "bg-[#1a73e8] text-white"
-              : "bg-[#eeeeee] text-[#616161]")
+              ? "bg-[#1a73e8] text-white shadow-sm"
+              : "bg-transparent text-[#616161]")
           }
         >
-          Escuelas / convenios
+          Escuelas
         </button>
       </div>
 
@@ -1448,72 +1448,89 @@ function ClientesPage() {
           </CardHeader>
 
           <CardContent className="px-3 sm:px-6">
-            <div className="mb-2 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
-              {(
-                [
-                  ["all", "Todos"],
-                  ["debt", "Con saldo"],
-                  ["clear", "Sin saldo"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setDebtFilter(key)}
-                  className={
-                    debtFilter === key
-                      ? "shrink-0 rounded-full bg-[#7c4dff] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
-                      : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            <div className="mb-2 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
-              {(
-                [
-                  ["all", "Vigencia"],
-                  ["activo", "Activos"],
-                  ["por_vencer", "Por vencer"],
-                  ["vencido", "Vencidos"],
-                  ["sin_fecha", "Sin fecha"],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() =>
-                    setStatusFilter(key as "all" | ConvenioStatus)
-                  }
-                  className={
-                    statusFilter === key
-                      ? "shrink-0 rounded-full bg-[#1a73e8] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
-                      : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
-                  }
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {schools.length > 0 && (
-              <div className="mb-3">
-                <select
-                  className="flex h-10 w-full rounded-xl border border-[#e0e0e0] bg-[#fafafa] px-3 text-sm"
-                  value={schoolFilter}
-                  onChange={(e) => setSchoolFilter(e.target.value)}
-                >
-                  <option value="all">Todas las escuelas</option>
-                  {schools.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
+            <div className="mb-3 space-y-2.5">
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
+                  Saldo
+                </p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(
+                    [
+                      ["all", "Todos"],
+                      ["debt", "Con saldo"],
+                      ["clear", "Sin saldo"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setDebtFilter(key)}
+                      className={
+                        "rounded-xl px-2 py-2 text-center text-[12px] font-semibold transition " +
+                        (debtFilter === key
+                          ? "bg-[#7c4dff] text-white shadow-sm"
+                          : "bg-[#f5f5f5] text-[#616161]")
+                      }
+                    >
+                      {label}
+                    </button>
                   ))}
-                </select>
+                </div>
               </div>
-            )}
+
+              <div>
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
+                  Convenio
+                </p>
+                <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5">
+                  {(
+                    [
+                      ["all", "Todos"],
+                      ["activo", "Activos"],
+                      ["por_vencer", "Por vencer"],
+                      ["vencido", "Vencidos"],
+                      ["sin_fecha", "Sin fecha"],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() =>
+                        setStatusFilter(key as "all" | ConvenioStatus)
+                      }
+                      className={
+                        "rounded-xl px-2 py-2 text-center text-[12px] font-semibold transition " +
+                        (statusFilter === key
+                          ? "bg-[#1a73e8] text-white shadow-sm"
+                          : "bg-[#f5f5f5] text-[#616161]")
+                      }
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {schools.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#9e9e9e]">
+                    Escuela
+                  </p>
+                  <select
+                    className="flex h-11 w-full rounded-xl border border-[#e0e0e0] bg-white px-3 text-sm shadow-sm"
+                    value={schoolFilter}
+                    onChange={(e) => setSchoolFilter(e.target.value)}
+                  >
+                    <option value="all">Todas las escuelas</option>
+                    {schools.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
             {/* Móvil / tablet: tarjetas */}
             <div className="grid gap-2.5 lg:hidden">
@@ -1932,18 +1949,18 @@ function ClientesPage() {
 
       {section === "escuelas" && (
         <div className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="space-y-3">
             <div>
               <h2 className="text-base font-bold text-[#212121]">
                 Escuelas con convenio
               </h2>
-              <p className="text-xs text-[#757575]">
+              <p className="text-xs leading-relaxed text-[#757575]">
                 Beneficios para alumnas. Asigna cada cliente a su escuela.
               </p>
             </div>
             <Button
               type="button"
-              className="rounded-xl"
+              className="h-11 w-full rounded-xl sm:w-auto"
               onClick={() => {
                 setSchoolForm({
                   ...emptySchool,
@@ -2043,22 +2060,22 @@ function ClientesPage() {
                           : ""}
                       </p>
 
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="grid grid-cols-3 gap-1.5">
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 text-xs"
+                          className="h-9 px-1 text-[11px]"
                           onClick={() => {
                             setSection("clientes");
                             setSchoolFilter(school.id);
                           }}
                         >
-                          Ver clientes
+                          Clientes
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 text-xs"
+                          className="h-9 px-1 text-[11px]"
                           onClick={() => {
                             setSchoolForm({
                               id: school.id,
@@ -2074,13 +2091,13 @@ function ClientesPage() {
                             setSchoolDialogOpen(true);
                           }}
                         >
-                          <Pencil className="mr-1 h-3 w-3" />
+                          <Pencil className="mr-0.5 h-3 w-3" />
                           Editar
                         </Button>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-8 text-xs text-red-600"
+                          className="h-9 px-1 text-[11px] text-red-600"
                           onClick={() => {
                             if (
                               confirm(
@@ -2091,8 +2108,8 @@ function ClientesPage() {
                             }
                           }}
                         >
-                          <Trash2 className="mr-1 h-3 w-3" />
-                          Eliminar
+                          <Trash2 className="mr-0.5 h-3 w-3" />
+                          Borrar
                         </Button>
                       </div>
                     </CardContent>
