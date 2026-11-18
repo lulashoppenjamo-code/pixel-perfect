@@ -1,16 +1,5 @@
 /**
- * LULA OS — Impresora térmica Bluetooth
- *
- * Comunicación:
- * - Web Bluetooth
- * - Bluetooth Low Energy / GATT
- * - ESC/POS
- *
- * Comportamiento:
- * - Una sola impresora emparejada para todo el sistema
- * - Se mantiene conectada hasta que el usuario la desconecte
- * - Auto-conexión silenciosa al abrir la app (si ya fue emparejada)
- * - La venta NO depende de la impresora
+ * LULA OS — Impresora térmica Bluetooth (Servicio Global y Persistente)
  */
 
 import type { TicketData } from "@/components/pos/TicketModal";
@@ -85,8 +74,8 @@ type PrinterConnection = {
   characteristic: BluetoothCharacteristic;
 };
 
-/** Conexión activa en memoria (se mantiene hasta desconectar manualmente) */
 let activeConnection: PrinterConnection | null = null;
+let printQueue: Promise<void> = Promise.resolve();
 
 const OPTIONAL_SERVICES = [
   "0000ffe0-0000-1000-8000-00805f9b34fb",
@@ -143,17 +132,11 @@ function bold(enabled: boolean) {
   return command(0x1b, 0x45, enabled ? 0x01 : 0x00);
 }
 
-function doubleSize(enabled: boolean) {
-  return command(0x1d, 0x21, enabled ? 0x11 : 0x00);
-}
-
 function cutPaper() {
   return command(0x1d, 0x56, 0x00);
 }
 
-/** Pulso ESC/POS para abrir cajón de dinero (pin 2 o 5 según impresora) */
 function openCashDrawer() {
-  // Comando más común: ESC p 0 25 250
   return command(0x1b, 0x70, 0x00, 0x19, 0xfa);
 }
 
@@ -186,7 +169,6 @@ function charsForPaper(paperWidth: 58 | 80): number {
 
 export function normalizeTicketLayout(raw: unknown): TicketPrintLayout {
   let obj: Record<string, unknown> = {};
-
   if (raw == null) return { ...DEFAULT_TICKET_LAYOUT };
 
   if (typeof raw === "string") {
@@ -218,11 +200,7 @@ export function normalizeTicketLayout(raw: unknown): TicketPrintLayout {
     showSku: bool(obj.showSku, obj.show_sku, DEFAULT_TICKET_LAYOUT.showSku),
     showDiscounts: bool(obj.showDiscounts, obj.show_discounts, DEFAULT_TICKET_LAYOUT.showDiscounts),
     showTaxes: bool(obj.showTaxes, obj.show_tax ?? obj.show_taxes, DEFAULT_TICKET_LAYOUT.showTaxes),
-    showCashReceived: bool(
-      obj.showCashReceived,
-      obj.show_cash_received,
-      DEFAULT_TICKET_LAYOUT.showCashReceived,
-    ),
+    showCashReceived: bool(obj.showCashReceived, obj.show_cash_received, DEFAULT_TICKET_LAYOUT.showCashReceived),
     showChange: bool(obj.showChange, obj.show_change, DEFAULT_TICKET_LAYOUT.showChange),
     paperWidth: paper,
     copies,
@@ -260,13 +238,11 @@ async function imageToEscPos(
   paperWidth: 58 | 80,
 ): Promise<Uint8Array | null> {
   if (!dataUrl || typeof document === "undefined") return null;
-
   try {
     const image = new Image();
     const loaded = new Promise<void>((resolve, reject) => {
       image.onload = () => resolve();
-      image.onerror = () =>
-        reject(new Error("No se pudo cargar el logo para impresión."));
+      image.onerror = () => reject(new Error("No se pudo cargar el logo."));
     });
     image.src = dataUrl;
     await loaded;
@@ -284,7 +260,6 @@ async function imageToEscPos(
     const canvas = document.createElement("canvas");
     canvas.width = finalWidth;
     canvas.height = finalHeight;
-
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) return null;
 
@@ -327,7 +302,7 @@ async function imageToEscPos(
 
     return concatBytes(center(), header, raster, encode("\n"), left());
   } catch (error) {
-    console.error("No se pudo convertir el logo para ESC/POS:", error);
+    console.error("No se pudo convertir el logo ESC/POS:", error);
     return null;
   }
 }
@@ -390,7 +365,7 @@ async function buildTicketText(
 
   for (const line of ticket.lines) {
     const name =
-      layout.showSku && line.sku ? `\( {line.name} ( \){line.sku})` : line.name;
+      layout.showSku && line.sku ? `${line.name} (${line.sku})` : line.name;
     chunks.push(
       encode(
         twoColumns(`${line.quantity} x ${name}`, moneyValue(line.total), width) +
@@ -434,6 +409,10 @@ async function buildTicketText(
     );
   }
 
+  if (ticket.notes) {
+    chunks.push(encode(`Notas: ${ticket.notes}\n`));
+  }
+
   chunks.push(encode("\n"));
   chunks.push(center());
   chunks.push(encode(`${ticket.footer ?? "¡Gracias por su compra!"}\n`));
@@ -469,28 +448,21 @@ async function findWritableCharacteristic(device: BluetoothDevice) {
     }
   }
 
-  throw new Error(
-    "No encontré un canal de escritura en la impresora. Verifica que sea BLE/GATT.",
-  );
+  throw new Error("No encontré un canal de escritura en la impresora.");
 }
 
 function bindDisconnectListener(device: BluetoothDevice) {
   try {
     device.addEventListener?.("gattserverdisconnected", () => {
-      // No borramos activeConnection: al imprimir intentamos reconectar el mismo device
-      console.warn(
-        "Impresora Bluetooth desconectada temporalmente. Se intentará reconectar al imprimir.",
-      );
+      console.warn("Impresora Bluetooth desconectada temporalmente.");
     });
   } catch {
     // ignore
   }
 }
 
-/** Emparejar impresora (solo cuando el usuario lo pide) */
 export async function connectBluetoothPrinter() {
   const bluetooth = getBluetooth();
-
   const device = await bluetooth.requestDevice({
     acceptAllDevices: true,
     optionalServices: OPTIONAL_SERVICES,
@@ -501,48 +473,30 @@ export async function connectBluetoothPrinter() {
   bindDisconnectListener(device);
 
   localStorage.setItem(DEVICE_NAME_KEY, device.name ?? "Impresora Bluetooth");
-
   return { name: device.name ?? "Impresora Bluetooth" };
 }
 
-/**
- * Reconecta sin mostrar selector si es posible.
- * NO lanza error si el navegador no tiene getDevices.
- */
 export async function reconnectBluetoothPrinter() {
-  // 1) Ya conectada
   if (activeConnection?.device.gatt?.connected) {
-    return {
-      name: activeConnection.device.name ?? "Impresora Bluetooth",
-    };
+    return { name: activeConnection.device.name ?? "Impresora Bluetooth" };
   }
 
-  // 2) Mismo device de esta sesión: reabrir GATT
   if (activeConnection?.device?.gatt) {
     try {
       await activeConnection.device.gatt.connect();
-      const characteristic = await findWritableCharacteristic(
-        activeConnection.device,
-      );
-      activeConnection = {
-        device: activeConnection.device,
-        characteristic,
-      };
-      return {
-        name: activeConnection.device.name ?? "Impresora Bluetooth",
-      };
+      const characteristic = await findWritableCharacteristic(activeConnection.device);
+      activeConnection = { device: activeConnection.device, characteristic };
+      return { name: activeConnection.device.name ?? "Impresora Bluetooth" };
     } catch (e) {
       console.warn("No se pudo reconectar el device en memoria:", e);
     }
   }
 
-  // 3) getDevices (si el navegador lo soporta)
   const bluetooth = getBluetooth();
   if (typeof bluetooth.getDevices === "function") {
     try {
       const devices = await bluetooth.getDevices();
       const savedName = localStorage.getItem(DEVICE_NAME_KEY);
-
       const device =
         devices.find((d) => savedName && d.name === savedName) ?? devices[0];
 
@@ -550,10 +504,7 @@ export async function reconnectBluetoothPrinter() {
         const characteristic = await findWritableCharacteristic(device);
         activeConnection = { device, characteristic };
         bindDisconnectListener(device);
-        localStorage.setItem(
-          DEVICE_NAME_KEY,
-          device.name ?? "Impresora Bluetooth",
-        );
+        localStorage.setItem(DEVICE_NAME_KEY, device.name ?? "Impresora Bluetooth");
         return { name: device.name ?? "Impresora Bluetooth" };
       }
     } catch (e) {
@@ -561,25 +512,13 @@ export async function reconnectBluetoothPrinter() {
     }
   }
 
-  // 4) No hay forma automática → null (NO error rojo)
   return null;
 }
 
-/**
- * Conexión silenciosa en segundo plano.
- * No muestra errores ni selector.
- * Solo funciona si la impresora ya fue emparejada antes.
- */
 export async function autoConnectBluetoothPrinter(): Promise<boolean> {
   try {
-    if (typeof navigator === "undefined" || !("bluetooth" in navigator)) {
-      return false;
-    }
-
-    if (activeConnection?.device.gatt?.connected) {
-      return true;
-    }
-
+    if (!bluetoothSupported()) return false;
+    if (activeConnection?.device.gatt?.connected) return true;
     const result = await reconnectBluetoothPrinter();
     return Boolean(result && activeConnection?.device.gatt?.connected);
   } catch (e) {
@@ -588,7 +527,6 @@ export async function autoConnectBluetoothPrinter(): Promise<boolean> {
   }
 }
 
-/** Solo el usuario desconecta */
 export function disconnectBluetoothPrinter() {
   try {
     activeConnection?.device.gatt?.disconnect();
@@ -606,7 +544,7 @@ export function getBluetoothPrinterName() {
 }
 
 export function isBluetoothPrinterConnected() {
-  return Boolean(activeConnection?.device.gatt?.connected);
+  return Boolean(activeConnection?.device?.gatt?.connected);
 }
 
 async function writeInChunks(
@@ -625,41 +563,15 @@ async function writeInChunks(
   }
 }
 
-/** Garantiza conexión; si no hay ninguna, lanza error claro (NO pide emparejar) */
 async function ensurePrinterConnected() {
-  if (activeConnection?.device.gatt?.connected) {
+  if (activeConnection?.device?.gatt?.connected) {
     return activeConnection;
   }
-
   const reconnected = await reconnectBluetoothPrinter();
-  if (reconnected && activeConnection?.device.gatt?.connected) {
+  if (reconnected && activeConnection?.device?.gatt?.connected) {
     return activeConnection;
   }
-
-  // Ya no llamamos a connectBluetoothPrinter() aquí.
-  // El emparejamiento solo se hace desde Ajustes.
-  throw new Error(
-    "La impresora Bluetooth no está conectada. Emparéjala desde Ajustes.",
-  );
-}
-
-/** Imprime bytes ESC/POS (tickets, cortes, reportes) */
-export async function printRawBluetooth(data: Uint8Array) {
-  const connection = await ensurePrinterConnected();
-  await writeInChunks(connection.characteristic, data);
-}
-
-/** Imprime texto plano (ideal para corte de caja) */
-export async function printTextBluetooth(text: string) {
-  const connection = await ensurePrinterConnected();
-  const data = concatBytes(
-    command(0x1b, 0x40),
-    left(),
-    encode(text.endsWith("\n") ? text : `${text}\n`),
-    encode("\n\n"),
-    cutPaper(),
-  );
-  await writeInChunks(connection.characteristic, data);
+  throw new Error("La impresora Bluetooth no está conectada. Conéctala usando el botón superior.");
 }
 
 export async function printTicketBluetooth(
@@ -667,34 +579,35 @@ export async function printTicketBluetooth(
   layoutOverride?: Partial<TicketPrintLayout>,
   options?: { openDrawer?: boolean },
 ) {
-  const connection = await ensurePrinterConnected();
+  // Cola de impresión para evitar envíos simultáneos o colisiones
+  printQueue = printQueue.then(async () => {
+    const connection = await ensurePrinterConnected();
+    const layout: TicketPrintLayout = {
+      ...getCachedTicketLayout(),
+      ...layoutOverride,
+    };
 
-  const layout: TicketPrintLayout = {
-    ...getCachedTicketLayout(),
-    ...layoutOverride,
-  };
+    const data = await buildTicketText(ticket, layout);
+    const copies = Math.max(1, Math.min(5, layout.copies || 1));
 
-  const data = await buildTicketText(ticket, layout);
-  const copies = Math.max(1, Math.min(5, layout.copies || 1));
-
-  for (let i = 0; i < copies; i += 1) {
-    await writeInChunks(connection.characteristic, data);
-    if (i < copies - 1) {
-      await new Promise((r) => setTimeout(r, 120));
+    for (let i = 0; i < copies; i += 1) {
+      await writeInChunks(connection.characteristic, data);
+      if (i < copies - 1) {
+        await new Promise((r) => setTimeout(r, 120));
+      }
     }
-  }
 
-  // Abrir cajón solo una vez por ticket (no por copia)
-  // y solo si se solicita explícitamente (por defecto sí)
-  const shouldOpenDrawer = options?.openDrawer !== false;
-  if (shouldOpenDrawer) {
-    try {
-      await writeInChunks(connection.characteristic, openCashDrawer());
-    } catch (e) {
-      // No convertimos un fallo del cajón en error de impresión
-      console.warn("No se pudo enviar el comando de apertura de cajón:", e);
+    const shouldOpenDrawer = options?.openDrawer !== false;
+    if (shouldOpenDrawer) {
+      try {
+        await writeInChunks(connection.characteristic, openCashDrawer());
+      } catch (e) {
+        console.warn("No se pudo abrir el cajón:", e);
+      }
     }
-  }
+  });
+
+  return printQueue;
 }
 
 export function setBluetoothAutoPrint(enabled: boolean) {
@@ -703,42 +616,4 @@ export function setBluetoothAutoPrint(enabled: boolean) {
 
 export function getBluetoothAutoPrint() {
   return localStorage.getItem(AUTO_PRINT_KEY) === "true";
-}
-
-export async function printTestTicket(
-  layoutOverride?: Partial<TicketPrintLayout>,
-) {
-  const layout: TicketPrintLayout = {
-    ...getCachedTicketLayout(),
-    ...layoutOverride,
-  };
-
-  const ticket: TicketData = {
-    companyName: "Lula Shop",
-    logoDataUrl: getCachedTicketLogo() || undefined,
-    branchName: layout.showBranch ? "Prueba de impresión" : undefined,
-    folio: "TEST",
-    date: new Date().toLocaleString("es-MX"),
-    cashierName: layout.showCashier ? "Sistema" : undefined,
-    customerName: layout.showCustomer ? "Cliente de prueba" : undefined,
-    paymentMethod: "Efectivo",
-    lines: [
-      {
-        name: "Ticket de prueba",
-        quantity: 1,
-        unit_price: 10,
-        discount: 0,
-        total: 10,
-      },
-    ],
-    subtotal: 10,
-    tax: 0,
-    discount: 0,
-    total: 10,
-    cashReceived: layout.showCashReceived ? 20 : null,
-    changeGiven: layout.showChange ? 10 : null,
-    footer: "Impresora configurada correctamente.",
-  };
-
-  await printTicketBluetooth(ticket, layout, { openDrawer: false });
 }
