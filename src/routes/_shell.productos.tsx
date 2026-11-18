@@ -1438,6 +1438,20 @@ export function ProductosPage({
           </CardContent>
         </Card>
       </div>
+      </div>
+
+      {/* Tirador: jala / toca para mostrar u ocultar el menú superior */}
+      <button
+        type="button"
+        onClick={() => setChromeHidden((v) => !v)}
+        className="mb-2 flex w-full flex-col items-center gap-0.5 py-1 text-[#9e9e9e] active:bg-[#f5f5f5]"
+        aria-label={chromeHidden ? "Mostrar menú de inventario" : "Ocultar menú de inventario"}
+      >
+        <span className="h-1 w-10 rounded-full bg-[#cfd8dc]" />
+        <span className="text-[10px] font-medium tracking-wide">
+          {chromeHidden ? "↓ Desliza o toca para ver menú" : "↑ Ocultar menú"}
+        </span>
+      </button>
 
       <Tabs
         value={activeTab}
@@ -1491,22 +1505,6 @@ export function ProductosPage({
               <RefreshCw className="h-4 w-4" />
             </Button>
           </div>
-
-
-      </div>
-
-      {/* Tirador: jala / toca para mostrar u ocultar el menú superior */}
-      <button
-        type="button"
-        onClick={() => setChromeHidden((v) => !v)}
-        className="mb-2 flex w-full flex-col items-center gap-0.5 py-1 text-[#9e9e9e] active:bg-[#f5f5f5]"
-        aria-label={chromeHidden ? "Mostrar menú de inventario" : "Ocultar menú de inventario"}
-      >
-        <span className="h-1 w-10 rounded-full bg-[#cfd8dc]" />
-        <span className="text-[10px] font-medium tracking-wide">
-          {chromeHidden ? "↓ Desliza o toca para ver menú" : "↑ Ocultar menú"}
-        </span>
-      </button>
 
           <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
             {(
