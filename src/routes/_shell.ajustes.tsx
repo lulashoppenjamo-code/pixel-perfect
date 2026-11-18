@@ -601,10 +601,31 @@ function AjustesPage() {
       return;
     }
 
+    if (editForm.pin && !editTarget.is_active) {
+      toast.error(
+        "Para cambiar el PIN, primero activa al colaborador y guarda los cambios.",
+      );
+      return;
+    }
+
     setEditPending(true);
 
     try {
-      // 1. Actualizar rol, sucursal y estado.
+      // 1. Cambiar PIN solamente si se escribió uno nuevo.
+      //    Se hace primero, mientras la cuenta sigue activa.
+      if (editForm.pin) {
+        const { error: pinError } = await (supabase as any).rpc(
+          "admin_set_collaborator_pin",
+          {
+            _user_id: editTarget.id,
+            _pin: editForm.pin,
+          },
+        );
+
+        if (pinError) throw pinError;
+      }
+
+      // 2. Actualizar rol, sucursal y estado.
       const { error: accessError } = await (supabase as any).rpc(
         "admin_set_user_access",
         {
@@ -620,7 +641,7 @@ function AjustesPage() {
 
       if (accessError) throw accessError;
 
-      // 2. Actualizar nombre.
+      // 3. Actualizar nombre.
       const { error: nameError } = await supabase
         .from("profiles")
         .update({
@@ -629,19 +650,6 @@ function AjustesPage() {
         .eq("id", editTarget.id);
 
       if (nameError) throw nameError;
-
-      // 3. Cambiar PIN solamente si se escribió uno nuevo.
-      if (editForm.pin) {
-        const { error: pinError } = await (supabase as any).rpc(
-          "admin_set_collaborator_pin",
-          {
-            _user_id: editTarget.id,
-            _pin: editForm.pin,
-          },
-        );
-
-        if (pinError) throw pinError;
-      }
 
       toast.success("Colaborador actualizado.");
 
@@ -1624,10 +1632,6 @@ function AjustesPage() {
                               </>
                             )}
 
-                            <p className="mt-2 text-[11px] text-[#9e9e9e]">
-                              Usa la vista de escritorio para cambiar
-                              rol, sucursal principal o activación.
-                            </p>
                           </div>
                         );
                       })}
