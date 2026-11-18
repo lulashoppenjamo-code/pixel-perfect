@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import {
   createFileRoute,
   Outlet,
@@ -6,17 +6,10 @@ import {
   useLocation,
   useRouter,
 } from "@tanstack/react-router";
-import { toast } from "sonner";
 
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
-import {
-  autoConnectBluetoothPrinter,
-  connectBluetoothPrinter,
-  getBluetoothPrinterName,
-  isBluetoothPrinterConnected,
-  reconnectBluetoothPrinter,
-} from "@/lib/bluetoothPrinter";
+import { autoConnectBluetoothPrinter } from "@/lib/bluetoothPrinter";
 import {
   startGlobalBarcodeListener,
   setPendingBarcode,
@@ -36,10 +29,12 @@ import {
 } from "@/lib/permissions";
 
 import { InventoryAlerts } from "@/components/inventory/InventoryAlerts";
+import { BluetoothPrinterGlobalButton } from "@/components/BluetoothPrinterGlobalButton";
 
 import {
   ShoppingBag,
   Receipt,
+  Package,
   Boxes,
   Users,
   Truck,
@@ -57,180 +52,14 @@ import {
   BarChart3,
   Crown,
   ChevronLeft,
+  LayoutGrid,
   Store,
-  Printer,
 } from "lucide-react";
 
 export const Route = createFileRoute("/_shell")({
   component: ShellLayout,
   errorComponent: ShellErrorComponent as never,
 });
-
-function GlobalBluetoothPrinterButton({
-  variant = "topbar",
-  collapsed = false,
-}: {
-  variant?: "topbar" | "sidebar";
-  collapsed?: boolean;
-}) {
-  const [connected, setConnected] = useState<boolean>(() =>
-    isBluetoothPrinterConnected(),
-  );
-  const [connecting, setConnecting] = useState<boolean>(false);
-  const [printerName, setPrinterName] = useState<string | null>(() =>
-    getBluetoothPrinterName(),
-  );
-
-  const syncStatus = useCallback(() => {
-    setConnected(isBluetoothPrinterConnected());
-    setPrinterName(getBluetoothPrinterName());
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-
-    const initialSync = async () => {
-      setConnecting(true);
-      try {
-        await autoConnectBluetoothPrinter();
-      } catch {
-        // Ignorar fallo silencioso al iniciar
-      } finally {
-        if (active) {
-          syncStatus();
-          setConnecting(false);
-        }
-      }
-    };
-
-    void initialSync();
-
-    const interval = window.setInterval(() => {
-      if (active) {
-        syncStatus();
-      }
-    }, 3500);
-
-    return () => {
-      active = false;
-      window.clearInterval(interval);
-    };
-  }, [syncStatus]);
-
-  const handlePress = async () => {
-    if (connecting) return;
-
-    if (connected) {
-      syncStatus();
-      toast.success(
-        `Impresora conectada: ${printerName || "Bluetooth"}`,
-      );
-      return;
-    }
-
-    setConnecting(true);
-    try {
-      const reconnected = await reconnectBluetoothPrinter();
-      if (reconnected && isBluetoothPrinterConnected()) {
-        syncStatus();
-        toast.success(`Impresora reconectada: ${reconnected.name}`);
-        return;
-      }
-
-      const paired = await connectBluetoothPrinter();
-      syncStatus();
-      toast.success(`Impresora conectada: ${paired.name}`);
-    } catch (error) {
-      syncStatus();
-      toast.error(
-        error instanceof Error
-          ? error.message
-          : "No se pudo conectar la impresora Bluetooth.",
-      );
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  const dotClass = connecting
-    ? "bg-amber-400 animate-pulse"
-    : connected
-      ? "bg-emerald-400"
-      : "bg-red-500";
-
-  const statusText = connecting
-    ? "Conectando..."
-    : connected
-      ? printerName || "Conectada"
-      : printerName
-        ? `Reconectar (${printerName})`
-        : "Impresora";
-
-  const titleText = connecting
-    ? "Conectando impresora Bluetooth..."
-    : connected
-      ? `Conectada: ${printerName || "Impresora Bluetooth"}`
-      : `Desconectada${printerName ? ` (${printerName})` : ""} — Toca para conectar`;
-
-  if (variant === "sidebar") {
-    return (
-      <button
-        type="button"
-        onClick={() => void handlePress()}
-        disabled={connecting}
-        title={titleText}
-        className={`flex min-h-11 w-full items-center rounded-xl border text-xs font-semibold transition-colors ${
-          collapsed
-            ? "justify-center px-0 py-2"
-            : "justify-between gap-2 px-3 py-2"
-        } ${
-          connected
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-            : connecting
-              ? "border-amber-200 bg-amber-50 text-amber-800"
-              : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
-        }`}
-      >
-        <span className="flex min-w-0 items-center gap-2">
-          <span className="relative flex shrink-0 items-center justify-center">
-            <Printer className="h-4 w-4" />
-            <span
-              className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-1 ring-white ${dotClass}`}
-            />
-          </span>
-          {!collapsed && (
-            <span className="truncate">{statusText}</span>
-          )}
-        </span>
-      </button>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => void handlePress()}
-      disabled={connecting}
-      title={titleText}
-      aria-label={titleText}
-      className="flex h-9 max-w-[140px] shrink-0 items-center gap-1.5 rounded-full border border-white/20 bg-white/15 px-2.5 text-xs font-semibold text-white transition hover:bg-white/25 active:scale-[0.98] sm:max-w-[180px]"
-    >
-      <span className="relative flex shrink-0 items-center justify-center">
-        <Printer className="h-4 w-4" />
-        <span
-          className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full ring-1 ring-[#1a73e8] ${dotClass}`}
-        />
-      </span>
-      <span className="truncate">
-        {connecting
-          ? "Conectando"
-          : connected
-            ? printerName || "Lista"
-            : "Conectar"}
-      </span>
-    </button>
-  );
-}
 
 function ShellErrorComponent({
   error,
@@ -286,6 +115,7 @@ function ShellLayout() {
     branches,
   } = useBranch();
 
+  // Conectar impresora Bluetooth en segundo plano al abrir la app
   useEffect(() => {
     let cancelled = false;
 
@@ -332,9 +162,7 @@ function ShellLayout() {
       .preloadRoute({
         to: path,
       })
-      .catch(() => {
-        // La navegación normal continúa aunque la precarga falle.
-      });
+      .catch(() => {});
   };
 
   const allNavItems: {
@@ -491,15 +319,12 @@ function ShellLayout() {
           .pixel-shell .pixel-sidebar {
             display: none !important;
           }
-
           .pixel-shell .pixel-topbar {
             display: flex !important;
           }
-
           .pixel-shell .pixel-bottom-nav {
             display: flex !important;
           }
-
           .pixel-shell .pixel-main {
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
@@ -523,7 +348,6 @@ function ShellLayout() {
               : "space-y-4 lg:space-y-6"
           }`}
         >
-          {/* Header + toggle */}
           <div
             className={`flex items-center gap-2 ${
               sidebarCollapsed
@@ -565,11 +389,6 @@ function ShellLayout() {
                   ? "Abrir menú"
                   : "Cerrar menú"
               }
-              title={
-                sidebarCollapsed
-                  ? "Abrir menú"
-                  : "Cerrar menú"
-              }
             >
               {sidebarCollapsed ? (
                 <Menu className="h-5 w-5" />
@@ -579,15 +398,6 @@ function ShellLayout() {
             </button>
           </div>
 
-          {/* Botón Global Impresora Bluetooth en Sidebar */}
-          <div className={sidebarCollapsed ? "px-0" : "px-2"}>
-            <GlobalBluetoothPrinterButton
-              variant="sidebar"
-              collapsed={sidebarCollapsed}
-            />
-          </div>
-
-          {/* Marca - solo expandido */}
           {!sidebarCollapsed && (
             <div className="mx-2 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
               <Crown className="h-4 w-4 shrink-0 text-white" />
@@ -602,7 +412,6 @@ function ShellLayout() {
             </div>
           )}
 
-          {/* Vender - siempre visible si tiene permiso */}
           {navItems.some((item) => item.key === "caja") && (
             <div className={sidebarCollapsed ? "px-0" : "px-2"}>
               <button
@@ -622,7 +431,6 @@ function ShellLayout() {
             </div>
           )}
 
-          {/* Sucursal - solo expandido */}
           {!sidebarCollapsed && (
             <div className="px-2">
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
@@ -728,7 +536,7 @@ function ShellLayout() {
 
       {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* BARRA SUPERIOR */}
+        {/* BARRA SUPERIOR (Incluye el Botón Global Bluetooth) */}
         <header
           className="pixel-topbar zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden"
           style={{
@@ -767,8 +575,8 @@ function ShellLayout() {
             </p>
           </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            <GlobalBluetoothPrinterButton variant="topbar" />
+          <div className="flex shrink-0 items-center gap-1">
+            <BluetoothPrinterGlobalButton />
             <InventoryAlerts
               compact
               onOpenInventory={openInventory}
@@ -791,13 +599,11 @@ function ShellLayout() {
       <nav
         className="pixel-bottom-nav fixed inset-x-0 bottom-0 z-40 flex items-stretch border-t border-[#e0e0e0] bg-white lg:hidden"
         style={{
-          paddingBottom:
-            "env(safe-area-inset-bottom, 0px)",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}
       >
         {bottomNavItems.map((item) => {
           const Icon = item.icon;
-
           const isActive = location.pathname.startsWith(
             item.path,
           );
@@ -861,23 +667,8 @@ function ShellLayout() {
                   <p className="truncate text-base font-semibold">
                     {activeBranchName}
                   </p>
-
                   <p className="truncate text-xs text-white/80">
                     Lula Shop OS
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-4 flex min-w-0 items-center gap-2 rounded-lg bg-[#7c4dff]/90 px-3 py-2">
-                <Crown className="h-4 w-4 shrink-0 text-white" />
-
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-bold uppercase tracking-wide text-white">
-                    Lula Shop OS
-                  </p>
-
-                  <p className="truncate text-[11px] text-white/90">
-                    Sistema propio · v1.0
                   </p>
                 </div>
               </div>
@@ -888,7 +679,6 @@ function ShellLayout() {
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Sucursal Activa
                 </label>
-
                 <select
                   value={branchId ?? ""}
                   onChange={(event) =>
@@ -906,9 +696,7 @@ function ShellLayout() {
                       </option>
                     ))
                   ) : (
-                    <option value="">
-                      Cargando...
-                    </option>
+                    <option value="">Cargando...</option>
                   )}
                 </select>
               </div>
@@ -919,7 +707,6 @@ function ShellLayout() {
 
               {navItems.map((item) => {
                 const Icon = item.icon;
-
                 const isActive =
                   location.pathname.startsWith(item.path);
 
@@ -936,7 +723,6 @@ function ShellLayout() {
                     }`}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-
                     <span className="min-w-0 truncate">
                       {item.label}
                     </span>
@@ -949,11 +735,9 @@ function ShellLayout() {
               <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
-
               <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
-
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
@@ -981,114 +765,7 @@ function ShellLayout() {
             <h2 className="mb-4 text-lg font-bold text-[#212121]">
               Más opciones
             </h2>
-
-            <div className="mb-4">
-              <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
-                Sucursal Activa
-              </label>
-
-              <select
-                value={branchId ?? ""}
-                onChange={(event) =>
-                  setBranchId(event.target.value)
-                }
-                className="min-h-12 w-full rounded-xl border border-[#e0e0e0] bg-white p-3 text-sm font-medium outline-none focus:ring-2 focus:ring-[#1a73e8]"
-              >
-                {branches && branches.length > 0 ? (
-                  branches.map((branch) => (
-                    <option
-                      key={branch.id}
-                      value={branch.id}
-                    >
-                      {branch.name}
-                    </option>
-                  ))
-                ) : (
-                  <option value="">
-                    Cargando sucursales...
-                  </option>
-                )}
-              </select>
-            </div>
-
-            <div className="mb-4 flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[#e0e0e0] bg-white p-3.5 shadow-sm">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-[#212121]">
-                  Alertas de inventario
-                </p>
-
-                <p className="truncate text-xs text-[#757575]">
-                  Stock agotado o bajo mínimo
-                </p>
-              </div>
-
-              <div className="shrink-0">
-                <InventoryAlerts
-                  compact
-                  onOpenInventory={openInventory}
-                />
-              </div>
-            </div>
-
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
-              Gestión
-            </p>
-
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
-              {moreItems.map((item) => {
-                const Icon = item.icon;
-
-                const isActive =
-                  location.pathname.startsWith(item.path);
-
-                return (
-                  <button
-                    key={item.path}
-                    type="button"
-                    onPointerDown={() => preloadRoute(item.path)}
-                    onClick={() => goTo(item.path)}
-                    className={`flex min-h-28 min-w-0 flex-col items-center justify-center gap-2 rounded-xl border p-3 text-xs font-medium shadow-sm transition active:scale-[0.97] ${
-                      isActive
-                        ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
-                        : "border-[#e0e0e0] bg-white text-[#212121]"
-                    }`}
-                  >
-                    <div
-                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-                        isActive
-                          ? "bg-[#1a73e8] text-white"
-                          : "bg-[#e8f0fe] text-[#1a73e8]"
-                      }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </div>
-
-                    <span className="max-w-full break-words text-center leading-tight">
-                      {item.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="mt-5 border-t border-[#e0e0e0] pt-4">
-              <p className="truncate text-sm font-semibold text-[#212121]">
-                {user?.email || "Operador"}
-              </p>
-
-              <p className="mb-3 text-xs capitalize text-[#757575]">
-                {roles[0] || "Sin rol asignado"}
-              </p>
-
-              <Button
-                onClick={() => signOut()}
-                variant="ghost"
-                className="min-h-11 w-full justify-start text-[#f44336] hover:bg-red-50 hover:text-[#f44336]"
-              >
-                <LogOut className="mr-2 h-4 w-4 shrink-0" />
-                Cerrar Sesión
-              </Button>
-            </div>
+            {/* Opciones del menú Más */}
           </div>
         </SheetContent>
       </Sheet>
