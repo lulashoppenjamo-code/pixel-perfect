@@ -157,10 +157,12 @@ function ShellLayout() {
    * Precarga de rutas.
    */
   const preloadRoute = (path: AppPath) => {
+    // AppPath es un subconjunto de rutas reales; el cast evita el error
+    // de unión discriminada de TanStack Router en build/IDE.
     void router
       .preloadRoute({
         to: path,
-      })
+      } as never)
       .catch(() => {});
   };
 
@@ -283,20 +285,21 @@ function ShellLayout() {
     navItems.some((n) => n.key === item.key),
   );
 
-  const moreItems = navItems.filter(
-    (item) =>
-      ![
-        "reportes",
-        "ventas",
-        "caja",
-        "inventario",
-      ].includes(item.key),
-  );
+  const moreItems = navItems.filter((item) => {
+    const bottomKeys: NavKey[] = [
+      "reportes",
+      "ventas",
+      "caja",
+      "inventario",
+    ];
+    return !bottomKeys.includes(item.key);
+  });
 
   const goTo = (path: AppPath) => {
     setMoreOpen(false);
     setSidebarOpen(false);
-    navigate({ to: path });
+    // Cast necesario: TanStack tipa `to` por ruta individual
+    navigate({ to: path } as never);
   };
 
   const openInventory = () => {
@@ -478,7 +481,7 @@ function ShellLayout() {
                   onClick={() =>
                     navigate({
                       to: item.path,
-                    })
+                    } as never)
                   }
                   className={`flex min-h-11 w-full items-center rounded-lg text-sm font-medium transition-colors ${
                     sidebarCollapsed
@@ -507,6 +510,19 @@ function ShellLayout() {
             sidebarCollapsed ? "space-y-1" : "space-y-2 pt-4"
           }`}
         >
+          {/*
+            Montaje en escritorio del botón Bluetooth:
+            asegura auto-conexión aunque el header móvil (lg:hidden) no esté visible.
+            Un solo responsable: BluetoothPrinterGlobalButton.
+          */}
+          <div
+            className={`hidden lg:flex ${
+              sidebarCollapsed ? "justify-center px-0" : "px-2"
+            }`}
+          >
+            <BluetoothPrinterGlobalButton />
+          </div>
+
           {!sidebarCollapsed && (
             <div className="px-2 py-1">
               <p className="truncate text-sm font-semibold text-[#212121]">
@@ -779,7 +795,39 @@ function ShellLayout() {
               Más opciones
             </h2>
 
-            {/* Opciones del menú Más */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {moreItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = location.pathname.startsWith(
+                  item.path,
+                );
+
+                return (
+                  <button
+                    key={item.path}
+                    type="button"
+                    onPointerDown={() => preloadRoute(item.path)}
+                    onClick={() => goTo(item.path)}
+                    className={`flex min-h-[4.5rem] flex-col items-center justify-center gap-1.5 rounded-xl border p-3 text-center text-xs font-semibold transition-colors ${
+                      isActive
+                        ? "border-[#1a73e8] bg-[#e8f0fe] text-[#1a73e8]"
+                        : "border-[#e0e0e0] bg-white text-[#212121] hover:bg-[#f8f9fa]"
+                    }`}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span className="w-full truncate">
+                      {item.label}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {moreItems.length === 0 && (
+                <p className="col-span-full py-6 text-center text-sm text-muted-foreground">
+                  No hay más opciones disponibles.
+                </p>
+              )}
+            </div>
           </div>
         </SheetContent>
       </Sheet>
