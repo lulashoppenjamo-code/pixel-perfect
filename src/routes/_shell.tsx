@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import {
   createFileRoute,
@@ -659,30 +658,24 @@ function ShellLayout() {
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
+            className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368] transition-colors"
           >
-            <MoreHorizontal
-              className="h-6 w-6"
-              strokeWidth={1.75}
-            />
-            <span className="leading-tight">Más</span>
+            <MoreHorizontal className="h-6 w-6" strokeWidth={1.75} />
+            <span className="max-w-[72px] truncate leading-tight">
+              Más
+            </span>
           </button>
         )}
       </nav>
 
-      {/* MENÚ LATERAL SUPERPUESTO */}
+      {/* MENÚ LATERAL MÓVIL */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0"
+          className="flex w-[min(100%,20rem)] flex-col border-r-0 p-0"
         >
-          <div className="flex min-h-full flex-col">
-            <div
-              className="bg-[#1a73e8] px-4 pb-5 text-white sm:px-5"
-              style={{
-                paddingTop: "calc(1.5rem + env(safe-area-inset-top, 0px))",
-              }}
-            >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="bg-[#1a73e8] px-4 py-4 text-white">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
                   L
