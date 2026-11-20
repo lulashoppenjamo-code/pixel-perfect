@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import {
   createFileRoute,
@@ -52,25 +53,6 @@ import {
   ChevronLeft,
   Store,
 } from "lucide-react";
-
-/**
- * Rutas permitidas de la aplicación.
- * Mantenerlas tipadas evita pasar rutas desconocidas
- * a TanStack Router.
- */
-type AppPath =
-  | "/caja"
-  | "/ventas"
-  | "/inventario"
-  | "/reposicion"
-  | "/compras"
-  | "/clientes"
-  | "/devoluciones"
-  | "/gastos"
-  | "/pedidos"
-  | "/reportes"
-  | "/ceo"
-  | "/ajustes";
 
 export const Route = createFileRoute("/_shell")({
   component: ShellLayout,
@@ -155,19 +137,17 @@ function ShellLayout() {
   /**
    * Precarga de rutas.
    */
-  const preloadRoute = (path: AppPath) => {
-    // AppPath es un subconjunto de rutas reales; el cast evita el error
-    // de unión discriminada de TanStack Router en build/IDE.
+  const preloadRoute = (path: string) => {
     void router
       .preloadRoute({
-        to: path,
-      } as never)
+        to: path as any,
+      })
       .catch(() => {});
   };
 
   const allNavItems: {
     label: string;
-    path: AppPath;
+    path: string;
     icon: typeof ShoppingBag;
     key: NavKey;
   }[] = [
@@ -258,25 +238,25 @@ function ShellLayout() {
   const bottomNavItems = [
     {
       label: "Informes",
-      path: "/reportes" as AppPath,
+      path: "/reportes",
       icon: BarChart3,
       key: "reportes" as NavKey,
     },
     {
       label: "Hoy",
-      path: "/ventas" as AppPath,
+      path: "/ventas",
       icon: Receipt,
       key: "ventas" as NavKey,
     },
     {
       label: "Caja",
-      path: "/caja" as AppPath,
+      path: "/caja",
       icon: Store,
       key: "caja" as NavKey,
     },
     {
       label: "Inventario",
-      path: "/inventario" as AppPath,
+      path: "/inventario",
       icon: Boxes,
       key: "inventario" as NavKey,
     },
@@ -294,11 +274,10 @@ function ShellLayout() {
     return !bottomKeys.includes(item.key);
   });
 
-  const goTo = (path: AppPath) => {
+  const goTo = (path: string) => {
     setMoreOpen(false);
     setSidebarOpen(false);
-    // Cast necesario: TanStack tipa `to` por ruta individual
-    navigate({ to: path } as never);
+    navigate({ to: path as any });
   };
 
   const openInventory = () => {
@@ -479,8 +458,8 @@ function ShellLayout() {
                   onPointerDown={() => preloadRoute(item.path)}
                   onClick={() =>
                     navigate({
-                      to: item.path,
-                    } as never)
+                      to: item.path as any,
+                    })
                   }
                   className={`flex min-h-11 w-full items-center rounded-lg text-sm font-medium transition-colors ${
                     sidebarCollapsed
@@ -658,24 +637,30 @@ function ShellLayout() {
           <button
             type="button"
             onClick={() => setMoreOpen(true)}
-            className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368] transition-colors"
+            className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
           >
-            <MoreHorizontal className="h-6 w-6" strokeWidth={1.75} />
-            <span className="max-w-[72px] truncate leading-tight">
-              Más
-            </span>
+            <MoreHorizontal
+              className="h-6 w-6"
+              strokeWidth={1.75}
+            />
+            <span className="leading-tight">Más</span>
           </button>
         )}
       </nav>
 
-      {/* MENÚ LATERAL MÓVIL */}
+      {/* MENÚ LATERAL SUPERPUESTO */}
       <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
         <SheetContent
           side="left"
-          className="flex w-[min(100%,20rem)] flex-col border-r-0 p-0"
+          className="w-[min(340px,88vw)] max-w-[88vw] overflow-y-auto overflow-x-hidden p-0"
         >
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="bg-[#1a73e8] px-4 py-4 text-white">
+          <div className="flex min-h-full flex-col">
+            <div
+              className="bg-[#1a73e8] px-4 pb-5 text-white sm:px-5"
+              style={{
+                paddingTop: "calc(1.5rem + env(safe-area-inset-top, 0px))",
+              }}
+            >
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white/20 text-lg font-bold">
                   L
