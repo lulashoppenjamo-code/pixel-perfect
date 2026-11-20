@@ -301,36 +301,68 @@ export type Database = {
       }
       customers: {
         Row: {
+          active: boolean
           address: string | null
+          barcode: string | null
           created_at: string
+          discount_type: string | null
           email: string | null
+          end_date: string | null
           id: string
           name: string
           notes: string | null
           phone: string | null
+          school: string | null
+          school_id: string | null
+          start_date: string | null
           updated_at: string
+          whatsapp: string | null
         }
         Insert: {
+          active?: boolean
           address?: string | null
+          barcode?: string | null
           created_at?: string
+          discount_type?: string | null
           email?: string | null
+          end_date?: string | null
           id?: string
           name: string
           notes?: string | null
           phone?: string | null
+          school?: string | null
+          school_id?: string | null
+          start_date?: string | null
           updated_at?: string
+          whatsapp?: string | null
         }
         Update: {
+          active?: boolean
           address?: string | null
+          barcode?: string | null
           created_at?: string
+          discount_type?: string | null
           email?: string | null
+          end_date?: string | null
           id?: string
           name?: string
           notes?: string | null
           phone?: string | null
+          school?: string | null
+          school_id?: string | null
+          start_date?: string | null
           updated_at?: string
+          whatsapp?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "customers_school_id_fkey"
+            columns: ["school_id"]
+            isOneToOne: false
+            referencedRelation: "schools"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       expenses: {
         Row: {
@@ -1144,6 +1176,48 @@ export type Database = {
           },
         ]
       }
+      schools: {
+        Row: {
+          active: boolean
+          contact_name: string | null
+          created_at: string
+          discount_type: string | null
+          end_date: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          start_date: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          contact_name?: string | null
+          created_at?: string
+          discount_type?: string | null
+          end_date?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          start_date?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          contact_name?: string | null
+          created_at?: string
+          discount_type?: string | null
+          end_date?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          start_date?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       settings: {
         Row: {
           branch_id: string | null
@@ -1423,6 +1497,7 @@ export type Database = {
         Args: { _reason?: string; _sale_id: string }
         Returns: string
       }
+      clear_product_catalog: { Args: { _confirmation: string }; Returns: Json }
       close_cash_session: {
         Args: { _closing_amount: number; _session_id: string }
         Returns: {
