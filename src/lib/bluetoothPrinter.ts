@@ -610,6 +610,32 @@ export async function printTicketBluetooth(
   return printQueue;
 }
 
+export async function printTextBluetooth(text: string): Promise<void> {
+  printQueue = printQueue.then(async () => {
+    const connection = await ensurePrinterConnected();
+    await writeInChunks(
+      connection.characteristic,
+      concatBytes(command(0x1b, 0x40), left(), encode(text), encode("\n\n"), cutPaper()),
+    );
+  });
+  return printQueue;
+}
+
+export async function printTestTicket(): Promise<void> {
+  await printTicketBluetooth({
+    companyName: "Lula Shop",
+    folio: "PRUEBA",
+    date: new Date().toLocaleString("es-MX"),
+    paymentMethod: "Prueba de impresión",
+    lines: [],
+    subtotal: 0,
+    tax: 0,
+    discount: 0,
+    total: 0,
+    footer: "Prueba de conexión Bluetooth",
+  }, { copies: 1 }, { openDrawer: false });
+}
+
 export function setBluetoothAutoPrint(enabled: boolean) {
   localStorage.setItem(AUTO_PRINT_KEY, enabled ? "true" : "false");
 }

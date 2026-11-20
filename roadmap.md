@@ -1,5 +1,7 @@
 # Lula Shop OS — roadmap
 
+- [x] Corregir exports Bluetooth, tipos de clientes/POS y parámetros opcionales de pedidos; compilación automática correcta, prueba Bluetooth aprobada, sin publicar.
+
 - [x] Lecturas de inventario/productos desde shared_inventory (inventoryData) y validación de variantes.
 - [x] Escrituras de inventario autorizadas (2026-11-15): RPCs ya usan shared_inventory; bloqueo frontend eliminado. branch_id solo en movimientos.
 

@@ -44,6 +44,7 @@ import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { CreditHistoryDialog } from "@/components/customers/CreditHistoryDialog";
 
 import { supabase } from "@/integrations/supabase/client";
+import type { Database } from "@/integrations/supabase/types";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
@@ -567,7 +568,7 @@ function ClientesPage() {
         schoolId = null;
       }
 
-      const payload: Record<string, string | boolean | null> = {
+      const payload: Database["public"]["Tables"]["customers"]["Insert"] = {
         name: form.name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
@@ -1889,6 +1890,14 @@ function ClientesPage() {
                                     address:
                                       customer.address ??
                                       "",
+                                    barcode: customerCardCode(customer),
+                                    whatsapp: customer.whatsapp ?? "",
+                                    school: customer.school ?? "",
+                                    school_id: customer.school_id ?? "",
+                                    discount_type: customer.discount_type ?? "",
+                                    start_date: customer.start_date ?? "",
+                                    end_date: customer.end_date ?? "",
+                                    active: customer.active !== false,
                                   })
                                 }
                               >

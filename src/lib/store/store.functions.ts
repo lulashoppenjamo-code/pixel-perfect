@@ -274,14 +274,14 @@ export const createStoreOnlineOrder = createServerFn({
       "create_online_order",
       {
         _branch_id: data.branchId,
-        _customer_email: null,
-        _customer_id: null,
+        _customer_email: undefined,
+        _customer_id: undefined,
         _customer_name: customerName,
         _customer_phone: customerPhone,
-        _delivery_address: address || null,
+        _delivery_address: address || undefined,
         _discount: 0,
         _items: orderItems,
-        _notes: notes || null,
+        _notes: notes || undefined,
       },
     );
 

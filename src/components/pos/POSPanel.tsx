@@ -682,10 +682,10 @@ export function POSPanel({
           .select("id, barcode")
           .limit(5000);
         if (!extra.error && Array.isArray(extra.data)) {
-          const map = new Map(
+          const map = new Map<string, string | null>(
             extra.data.map((r: { id: string; barcode?: string | null }) => [
               r.id,
-              r.barcode ?? null,
+              typeof r.barcode === "string" ? r.barcode : null,
             ]),
           );
           for (const row of rows) {
