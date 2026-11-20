@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import {
   createFileRoute,
@@ -34,6 +33,7 @@ import { BluetoothPrinterGlobalButton } from "@/components/BluetoothPrinterGloba
 import {
   ShoppingBag,
   Receipt,
+  Package,
   Boxes,
   Users,
   Truck,
@@ -51,6 +51,7 @@ import {
   BarChart3,
   Crown,
   ChevronLeft,
+  LayoutGrid,
   Store,
 } from "lucide-react";
 
@@ -117,30 +118,21 @@ function ShellLayout() {
   const location = useLocation();
   const router = useRouter();
 
-  /**
-   * Lector global de códigos de barras.
-   * Se conserva el comportamiento original.
-   */
   useEffect(() => {
     const stop = startGlobalBarcodeListener((code) => {
       setPendingBarcode(code);
       dispatchBarcode(code);
-
       if (!location.pathname.startsWith("/caja")) {
         navigate({ to: "/caja" });
       }
     });
-
     return stop;
   }, [navigate, location.pathname]);
 
-  /**
-   * Precarga de rutas.
-   */
   const preloadRoute = (path: string) => {
     void router
       .preloadRoute({
-        to: path as any,
+        to: path as never,
       })
       .catch(() => {});
   };
@@ -277,7 +269,7 @@ function ShellLayout() {
   const goTo = (path: string) => {
     setMoreOpen(false);
     setSidebarOpen(false);
-    navigate({ to: path as any });
+    navigate({ to: path as never });
   };
 
   const openInventory = () => {
@@ -352,7 +344,6 @@ function ShellLayout() {
                     Punto de Venta
                   </p>
                 </div>
-
                 <div className="shrink-0">
                   <InventoryAlerts
                     compact
@@ -420,7 +411,6 @@ function ShellLayout() {
               <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                 Sucursal Activa
               </label>
-
               <select
                 value={branchId ?? ""}
                 onChange={(event) =>
@@ -458,7 +448,7 @@ function ShellLayout() {
                   onPointerDown={() => preloadRoute(item.path)}
                   onClick={() =>
                     navigate({
-                      to: item.path as any,
+                      to: item.path as never,
                     })
                   }
                   className={`flex min-h-11 w-full items-center rounded-lg text-sm font-medium transition-colors ${
@@ -488,19 +478,6 @@ function ShellLayout() {
             sidebarCollapsed ? "space-y-1" : "space-y-2 pt-4"
           }`}
         >
-          {/*
-            Montaje en escritorio del botón Bluetooth:
-            asegura auto-conexión aunque el header móvil (lg:hidden) no esté visible.
-            Un solo responsable: BluetoothPrinterGlobalButton.
-          */}
-          <div
-            className={`hidden lg:flex ${
-              sidebarCollapsed ? "justify-center px-0" : "px-2"
-            }`}
-          >
-            <BluetoothPrinterGlobalButton />
-          </div>
-
           {!sidebarCollapsed && (
             <div className="px-2 py-1">
               <p className="truncate text-sm font-semibold text-[#212121]">
@@ -534,7 +511,7 @@ function ShellLayout() {
 
       {/* CONTENIDO PRINCIPAL */}
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        {/* BARRA SUPERIOR */}
+        {/* BARRA SUPERIOR (Incluye el Botón Global Bluetooth) */}
         <header
           className="pixel-topbar zb-topbar flex min-h-14 shrink-0 items-center gap-2 px-2 sm:gap-3 sm:px-4 lg:hidden"
           style={{
@@ -575,7 +552,6 @@ function ShellLayout() {
 
           <div className="flex shrink-0 items-center gap-1">
             <BluetoothPrinterGlobalButton />
-
             <InventoryAlerts
               compact
               onOpenInventory={openInventory}
@@ -625,7 +601,6 @@ function ShellLayout() {
                 }`}
                 strokeWidth={isActive ? 2.25 : 1.75}
               />
-
               <span className="max-w-[72px] truncate leading-tight">
                 {item.label}
               </span>
@@ -639,10 +614,7 @@ function ShellLayout() {
             onClick={() => setMoreOpen(true)}
             className="flex min-h-[3.5rem] min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 py-1.5 text-[10px] font-semibold text-[#5f6368]"
           >
-            <MoreHorizontal
-              className="h-6 w-6"
-              strokeWidth={1.75}
-            />
+            <MoreHorizontal className="h-6 w-6" strokeWidth={1.75} />
             <span className="leading-tight">Más</span>
           </button>
         )}
@@ -682,7 +654,6 @@ function ShellLayout() {
                 <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                   Sucursal Activa
                 </label>
-
                 <select
                   value={branchId ?? ""}
                   onChange={(event) =>
@@ -727,7 +698,6 @@ function ShellLayout() {
                     }`}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
-
                     <span className="min-w-0 truncate">
                       {item.label}
                     </span>
@@ -740,11 +710,9 @@ function ShellLayout() {
               <p className="truncate text-sm font-semibold text-[#212121]">
                 {user?.email || "Operador"}
               </p>
-
               <p className="mb-3 text-xs capitalize text-[#757575]">
                 {roles[0] || "Sin rol asignado"}
               </p>
-
               <Button
                 onClick={() => signOut()}
                 variant="ghost"
@@ -776,10 +744,7 @@ function ShellLayout() {
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {moreItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = location.pathname.startsWith(
-                  item.path,
-                );
-
+                const isActive = location.pathname.startsWith(item.path);
                 return (
                   <button
                     key={item.path}
@@ -793,13 +758,10 @@ function ShellLayout() {
                     }`}
                   >
                     <Icon className="h-5 w-5" />
-                    <span className="w-full truncate">
-                      {item.label}
-                    </span>
+                    <span className="w-full truncate">{item.label}</span>
                   </button>
                 );
               })}
-
               {moreItems.length === 0 && (
                 <p className="col-span-full py-6 text-center text-sm text-muted-foreground">
                   No hay más opciones disponibles.
