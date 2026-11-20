@@ -206,9 +206,14 @@ function downloadBarcodeLabel(
   price: string,
   barcode: string,
 ): void {
+  /*
+   * Etiqueta compacta estilo sticker (proporción corta).
+   * Misma fuente Arial / Code 128; barras más densas y texto pegado al código.
+   */
   const canvas = document.createElement("canvas");
-  canvas.width = 1200;
-  canvas.height = 600;
+  // Formato corto tipo etiqueta de estante (aprox. 50x30 mm a alta resolución)
+  canvas.width = 900;
+  canvas.height = 480;
 
   const context = canvas.getContext("2d");
 
@@ -223,33 +228,54 @@ function downloadBarcodeLabel(
     throw new Error("No se pudo generar el código de barras.");
   }
 
+  const W = canvas.width;
+  const H = canvas.height;
+  const cx = W / 2;
+
   context.fillStyle = "#ffffff";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  context.fillStyle = "#111111";
+  context.fillRect(0, 0, W, H);
+  context.fillStyle = "#000000";
   context.textAlign = "center";
   context.textBaseline = "middle";
 
-  const safeName = productName.trim() || "Producto";
-  context.font = "bold 48px Arial, sans-serif";
+  const safeName = (productName.trim() || "Producto").toUpperCase();
+  const priceNum = Number(price) || 0;
+  const priceText =
+    priceNum % 1 === 0
+      ? `$${Math.round(priceNum)}`
+      : `$${priceNum.toFixed(2)}`;
 
-  let displayName = safeName;
+  // Partir nombre en 2 líneas si es largo (como MAQUILLAJE / MAESTRO TOUCH $65)
+  const words = safeName.split(/\s+/).filter(Boolean);
+  let line1 = safeName;
+  let line2 = "";
 
-  while (
-    context.measureText(displayName).width > 1080 &&
-    displayName.length > 4
-  ) {
-    displayName = `${displayName.slice(0, -4)}…`;
+  if (words.length >= 2) {
+    const mid = Math.ceil(words.length / 2);
+    line1 = words.slice(0, mid).join(" ");
+    line2 = words.slice(mid).join(" ");
   }
 
-  context.fillText(displayName, 600, 90, 1080);
+  // Línea 2 incluye el precio al estilo del ejemplo corto
+  const line2WithPrice = line2
+    ? `${line2} ${priceText}`
+    : priceText;
 
-  context.font = "bold 64px Arial, sans-serif";
-  context.fillText(
-    money(Number(price) || 0),
-    600,
-    180,
-    1080,
-  );
+  const maxTextWidth = W - 80;
+
+  context.font = "bold 36px Arial, sans-serif";
+  let l1 = line1;
+  while (context.measureText(l1).width > maxTextWidth && l1.length > 4) {
+    l1 = `${l1.slice(0, -2)}…`;
+  }
+  context.fillText(l1, cx, 48);
+
+  context.font = "bold 34px Arial, sans-serif";
+  let l2 = line2WithPrice;
+  while (context.measureText(l2).width > maxTextWidth && l2.length > 4) {
+    l2 = `${l2.slice(0, -2)}…`;
+  }
+  context.fillText(l2, cx, 92);
 
   const totalModules = patterns.reduce(
     (total, pattern) =>
@@ -261,14 +287,15 @@ function downloadBarcodeLabel(
     0,
   );
 
-  const left = 70;
-  const right = 1130;
+  // Código más corto: márgenes laterales amplios → barras más gruesas y compactas
+  const sidePad = Math.round(W * 0.14);
+  const left = sidePad;
+  const right = W - sidePad;
   const barWidth = (right - left) / totalModules;
-  const barTop = 250;
-  const barHeight = 210;
+  const barTop = 130;
+  const barHeight = 220;
 
   let x = left;
-
   context.fillStyle = "#000000";
 
   for (const pattern of patterns) {
@@ -278,21 +305,17 @@ function downloadBarcodeLabel(
       const width = Number(pattern[i]) * barWidth;
 
       if (i % 2 === 0) {
-        context.fillRect(
-          x,
-          barTop,
-          Math.max(width, 1),
-          barHeight,
-        );
+        context.fillRect(x, barTop, Math.max(width, 1), barHeight);
       }
 
       x += width;
     }
   }
 
-  context.font = "32px monospace";
-  context.fillStyle = "#111111";
-  context.fillText(barcode, 600, 510, 1080);
+  // Número pegado debajo del código (formato corto)
+  context.font = "28px Arial, sans-serif";
+  context.fillStyle = "#000000";
+  context.fillText(barcode, cx, barTop + barHeight + 36);
 
   canvas.toBlob((blob) => {
     if (!blob) {
