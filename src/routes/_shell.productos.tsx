@@ -207,34 +207,31 @@ function downloadBarcodeLabel(
   barcode: string,
 ): void {
   /*
-   * Proporciones exactas tomadas de la etiqueta de referencia (600×352):
-   * - Zona blanca ≈ 457×352
-   * - Texto superior ~110 px
-   * - Barras: alto ≈ 52% del lienzo, ancho ≈ 92% (más alto, menos largo)
-   * - Número pegado debajo
-   * HD = 2× la referencia → 914×704
+   * Tamaño EXACTO de la etiqueta de referencia (1002625553):
+   *   lienzo blanco 457×352 px
+   *   texto L1 ~y=32  alto glifo ~24px
+   *   texto L2 ~y=77  alto glifo ~27px
+   *   barras y=112..298  alto=187  x=18..437  ancho=420
+   *   número ~y=320  alto ~24px
    */
   const canvas = document.createElement("canvas");
-  canvas.width = 914;
-  canvas.height = 704;
+  canvas.width = 457;
+  canvas.height = 352;
 
   const context = canvas.getContext("2d");
-
   if (!context) {
     throw new Error("No se pudo preparar la etiqueta.");
   }
 
   const values = getCode128Values(barcode);
   const patterns = values.map((value) => CODE128_PATTERNS[value]);
-
   if (patterns.some((pattern) => !pattern)) {
     throw new Error("No se pudo generar el código de barras.");
   }
 
-  const W = canvas.width;
-  const H = canvas.height;
+  const W = 457;
+  const H = 352;
   const cx = W / 2;
-  const scale = 2; // HD respecto a la etiqueta de 457×352
 
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, W, H);
@@ -259,44 +256,37 @@ function downloadBarcodeLabel(
   }
   const line2WithPrice = line2 ? `${line2} ${priceText}` : priceText;
 
-  const maxTextWidth = W - 80 * scale;
-
-  // Texto: mismas posiciones relativas que la referencia
-  context.font = `bold ${22 * scale}px Arial, sans-serif`;
+  // Letras: mismo orden de tamaño que la referencia (~24–26 px)
+  context.font = "bold 24px Arial, sans-serif";
   let l1 = line1;
-  while (context.measureText(l1).width > maxTextWidth && l1.length > 4) {
+  while (context.measureText(l1).width > 420 && l1.length > 4) {
     l1 = `${l1.slice(0, -2)}…`;
   }
-  context.fillText(l1, cx, 30 * scale);
+  context.fillText(l1, cx, 32);
 
-  context.font = `bold ${20 * scale}px Arial, sans-serif`;
+  context.font = "bold 26px Arial, sans-serif";
   let l2 = line2WithPrice;
-  while (context.measureText(l2).width > maxTextWidth && l2.length > 4) {
+  while (context.measureText(l2).width > 420 && l2.length > 4) {
     l2 = `${l2.slice(0, -2)}…`;
   }
-  context.fillText(l2, cx, 80 * scale);
+  context.fillText(l2, cx, 77);
 
   const totalModules = patterns.reduce(
     (total, pattern) =>
       total +
-      [...(pattern ?? "")].reduce(
-        (sum, digit) => sum + Number(digit),
-        0,
-      ),
+      [...(pattern ?? "")].reduce((sum, digit) => sum + Number(digit), 0),
     0,
   );
 
-  // Barras: margen lateral ~4%, alto ~183px en referencia → 366 en HD
-  const sidePad = Math.round(18 * scale);
-  const left = sidePad;
-  const right = W - sidePad;
+  // Código de barras: medidas exactas de la referencia
+  const left = 18;
+  const right = 437;
   const barWidth = (right - left) / totalModules;
-  const barTop = Math.round(115 * scale);
-  const barHeight = Math.round(183 * scale);
+  const barTop = 112;
+  const barHeight = 187;
 
   let x = left;
   context.fillStyle = "#000000";
-
   for (const pattern of patterns) {
     if (!pattern) continue;
     for (let i = 0; i < pattern.length; i++) {
@@ -308,30 +298,28 @@ function downloadBarcodeLabel(
     }
   }
 
-  // Número bajo el código (referencia ~ y=320)
-  context.font = `${16 * scale}px Arial, sans-serif`;
+  // Número: mismo tamaño aproximado que la referencia
+  context.font = "20px Arial, sans-serif";
   context.fillStyle = "#000000";
-  context.fillText(barcode, cx, Math.round(320 * scale));
+  context.fillText(barcode, cx, 320);
 
   canvas.toBlob((blob) => {
     if (!blob) {
       toast.error("No se pudo crear el archivo PNG.");
       return;
     }
-
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
-
     anchor.href = url;
     anchor.download = `etiqueta-${barcode}.png`;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast.success("Etiqueta PNG descargada.");
   }, "image/png");
 }
+
 
 
 /*
