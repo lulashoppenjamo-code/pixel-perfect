@@ -5,7 +5,7 @@
  * - Catálogo responsive.
  * - Inventario oficial: shared_inventory.
  * - Escáner con BarcodeDetector cuando está disponible.
- * - Etiquetas PNG HD con código de barras Code 128.
+ * - Etiquetas PNG HD 600×352 (Code 128 Set C numérico) con franja negra.
  * - Sin nuevas dependencias, tablas ni migraciones.
  */
 
@@ -138,8 +138,9 @@ type ProductRow = {
 };
 
 /*
- * Patrones oficiales de módulos Code 128.
- * El generador de etiquetas usa Code Set B.
+ * Patrones oficiales de módulos Code 128 (valores 0–106).
+ * Etiquetas: Code 128 Set C para códigos numéricos de longitud par
+ * (p. ej. 10 dígitos); fallback a Set B en el resto de casos.
  */
 const CODE128_PATTERNS = [
   "212222", "222122", "222221", "121223", "121322",
@@ -166,6 +167,11 @@ const CODE128_PATTERNS = [
   "211232", "2331112",
 ];
 
+/**
+ * Genera la secuencia de valores Code 128 (start + datos + checksum + stop).
+ * - Códigos exclusivamente numéricos de longitud par → Code Set C (105).
+ * - Cualquier otro texto → Code Set B (104).
+ */
 function getCode128Values(value: string): number[] {
   const text = value.trim();
 
@@ -173,7 +179,25 @@ function getCode128Values(value: string): number[] {
     throw new Error("El producto necesita un código de barras.");
   }
 
-  // Code Set B codifica caracteres ASCII imprimibles (32–126).
+  // Set C: pares de dígitos (0–99). Ideal para códigos de 10 dígitos.
+  if (/^\d+$/.test(text) && text.length % 2 === 0) {
+    const values: number[] = [105]; // Start C
+
+    for (let i = 0; i < text.length; i += 2) {
+      values.push(parseInt(text.slice(i, i + 2), 10));
+    }
+
+    let checksum = 105;
+    for (let i = 1; i < values.length; i++) {
+      checksum += values[i]! * i;
+    }
+    values.push(checksum % 103);
+    values.push(106); // Stop
+
+    return values;
+  }
+
+  // Set B: caracteres ASCII imprimibles (32–126).
   for (let i = 0; i < text.length; i++) {
     const code = text.charCodeAt(i);
     if (code < 32 || code > 126) {
@@ -183,40 +207,47 @@ function getCode128Values(value: string): number[] {
     }
   }
 
-  const values = [104];
+  const values: number[] = [104]; // Start B
 
   for (let i = 0; i < text.length; i++) {
     values.push(text.charCodeAt(i) - 32);
   }
 
   let checksum = 104;
-
   for (let i = 1; i < values.length; i++) {
     checksum += values[i]! * i;
   }
-
   values.push(checksum % 103);
-  values.push(106);
+  values.push(106); // Stop
 
   return values;
 }
 
+/**
+ * Genera y descarga la etiqueta PNG HD (600 × 352).
+ * Diseño de referencia (El Gurú del Código):
+ *   - Franja negra vertical izquierda de 71 px
+ *   - Fondo blanco en el resto
+ *   - Nombre arriba, precio debajo
+ *   - Código de barras Code 128 (Set C si es numérico par)
+ *   - Número de 10 dígitos debajo de las barras
+ *   - Barras compactas, nítidas y con zona de silencio
+ */
 function downloadBarcodeLabel(
   productName: string,
   price: string,
   barcode: string,
 ): void {
-  /*
-   * Tamaño EXACTO de la etiqueta de referencia (1002625553):
-   *   lienzo blanco 457×352 px
-   *   texto L1 ~y=32  alto glifo ~24px
-   *   texto L2 ~y=77  alto glifo ~27px
-   *   barras y=112..298  alto=187  x=18..437  ancho=420
-   *   número ~y=320  alto ~24px
-   */
+  const W = 600;
+  const H = 352;
+  const BLACK_STRIP = 71;
+  const CONTENT_LEFT = BLACK_STRIP;
+  const CONTENT_WIDTH = W - BLACK_STRIP;
+  const cx = CONTENT_LEFT + CONTENT_WIDTH / 2;
+
   const canvas = document.createElement("canvas");
-  canvas.width = 457;
-  canvas.height = 352;
+  canvas.width = W;
+  canvas.height = H;
 
   const context = canvas.getContext("2d");
   if (!context) {
@@ -229,12 +260,12 @@ function downloadBarcodeLabel(
     throw new Error("No se pudo generar el código de barras.");
   }
 
-  const W = 457;
-  const H = 352;
-  const cx = W / 2;
-
+  // Fondo blanco + franja negra izquierda
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, W, H);
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, BLACK_STRIP, H);
+
   context.fillStyle = "#000000";
   context.textAlign = "center";
   context.textBaseline = "middle";
@@ -246,31 +277,20 @@ function downloadBarcodeLabel(
       ? `$${Math.round(priceNum)}`
       : `$${priceNum.toFixed(2)}`;
 
-  const words = safeName.split(/\s+/).filter(Boolean);
-  let line1 = safeName;
-  let line2 = "";
-  if (words.length >= 2) {
-    const mid = Math.ceil(words.length / 2);
-    line1 = words.slice(0, mid).join(" ");
-    line2 = words.slice(mid).join(" ");
-  }
-  const line2WithPrice = line2 ? `${line2} ${priceText}` : priceText;
-
-  // Letras: mismo orden de tamaño que la referencia (~24–26 px)
+  // Nombre (parte superior) — ancho útil dentro del área blanca
+  const maxTextWidth = CONTENT_WIDTH - 40;
   context.font = "bold 24px Arial, sans-serif";
-  let l1 = line1;
-  while (context.measureText(l1).width > 420 && l1.length > 4) {
-    l1 = `${l1.slice(0, -2)}…`;
+  let nameLine = safeName;
+  while (context.measureText(nameLine).width > maxTextWidth && nameLine.length > 4) {
+    nameLine = `${nameLine.slice(0, -2)}…`;
   }
-  context.fillText(l1, cx, 32);
+  context.fillText(nameLine, cx, 36);
 
-  context.font = "bold 26px Arial, sans-serif";
-  let l2 = line2WithPrice;
-  while (context.measureText(l2).width > 420 && l2.length > 4) {
-    l2 = `${l2.slice(0, -2)}…`;
-  }
-  context.fillText(l2, cx, 77);
+  // Precio debajo del nombre
+  context.font = "bold 28px Arial, sans-serif";
+  context.fillText(priceText, cx, 72);
 
+  // Módulos totales del código
   const totalModules = patterns.reduce(
     (total, pattern) =>
       total +
@@ -278,30 +298,49 @@ function downloadBarcodeLabel(
     0,
   );
 
-  // Código de barras: medidas exactas de la referencia
-  const left = 18;
-  const right = 437;
-  const barWidth = (right - left) / totalModules;
-  const barTop = 112;
-  const barHeight = 187;
+  /*
+   * Barras: centradas en el área blanca, con zona de silencio ≥ 10 módulos
+   * a cada lado y ancho de módulo suficiente para legibilidad del escáner.
+   * Alto generoso, barras nítidas (sin anti-aliasing forzado).
+   */
+  const quietModules = 10;
+  const usableModules = totalModules + quietModules * 2;
+  // Ancho disponible para el código (deja margen lateral)
+  const barAreaLeft = CONTENT_LEFT + 24;
+  const barAreaRight = W - 24;
+  const barAreaWidth = barAreaRight - barAreaLeft;
+  const moduleWidth = barAreaWidth / usableModules;
+  // No reducir excesivamente el ancho de las barras
+  const barWidth = Math.max(moduleWidth, 1.15);
+  const drawnWidth = usableModules * barWidth;
+  const barLeft = CONTENT_LEFT + (CONTENT_WIDTH - drawnWidth) / 2 + quietModules * barWidth;
+  const barTop = 100;
+  const barHeight = 200;
 
-  let x = left;
+  // Desactivar suavizado para barras nítidas
+  context.imageSmoothingEnabled = false;
+
+  let x = barLeft;
   context.fillStyle = "#000000";
   for (const pattern of patterns) {
     if (!pattern) continue;
     for (let i = 0; i < pattern.length; i++) {
       const width = Number(pattern[i]) * barWidth;
       if (i % 2 === 0) {
-        context.fillRect(x, barTop, Math.max(width, 1), barHeight);
+        // Relleno entero para evitar bordes difusos
+        const rx = Math.round(x);
+        const rw = Math.max(Math.round(width), 1);
+        context.fillRect(rx, barTop, rw, barHeight);
       }
       x += width;
     }
   }
 
-  // Número: mismo tamaño aproximado que la referencia
-  context.font = "20px Arial, sans-serif";
+  // Número debajo de las barras (exactamente el valor codificado)
+  context.font = "22px Arial, sans-serif";
   context.fillStyle = "#000000";
-  context.fillText(barcode, cx, 320);
+  context.imageSmoothingEnabled = true;
+  context.fillText(barcode, cx, 328);
 
   canvas.toBlob((blob) => {
     if (!blob) {
@@ -1981,8 +2020,9 @@ export function ProductosPage({
                     </Button>
 
                     <p className="text-[10px] text-[#757575]">
-                      La etiqueta usa Code 128. El escáner depende del soporte
-                      del navegador y de los permisos de cámara.
+                      Etiqueta 600×352 (Code 128 Set C en códigos numéricos).
+                      El escáner depende del soporte del navegador y de los
+                      permisos de cámara.
                     </p>
                   </div>
                 </div>
