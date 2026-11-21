@@ -5,7 +5,7 @@
  * - Catálogo responsive.
  * - Inventario oficial: shared_inventory.
  * - Escáner con BarcodeDetector cuando está disponible.
- * - Etiquetas PNG HD 600×352 (Code 128 Set C numérico) con franja negra.
+ * - Etiquetas PNG HD (franjas negras ambos lados, Code 128 Set C, texto auto-ajustado).
  * - Sin nuevas dependencias, tablas ni migraciones.
  */
 
@@ -224,26 +224,31 @@ function getCode128Values(value: string): number[] {
 }
 
 /**
- * Genera y descarga la etiqueta PNG HD (600 × 352).
- * Diseño de referencia (El Gurú del Código):
- *   - Franja negra vertical izquierda de 71 px
- *   - Fondo blanco en el resto
- *   - Nombre arriba, precio debajo
- *   - Código de barras Code 128 (Set C si es numérico par)
- *   - Número de 10 dígitos debajo de las barras
- *   - Barras compactas, nítidas y con zona de silencio
+ * Genera y descarga la etiqueta PNG HD (1200 × 704 = 2× de 600 × 352).
+ * Diseño tipo El Gurú del Código / impresora térmica:
+ *   - Franjas negras verticales en AMBOS lados (71 px lógicos c/u)
+ *   - Área blanca central con nombre, precio, barras y número
+ *   - Code 128 Set C para códigos numéricos de longitud par
+ *   - Texto que se reduce automáticamente para no cortarse
+ *   - Barras nítidas, zonas de silencio, listo para térmica
  */
 function downloadBarcodeLabel(
   productName: string,
   price: string,
   barcode: string,
 ): void {
-  const W = 600;
-  const H = 352;
-  const BLACK_STRIP = 71;
-  const CONTENT_LEFT = BLACK_STRIP;
-  const CONTENT_WIDTH = W - BLACK_STRIP;
-  const cx = CONTENT_LEFT + CONTENT_WIDTH / 2;
+  // Unidades lógicas de diseño (referencia 600 × 352)
+  const LOGIC_W = 600;
+  const LOGIC_H = 352;
+  const BLACK_STRIP = 71; // cada lado
+  const SCALE = 2; // 2× → PNG HD 1200 × 704 (mejor para térmica)
+
+  const W = LOGIC_W * SCALE;
+  const H = LOGIC_H * SCALE;
+  const strip = BLACK_STRIP * SCALE;
+  const contentLeft = strip;
+  const contentWidth = W - strip * 2;
+  const cx = contentLeft + contentWidth / 2;
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -260,11 +265,12 @@ function downloadBarcodeLabel(
     throw new Error("No se pudo generar el código de barras.");
   }
 
-  // Fondo blanco + franja negra izquierda
+  // Fondo blanco + franjas negras izquierda y derecha
   context.fillStyle = "#ffffff";
   context.fillRect(0, 0, W, H);
   context.fillStyle = "#000000";
-  context.fillRect(0, 0, BLACK_STRIP, H);
+  context.fillRect(0, 0, strip, H);
+  context.fillRect(W - strip, 0, strip, H);
 
   context.fillStyle = "#000000";
   context.textAlign = "center";
@@ -277,18 +283,41 @@ function downloadBarcodeLabel(
       ? `$${Math.round(priceNum)}`
       : `$${priceNum.toFixed(2)}`;
 
-  // Nombre (parte superior) — ancho útil dentro del área blanca
-  const maxTextWidth = CONTENT_WIDTH - 40;
-  context.font = "bold 24px Arial, sans-serif";
-  let nameLine = safeName;
-  while (context.measureText(nameLine).width > maxTextWidth && nameLine.length > 4) {
-    nameLine = `${nameLine.slice(0, -2)}…`;
-  }
-  context.fillText(nameLine, cx, 36);
+  // Margen interno del texto respecto a las franjas
+  const maxTextWidth = contentWidth - 36 * SCALE;
+
+  /**
+   * Ajusta el tamaño de fuente (y opcionalmente trunca con …)
+   * para que el texto quepa completo dentro del área blanca.
+   */
+  const fitText = (
+    raw: string,
+    preferredPx: number,
+    minPx: number,
+  ): { text: string; fontPx: number } => {
+    let fontPx = preferredPx;
+    let text = raw;
+    context.font = `bold ${fontPx}px Arial, sans-serif`;
+    while (context.measureText(text).width > maxTextWidth && fontPx > minPx) {
+      fontPx -= 1 * SCALE;
+      context.font = `bold ${fontPx}px Arial, sans-serif`;
+    }
+    // Si aún no cabe, truncar con elipsis manteniendo el tamaño actual
+    while (context.measureText(text).width > maxTextWidth && text.length > 4) {
+      text = `${text.slice(0, -2)}…`;
+    }
+    return { text, fontPx };
+  };
+
+  // Nombre (parte superior)
+  const nameFit = fitText(safeName, 24 * SCALE, 14 * SCALE);
+  context.font = `bold ${nameFit.fontPx}px Arial, sans-serif`;
+  context.fillText(nameFit.text, cx, 36 * SCALE);
 
   // Precio debajo del nombre
-  context.font = "bold 28px Arial, sans-serif";
-  context.fillText(priceText, cx, 72);
+  const priceFit = fitText(priceText, 28 * SCALE, 16 * SCALE);
+  context.font = `bold ${priceFit.fontPx}px Arial, sans-serif`;
+  context.fillText(priceFit.text, cx, 72 * SCALE);
 
   // Módulos totales del código
   const totalModules = patterns.reduce(
@@ -299,25 +328,23 @@ function downloadBarcodeLabel(
   );
 
   /*
-   * Barras: centradas en el área blanca, con zona de silencio ≥ 10 módulos
-   * a cada lado y ancho de módulo suficiente para legibilidad del escáner.
-   * Alto generoso, barras nítidas (sin anti-aliasing forzado).
+   * Barras centradas entre las dos franjas, con quiet zone ≥ 10 módulos
+   * y ancho de módulo suficiente para escáner / térmica.
    */
   const quietModules = 10;
   const usableModules = totalModules + quietModules * 2;
-  // Ancho disponible para el código (deja margen lateral)
-  const barAreaLeft = CONTENT_LEFT + 24;
-  const barAreaRight = W - 24;
-  const barAreaWidth = barAreaRight - barAreaLeft;
-  const moduleWidth = barAreaWidth / usableModules;
+  const barAreaPadding = 20 * SCALE;
+  const barAreaWidth = contentWidth - barAreaPadding * 2;
+  let moduleWidth = barAreaWidth / usableModules;
   // No reducir excesivamente el ancho de las barras
-  const barWidth = Math.max(moduleWidth, 1.15);
-  const drawnWidth = usableModules * barWidth;
-  const barLeft = CONTENT_LEFT + (CONTENT_WIDTH - drawnWidth) / 2 + quietModules * barWidth;
-  const barTop = 100;
-  const barHeight = 200;
+  moduleWidth = Math.max(moduleWidth, 1.15 * SCALE);
+  const drawnWidth = usableModules * moduleWidth;
+  const barLeft =
+    contentLeft + (contentWidth - drawnWidth) / 2 + quietModules * moduleWidth;
+  const barTop = 100 * SCALE;
+  const barHeight = 200 * SCALE;
 
-  // Desactivar suavizado para barras nítidas
+  // Barras nítidas (impresora térmica)
   context.imageSmoothingEnabled = false;
 
   let x = barLeft;
@@ -325,9 +352,8 @@ function downloadBarcodeLabel(
   for (const pattern of patterns) {
     if (!pattern) continue;
     for (let i = 0; i < pattern.length; i++) {
-      const width = Number(pattern[i]) * barWidth;
+      const width = Number(pattern[i]) * moduleWidth;
       if (i % 2 === 0) {
-        // Relleno entero para evitar bordes difusos
         const rx = Math.round(x);
         const rw = Math.max(Math.round(width), 1);
         context.fillRect(rx, barTop, rw, barHeight);
@@ -336,11 +362,20 @@ function downloadBarcodeLabel(
     }
   }
 
-  // Número debajo de las barras (exactamente el valor codificado)
-  context.font = "22px Arial, sans-serif";
+  // Número debajo de las barras
+  const numFont = 22 * SCALE;
+  context.font = `${numFont}px Arial, sans-serif`;
   context.fillStyle = "#000000";
   context.imageSmoothingEnabled = true;
-  context.fillText(barcode, cx, 328);
+  // Ajuste por si el número fuera muy largo (no debería con 10 dígitos)
+  let numText = barcode;
+  while (
+    context.measureText(numText).width > maxTextWidth &&
+    numText.length > 4
+  ) {
+    numText = `${numText.slice(0, -2)}…`;
+  }
+  context.fillText(numText, cx, 328 * SCALE);
 
   canvas.toBlob((blob) => {
     if (!blob) {
@@ -355,7 +390,7 @@ function downloadBarcodeLabel(
     anchor.click();
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-    toast.success("Etiqueta PNG descargada.");
+    toast.success("Etiqueta PNG HD descargada.");
   }, "image/png");
 }
 
@@ -2020,9 +2055,8 @@ export function ProductosPage({
                     </Button>
 
                     <p className="text-[10px] text-[#757575]">
-                      Etiqueta 600×352 (Code 128 Set C en códigos numéricos).
-                      El escáner depende del soporte del navegador y de los
-                      permisos de cámara.
+                      Etiqueta HD con franjas negras a ambos lados (Code 128 Set C).
+                      El texto se ajusta solo para no cortarse. Lista para térmica.
                     </p>
                   </div>
                 </div>
