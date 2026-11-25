@@ -1419,7 +1419,7 @@ export function ProductosPage({
       const { error } = await supabase.rpc("adjust_stock", {
         _branch_id: branchId,
         _product_id: productId,
-        _variant_id: variantId ?? null,
+        ...(variantId ? { _variant_id: variantId } : {}),
         _quantity: signed,
         _notes:
           (params?.notes ?? adjustNotes).trim() ||
@@ -2515,7 +2515,7 @@ export function ProductosPage({
                                   !adjustQty ||
                                   Number(adjustQty) <= 0
                                 }
-                                onClick={() => adjustProductStock.mutate()}
+                                onClick={() => adjustProductStock.mutate(undefined)}
                               >
                                 {adjustProductStock.isPending
                                   ? "Aplicando…"
