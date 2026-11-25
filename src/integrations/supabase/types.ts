@@ -132,6 +132,7 @@ export type Database = {
           closed_at: string | null
           closed_by: string | null
           closing_amount: number | null
+          closing_denominations: Json | null
           created_at: string
           difference: number | null
           expected_amount: number | null
@@ -147,6 +148,7 @@ export type Database = {
           closed_at?: string | null
           closed_by?: string | null
           closing_amount?: number | null
+          closing_denominations?: Json | null
           created_at?: string
           difference?: number | null
           expected_amount?: number | null
@@ -162,6 +164,7 @@ export type Database = {
           closed_at?: string | null
           closed_by?: string | null
           closing_amount?: number | null
+          closing_denominations?: Json | null
           created_at?: string
           difference?: number | null
           expected_amount?: number | null
@@ -1505,6 +1508,7 @@ export type Database = {
           closed_at: string | null
           closed_by: string | null
           closing_amount: number | null
+          closing_denominations: Json | null
           created_at: string
           difference: number | null
           expected_amount: number | null

@@ -24,7 +24,7 @@
  * IMPORTANTE:
  * El inventario sigue siendo compartido entre sucursales.
  * Caja sí permanece separada por sucursal.
- * No se modifican RPCs ni tablas: se reutiliza open + close_cash_session.
+ * Persiste closing_denominations en cash_sessions y cierra mediante close_cash_session.
  */
 
 import { useState } from "react";
@@ -141,31 +141,44 @@ type ArqueoPrintOpts = {
   }[];
 };
 
-const DENOM_STORAGE_PREFIX = "lula-cash-denoms:";
-
-function saveDenomCounts(sessionId: string, counts: Record<string, string>) {
-  try {
-    localStorage.setItem(
-      `${DENOM_STORAGE_PREFIX}${sessionId}`,
-      JSON.stringify(counts),
-    );
-  } catch {
-    /* ignore quota */
+function parseDenomCounts(raw: unknown): Record<string, string> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const src = raw as Record<string, unknown>;
+  const result = emptyDenomCounts();
+  let hasAny = false;
+  for (const d of DENOMINATIONS) {
+    const key = String(d.value);
+    const val = src[key];
+    if (val === undefined || val === null || val === "") continue;
+    const num = Number(val);
+    if (Number.isFinite(num) && num > 0) {
+      result[key] = String(num);
+      hasAny = true;
+    }
   }
+  return hasAny ? result : null;
 }
 
-function loadDenomCounts(sessionId: string): Record<string, string> | null {
-  try {
-    const raw = localStorage.getItem(`${DENOM_STORAGE_PREFIX}${sessionId}`);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    return parsed && typeof parsed === "object" ? parsed : null;
-  } catch {
-    return null;
+function serializeDenomCounts(
+  counts: Record<string, string>,
+): Record<string, number> | null {
+  const out: Record<string, number> = {};
+  let hasAny = false;
+  for (const d of DENOMINATIONS) {
+    const key = String(d.value);
+    const num = Number(counts[key] || 0);
+    if (Number.isFinite(num) && num > 0) {
+      out[key] = num;
+      hasAny = true;
+    }
   }
+  return hasAny ? out : null;
 }
 
-function denomLinesFromCounts(counts: Record<string, string>): DenomLine[] {
+function denomLinesFromCounts(
+  counts: Record<string, string> | null | undefined,
+): DenomLine[] {
+  if (!counts) return [];
   const lines: DenomLine[] = [];
   for (const d of DENOMINATIONS) {
     const qty = Number(counts[String(d.value)] || 0);
@@ -479,18 +492,25 @@ async function loadSessionPrintData(sessionId: string) {
       .select("total")
       .eq("cash_session_id", sessionId)
       .eq("payment_method", "cash")
-      .in("status", ["completed", "partially_refunded"]),
+      .in("status", ["completed", "partially_refunded", "refunded"]),
     supabase
       .from("sales")
       .select("cash_received")
       .eq("cash_session_id", sessionId)
       .eq("payment_method", "mixed")
-      .in("status", ["completed", "partially_refunded"]),
+      .in("status", ["completed", "partially_refunded", "refunded"]),
     supabase
       .from("expenses")
       .select("amount")
-      .eq("cash_session_id", sessionId),
+      .eq("cash_session_id", sessionId)
+      .eq("payment_method", "cash"),
   ]);
+
+  for (const res of [mvRes, cashRes, mixedRes, expRes]) {
+    if (res.error) {
+      throw res.error;
+    }
+  }
 
   const movements = mvRes.data ?? [];
   const deposits = movements
@@ -588,6 +608,7 @@ export function CashDrawerPanel({
     expected_amount: number | null;
     closing_amount: number | null;
     difference: number | null;
+    closing_denominations?: unknown;
   }) => {
     try {
       setPrintingClosedId(closedSession.id);
@@ -595,7 +616,7 @@ export function CashDrawerPanel({
         loadSessionPrintData(closedSession.id),
         resolveProfileName(closedSession.opened_by),
       ]);
-      const savedDenoms = loadDenomCounts(closedSession.id);
+      const savedDenoms = parseDenomCounts(closedSession.closing_denominations);
       openTicketPreview(
         {
           branchLabel,
@@ -610,12 +631,15 @@ export function CashDrawerPanel({
           cashExpenses: detail.cashExpenses,
           expected: Number(
             closedSession.expected_amount ??
-              Number(closedSession.opening_amount ?? 0) +
-                detail.cashSales +
-                detail.mixedCash +
-                detail.deposits -
-                detail.withdrawals -
-                detail.cashExpenses,
+              Math.round(
+                (Number(closedSession.opening_amount ?? 0) +
+                  detail.cashSales +
+                  detail.mixedCash +
+                  detail.deposits -
+                  detail.withdrawals -
+                  detail.cashExpenses) *
+                  100,
+              ) / 100,
           ),
           denominations: savedDenoms
             ? denomLinesFromCounts(savedDenoms)
@@ -816,12 +840,15 @@ export function CashDrawerPanel({
       );
 
       const expected =
-        Number(session!.opening_amount ?? 0) +
-        cashSales +
-        mixedCash +
-        deposits -
-        withdrawals -
-        cashExpenses;
+        Math.round(
+          (Number(session!.opening_amount ?? 0) +
+            cashSales +
+            mixedCash +
+            deposits -
+            withdrawals -
+            cashExpenses) *
+            100,
+        ) / 100;
 
       return {
         cashSales,
@@ -1022,8 +1049,17 @@ export function CashDrawerPanel({
         );
       }
 
-      // Guardar desglose de billetes/monedas del cuadre (local, por sesión)
-      saveDenomCounts(session.id, denomCounts);
+      // Persistir desglose de billetes/monedas en la sesión antes de cerrar
+      const serializedDenoms = serializeDenomCounts(denomCounts);
+      const { error: denomErr } = await supabase
+        .from("cash_sessions")
+        .update({ closing_denominations: serializedDenoms })
+        .eq("id", session.id)
+        .eq("status", "open");
+
+      if (denomErr) {
+        throw denomErr;
+      }
 
       const { error } =
         await supabase.rpc(
@@ -1044,7 +1080,7 @@ export function CashDrawerPanel({
       } = await supabase
         .from("cash_sessions")
         .select(
-          "id, opened_at, closed_at, opened_by, opening_amount, expected_amount, closing_amount, difference",
+          "id, opened_at, closed_at, opened_by, opening_amount, expected_amount, closing_amount, difference, closing_denominations",
         )
         .eq("id", session.id)
         .maybeSingle();
@@ -1080,7 +1116,9 @@ export function CashDrawerPanel({
       if (result?.printAfter && result.sessionSnapshot) {
         const sess = result.sessionSnapshot;
         const openedByName = await resolveProfileName(sess.opened_by);
-        const denoms = denomLinesFromCounts(result.denomSnapshot);
+        const persistedDenoms =
+          parseDenomCounts(row?.closing_denominations) ?? result.denomSnapshot;
+        const denoms = denomLinesFromCounts(persistedDenoms);
         openTicketPreview(
           {
             branchLabel,
@@ -1216,7 +1254,7 @@ export function CashDrawerPanel({
                     const openedByName = await resolveProfileName(
                       session.opened_by,
                     );
-                    const saved = loadDenomCounts(session.id);
+                    const saved = parseDenomCounts(session.closing_denominations);
                     openTicketPreview(
                       {
                         branchLabel,
@@ -1258,7 +1296,7 @@ export function CashDrawerPanel({
                 className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d] sm:w-auto"
                 onClick={() => {
                   if (session?.id) {
-                    const saved = loadDenomCounts(session.id);
+                    const saved = parseDenomCounts(session.closing_denominations);
                     if (saved) {
                       setDenomCounts(saved);
                       setCounted(String(sumDenominations(saved)));
@@ -1744,9 +1782,6 @@ export function CashDrawerPanel({
                         setCounted(
                           String(sumDenominations(next)),
                         );
-                        if (session?.id) {
-                          saveDenomCounts(session.id, next);
-                        }
                       }}
                       placeholder="0"
                       className="mt-1 h-9 rounded-lg text-sm"
