@@ -8,6 +8,13 @@
       "when": 1792559662264,
       "tag": "0000_product_images_storage_policies",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795644492629,
+      "tag": "0001_cash_session_denominations_and_close_rpc",
+      "breakpoints": true
     }
   ]
 }
