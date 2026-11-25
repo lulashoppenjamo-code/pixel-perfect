@@ -1387,29 +1387,43 @@ export function ProductosPage({
 
 
   const adjustProductStock = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: {
+      productId?: string;
+      variantId?: string | null;
+      quantity?: number;
+      direction?: "in" | "out";
+      notes?: string;
+    }) => {
       if (!canAdjustStock) {
         throw new Error("Solo un administrador puede ajustar existencias.");
       }
       if (!branchId) {
         throw new Error("Selecciona una sucursal activa antes de ajustar.");
       }
-      if (!form.id) {
+      const productId = params?.productId ?? form.id;
+      if (!productId) {
         throw new Error("Guarda el producto antes de ajustar stock.");
       }
-      const quantity = Math.abs(Number(adjustQty));
+      const direction = params?.direction ?? adjustDir;
+      const quantity = Math.abs(
+        Number(params?.quantity ?? adjustQty),
+      );
       if (!Number.isFinite(quantity) || quantity <= 0) {
         throw new Error("La cantidad debe ser mayor que cero.");
       }
-      const signed = adjustDir === "in" ? quantity : -quantity;
+      const variantId =
+        params && "variantId" in params
+          ? params.variantId
+          : adjustVariantId;
+      const signed = direction === "in" ? quantity : -quantity;
       const { error } = await supabase.rpc("adjust_stock", {
         _branch_id: branchId,
-        _product_id: form.id,
-        _variant_id: adjustVariantId,
+        _product_id: productId,
+        _variant_id: variantId ?? null,
         _quantity: signed,
         _notes:
-          adjustNotes.trim() ||
-          (adjustDir === "in" ? "Ajuste de entrada" : "Ajuste de salida"),
+          (params?.notes ?? adjustNotes).trim() ||
+          (direction === "in" ? "Ajuste de entrada" : "Ajuste de salida"),
       });
       if (error) throw error;
     },
@@ -1789,15 +1803,19 @@ export function ProductosPage({
                     : null;
 
                 const getChipLabel = (row: (typeof chipRows)[number]) => {
+                  // Preferir nombre de variante: "Producto — NombreVariante"
+                  if (row.product_name?.includes("—")) {
+                    const name = row.product_name.split("—").pop()?.trim();
+                    if (name) return name;
+                  }
                   if (row.sku) return row.sku;
                   if (row.barcode) return row.barcode;
-                  if (row.product_name?.includes("—")) {
-                    return (
-                      row.product_name.split("—").pop()?.trim() || "Var"
-                    );
-                  }
                   return p.sku || p.barcode || "Base";
                 };
+
+                const selectedLabel = selectedRow
+                  ? getChipLabel(selectedRow)
+                  : null;
 
                 return (
                   <div
@@ -1839,6 +1857,12 @@ export function ProductosPage({
                           <div className="min-w-0 flex-1">
                             <p className="break-words text-[15px] font-semibold leading-snug text-[#212121]">
                               {p.name}
+                              {selectedLabel && hasVariants ? (
+                                <span className="font-normal text-[#757575]">
+                                  {" "}
+                                  {selectedLabel}
+                                </span>
+                              ) : null}
                             </p>
                             <p className="mt-0.5 text-[15px] font-bold text-[#1a73e8]">
                               {money(displayPrice)}
@@ -1922,6 +1946,100 @@ export function ProductosPage({
                                 +{chipRows.length - 12}
                               </span>
                             )}
+                          </div>
+                        )}
+
+                        {/* Ajuste rápido de existencias sobre la variante seleccionada */}
+                        {canAdjustStock && (
+                          <div
+                            className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-[#eeeeee] pt-2.5"
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => e.stopPropagation()}
+                          >
+                            <span className="text-[11px] font-medium text-[#9e9e9e]">
+                              {selectedLabel
+                                ? `Stock · ${selectedLabel}`
+                                : "Stock"}
+                            </span>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 min-w-[2.25rem] items-center justify-center rounded-lg bg-[#e53935] px-2 text-sm font-bold text-white active:scale-95 disabled:opacity-50"
+                              disabled={adjustProductStock.isPending || available <= 0}
+                              title="Salida −1"
+                              onClick={() =>
+                                adjustProductStock.mutate({
+                                  productId: p.id,
+                                  variantId: selectedId,
+                                  quantity: 1,
+                                  direction: "out",
+                                  notes: selectedLabel
+                                    ? `Salida rápida · ${selectedLabel}`
+                                    : "Salida rápida",
+                                })
+                              }
+                            >
+                              −
+                            </button>
+                            <span className="min-w-[2rem] text-center text-sm font-bold text-[#212121]">
+                              {available}
+                            </span>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 min-w-[2.25rem] items-center justify-center rounded-lg bg-[#34a853] px-2 text-sm font-bold text-white active:scale-95 disabled:opacity-50"
+                              disabled={adjustProductStock.isPending}
+                              title="Entrada +1"
+                              onClick={() =>
+                                adjustProductStock.mutate({
+                                  productId: p.id,
+                                  variantId: selectedId,
+                                  quantity: 1,
+                                  direction: "in",
+                                  notes: selectedLabel
+                                    ? `Entrada rápida · ${selectedLabel}`
+                                    : "Entrada rápida",
+                                })
+                              }
+                            >
+                              +
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 items-center justify-center rounded-lg bg-[#e8f5e9] px-2.5 text-[11px] font-semibold text-[#2e7d32] active:scale-95 disabled:opacity-50"
+                              disabled={adjustProductStock.isPending}
+                              title="Entrada +5"
+                              onClick={() =>
+                                adjustProductStock.mutate({
+                                  productId: p.id,
+                                  variantId: selectedId,
+                                  quantity: 5,
+                                  direction: "in",
+                                  notes: selectedLabel
+                                    ? `Entrada +5 · ${selectedLabel}`
+                                    : "Entrada +5",
+                                })
+                              }
+                            >
+                              +5
+                            </button>
+                            <button
+                              type="button"
+                              className="inline-flex h-8 items-center justify-center rounded-lg bg-[#e8f5e9] px-2.5 text-[11px] font-semibold text-[#2e7d32] active:scale-95 disabled:opacity-50"
+                              disabled={adjustProductStock.isPending}
+                              title="Entrada +10"
+                              onClick={() =>
+                                adjustProductStock.mutate({
+                                  productId: p.id,
+                                  variantId: selectedId,
+                                  quantity: 10,
+                                  direction: "in",
+                                  notes: selectedLabel
+                                    ? `Entrada +10 · ${selectedLabel}`
+                                    : "Entrada +10",
+                                })
+                              }
+                            >
+                              +10
+                            </button>
                           </div>
                         )}
                       </div>
