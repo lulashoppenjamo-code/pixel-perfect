@@ -1,5 +1,18 @@
+/**
+ * Productos y categorías — LULA OS
+ * Ruta: src/routes/_shell.productos.tsx
+ *
+ * - Catálogo responsive.
+ * - Inventario oficial: shared_inventory.
+ * - Escáner con BarcodeDetector cuando está disponible.
+ * - Etiquetas PNG HD (franjas negras ambos lados, Code 128 Set C, texto auto-ajustado).
+ * - Sin nuevas dependencias, tablas ni migraciones.
+ */
+
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { RequireNavAccess } from "@/components/RequireNavAccess";
+import { generateUniqueBarcode } from "@/lib/uniqueBarcode";
 import {
   useMutation,
   useQuery,
@@ -7,60 +20,44 @@ import {
 } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
-  AlertTriangle,
-  Boxes,
-  ClipboardList,
-  FileSpreadsheet,
+  Trash2,
+  Search,
   Package,
-  Play,
-  CheckCircle2,
-  History,
+  RefreshCw,
+  Hash,
+  ScanLine,
+  Download,
+  X,
+  Camera,
+  Plus,
 } from "lucide-react";
 
-import { RequireNavAccess } from "@/components/RequireNavAccess";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useBranch } from "@/lib/branch";
 import {
   getSharedInventory,
-  setSharedInventoryLimits,
+  type SharedInventoryRow,
 } from "@/lib/sharedInventory";
 import { getOperationalInventory } from "@/lib/inventoryData";
 import { requireInventoryBranch } from "@/lib/inventoryModel";
-import { money, shortDate } from "@/lib/format";
+import { money } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
-import {
-  PageHeader,
-  PageShell,
-} from "@/components/PageHeader";
-
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
-
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
 import {
   Select,
   SelectContent,
@@ -68,2715 +65,3057 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-
 import { Badge } from "@/components/ui/badge";
+import { PageHeader, PageShell } from "@/components/PageHeader";
 import { cn } from "@/lib/utils";
+import { ProductImage } from "@/components/ProductImage";
+import { ProductImageUploader } from "@/components/products/ProductImageUploader";
+import { validImageRef } from "@/lib/productImport";
 
-import { ImportExportPanel } from "@/components/inventory/ImportExportPanel";
-import { RestockList } from "@/components/inventory/RestockList";
-import { PhysicalCountProgress } from "@/components/inventory/PhysicalCountProgress";
-import { ProductosPage } from "./_shell.productos";
-
-/**
- * Inventario — lecturas y escrituras sobre shared_inventory.
- * Productos (catálogo) integrado como pestaña; stock, ajustes, límites, conteo e historial.
- * Escrituras autorizadas (2026-11-15): adjust_stock / start|complete_inventory_count / set_shared_inventory_limits.
- */
-
-export const Route = createFileRoute("/_shell/inventario")({
+export const Route = createFileRoute("/_shell/productos")({
   head: () => ({
     meta: [
-      {
-        title: "Inventario — Lula Shop OS",
-      },
-      {
-        name: "description",
-        content:
-          "Catálogo de productos, existencias, ajustes, conteos físicos e historial de Lula Shop.",
-      },
-      { property: "og:title", content: "Inventario — Lula Shop OS" },
-      { property: "og:description", content: "Existencias compartidas e historial de inventario de Lula Shop." },
+      { title: "Productos — Lula Shop OS" },
+      { name: "description", content: "Catálogo de productos, imágenes, precios y existencias de Lula Shop OS." },
+      { property: "og:title", content: "Productos — Lula Shop OS" },
+      { property: "og:description", content: "Catálogo de productos, imágenes, precios y existencias de Lula Shop OS." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-
   component: () => (
-    <RequireNavAccess navKey="inventario">
-      <InventarioPage />
+    <RequireNavAccess navKey="productos">
+      <ProductosPage />
     </RequireNavAccess>
   ),
 });
 
-type InventoryRow = Awaited<
-  ReturnType<typeof getSharedInventory>
->[number];
-
-type CountRow = {
-  id: string;
-  branch_id: string;
-  status: string;
-  notes: string | null;
-  started_by: string | null;
-  completed_by: string | null;
-  started_at: string;
-  completed_at: string | null;
+type ProductForm = {
+  id?: string;
+  sku: string;
+  barcode: string;
+  name: string;
+  description: string;
+  category_id: string;
+  price: string;
+  cost: string;
+  tax_rate: string;
+  emoji: string;
+  image_url: string;
 };
 
-type CountItemRow = {
+const emptyProduct: ProductForm = {
+  sku: "",
+  barcode: "",
+  name: "",
+  description: "",
+  category_id: "none",
+  price: "0",
+  cost: "0",
+  tax_rate: "0.16",
+  emoji: "📦",
+  image_url: "",
+};
+
+type ProductRow = {
   id: string;
-  count_id: string;
-  product_id: string;
-  variant_id: string | null;
-  system_stock: number;
-  counted_stock: number | null;
-  difference: number | null;
-  unit_cost: number;
-  difference_value: number | null;
-  counted_at: string | null;
-  products:
+  sku: string | null;
+  barcode: string | null;
+  name: string;
+  description: string | null;
+  category_id: string | null;
+  price: number;
+  cost: number;
+  tax_rate: number;
+  emoji: string | null;
+  image_url: string | null;
+  is_active: boolean;
+  categories:
     | {
         name: string;
-        sku: string | null;
       }
     | null;
 };
 
-type GroupedProduct = {
-  productId: string;
-  variants: InventoryRow[];
-};
+/*
+ * Patrones oficiales de módulos Code 128 (valores 0–106).
+ * Etiquetas: Code 128 Set C para códigos numéricos de longitud par
+ * (p. ej. 10 dígitos); fallback a Set B en el resto de casos.
+ */
+const CODE128_PATTERNS = [
+  "212222", "222122", "222221", "121223", "121322",
+  "131222", "122213", "122312", "132212", "221213",
+  "221312", "231212", "112232", "122132", "122231",
+  "113222", "123122", "123221", "223211", "221132",
+  "221231", "213212", "223112", "312131", "311222",
+  "321122", "321221", "312212", "322112", "322211",
+  "212123", "212321", "232121", "111323", "131123",
+  "131321", "112313", "132113", "132311", "211313",
+  "231113", "231311", "112133", "112331", "132131",
+  "113123", "113321", "133121", "313121", "211331",
+  "231131", "213113", "213311", "213131", "311123",
+  "311321", "331121", "312113", "312311", "332111",
+  "314111", "221411", "431111", "111224", "111422",
+  "121124", "121421", "141122", "141221", "112214",
+  "112412", "122114", "122411", "142112", "142211",
+  "241211", "221114", "413111", "241112", "134111",
+  "111242", "121142", "121241", "114212", "124112",
+  "124211", "411212", "421112", "421211", "212141",
+  "214121", "412121", "111143", "111341", "131141",
+  "114113", "114311", "411113", "411311", "113141",
+  "114131", "311141", "411131", "211412", "211214",
+  "211232", "2331112",
+];
 
-function groupInventoryByProduct(
-  rows: InventoryRow[],
-): GroupedProduct[] {
-  const groups = new Map<string, GroupedProduct>();
+/**
+ * Genera la secuencia de valores Code 128 (start + datos + checksum + stop).
+ * - Códigos exclusivamente numéricos de longitud par → Code Set C (105).
+ * - Cualquier otro texto → Code Set B (104).
+ */
+function getCode128Values(value: string): number[] {
+  const text = value.trim();
 
-  for (const row of rows) {
-    const existing = groups.get(row.product_id);
+  if (!text) {
+    throw new Error("El producto necesita un código de barras.");
+  }
 
-    if (existing) {
-      existing.variants.push(row);
-    } else {
-      groups.set(row.product_id, {
-        productId: row.product_id,
-        variants: [row],
-      });
+  // Set C: pares de dígitos (0–99). Ideal para códigos de 10 dígitos.
+  if (/^\d+$/.test(text) && text.length % 2 === 0) {
+    const values: number[] = [105]; // Start C
+
+    for (let i = 0; i < text.length; i += 2) {
+      values.push(parseInt(text.slice(i, i + 2), 10));
+    }
+
+    let checksum = 105;
+    for (let i = 1; i < values.length; i++) {
+      checksum += values[i]! * i;
+    }
+    values.push(checksum % 103);
+    values.push(106); // Stop
+
+    return values;
+  }
+
+  // Set B: caracteres ASCII imprimibles (32–126).
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 32 || code > 126) {
+      throw new Error(
+        "El código contiene caracteres que no admite Code 128.",
+      );
     }
   }
 
-  return Array.from(groups.values());
-}
+  const values: number[] = [104]; // Start B
 
-function getVariantLabel(row: InventoryRow): string {
-  if (row.sku) return row.sku;
-  if (row.barcode) return row.barcode;
-
-  const parts = row.product_name.split(" — ");
-
-  if (parts.length > 1) {
-    return parts[parts.length - 1].trim();
+  for (let i = 0; i < text.length; i++) {
+    values.push(text.charCodeAt(i) - 32);
   }
 
-  return "Base";
+  let checksum = 104;
+  for (let i = 1; i < values.length; i++) {
+    checksum += values[i]! * i;
+  }
+  values.push(checksum % 103);
+  values.push(106); // Stop
+
+  return values;
 }
 
-const MOVEMENT_LABELS: Record<string, string> = {
+/**
+ * Genera y descarga la etiqueta PNG HD (1200 × 704 = 2× de 600 × 352).
+ * Diseño tipo El Gurú del Código / impresora térmica:
+ *   - Franjas negras verticales en AMBOS lados (71 px lógicos c/u)
+ *   - Área blanca central con nombre, precio, barras y número
+ *   - Code 128 Set C para códigos numéricos de longitud par
+ *   - Texto que se reduce automáticamente para no cortarse
+ *   - Barras nítidas, zonas de silencio, listo para térmica
+ */
+function downloadBarcodeLabel(
+  productName: string,
+  price: string,
+  barcode: string,
+): void {
+  // Unidades lógicas de diseño (referencia 600 × 352)
+  const LOGIC_W = 600;
+  const LOGIC_H = 352;
+  const BLACK_STRIP = 71; // cada lado
+  const SCALE = 2; // 2× → PNG HD 1200 × 704 (mejor para térmica)
+
+  const W = LOGIC_W * SCALE;
+  const H = LOGIC_H * SCALE;
+  const strip = BLACK_STRIP * SCALE;
+  const contentLeft = strip;
+  const contentWidth = W - strip * 2;
+  const cx = contentLeft + contentWidth / 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("No se pudo preparar la etiqueta.");
+  }
+
+  const values = getCode128Values(barcode);
+  const patterns = values.map((value) => CODE128_PATTERNS[value]);
+  if (patterns.some((pattern) => !pattern)) {
+    throw new Error("No se pudo generar el código de barras.");
+  }
+
+  // Fondo blanco + franjas negras izquierda y derecha
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, W, H);
+  context.fillStyle = "#000000";
+  context.fillRect(0, 0, strip, H);
+  context.fillRect(W - strip, 0, strip, H);
+
+  context.fillStyle = "#000000";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+
+  const safeName = (productName.trim() || "Producto").toUpperCase();
+  const priceNum = Number(price) || 0;
+  const priceText =
+    priceNum % 1 === 0
+      ? `$${Math.round(priceNum)}`
+      : `$${priceNum.toFixed(2)}`;
+
+  // Margen interno del texto respecto a las franjas
+  const maxTextWidth = contentWidth - 36 * SCALE;
+
+  /**
+   * Ajusta el tamaño de fuente (y opcionalmente trunca con …)
+   * para que el texto quepa completo dentro del área blanca.
+   */
+  const fitText = (
+    raw: string,
+    preferredPx: number,
+    minPx: number,
+  ): { text: string; fontPx: number } => {
+    let fontPx = preferredPx;
+    let text = raw;
+    context.font = `bold ${fontPx}px Arial, sans-serif`;
+    while (context.measureText(text).width > maxTextWidth && fontPx > minPx) {
+      fontPx -= 1 * SCALE;
+      context.font = `bold ${fontPx}px Arial, sans-serif`;
+    }
+    // Si aún no cabe, truncar con elipsis manteniendo el tamaño actual
+    while (context.measureText(text).width > maxTextWidth && text.length > 4) {
+      text = `${text.slice(0, -2)}…`;
+    }
+    return { text, fontPx };
+  };
+
+  // Nombre (parte superior)
+  const nameFit = fitText(safeName, 24 * SCALE, 14 * SCALE);
+  context.font = `bold ${nameFit.fontPx}px Arial, sans-serif`;
+  context.fillText(nameFit.text, cx, 36 * SCALE);
+
+  // Precio debajo del nombre
+  const priceFit = fitText(priceText, 28 * SCALE, 16 * SCALE);
+  context.font = `bold ${priceFit.fontPx}px Arial, sans-serif`;
+  context.fillText(priceFit.text, cx, 72 * SCALE);
+
+  // Módulos totales del código
+  const totalModules = patterns.reduce(
+    (total, pattern) =>
+      total +
+      [...(pattern ?? "")].reduce((sum, digit) => sum + Number(digit), 0),
+    0,
+  );
+
+  /*
+   * Barras centradas entre las dos franjas, con quiet zone ≥ 10 módulos
+   * y ancho de módulo suficiente para escáner / térmica.
+   */
+  const quietModules = 10;
+  const usableModules = totalModules + quietModules * 2;
+  const barAreaPadding = 20 * SCALE;
+  const barAreaWidth = contentWidth - barAreaPadding * 2;
+  let moduleWidth = barAreaWidth / usableModules;
+  // No reducir excesivamente el ancho de las barras
+  moduleWidth = Math.max(moduleWidth, 1.15 * SCALE);
+  const drawnWidth = usableModules * moduleWidth;
+  const barLeft =
+    contentLeft + (contentWidth - drawnWidth) / 2 + quietModules * moduleWidth;
+  const barTop = 100 * SCALE;
+  const barHeight = 200 * SCALE;
+
+  // Barras nítidas (impresora térmica)
+  context.imageSmoothingEnabled = false;
+
+  let x = barLeft;
+  context.fillStyle = "#000000";
+  for (const pattern of patterns) {
+    if (!pattern) continue;
+    for (let i = 0; i < pattern.length; i++) {
+      const width = Number(pattern[i]) * moduleWidth;
+      if (i % 2 === 0) {
+        const rx = Math.round(x);
+        const rw = Math.max(Math.round(width), 1);
+        context.fillRect(rx, barTop, rw, barHeight);
+      }
+      x += width;
+    }
+  }
+
+  // Número debajo de las barras
+  const numFont = 22 * SCALE;
+  context.font = `${numFont}px Arial, sans-serif`;
+  context.fillStyle = "#000000";
+  context.imageSmoothingEnabled = true;
+  // Ajuste por si el número fuera muy largo (no debería con 10 dígitos)
+  let numText = barcode;
+  while (
+    context.measureText(numText).width > maxTextWidth &&
+    numText.length > 4
+  ) {
+    numText = `${numText.slice(0, -2)}…`;
+  }
+  context.fillText(numText, cx, 328 * SCALE);
+
+  canvas.toBlob((blob) => {
+    if (!blob) {
+      toast.error("No se pudo crear el archivo PNG.");
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `etiqueta-${barcode}.png`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast.success("Etiqueta PNG HD descargada.");
+  }, "image/png");
+}
+
+
+
+/*
+ * Escáner de cámara.
+ * No requiere librerías externas.
+ */
+type DetectedBarcode = {
+  rawValue?: string;
+};
+
+type BarcodeDetectorInstance = {
+  detect: (source: HTMLVideoElement) => Promise<DetectedBarcode[]>;
+};
+
+type BarcodeDetectorConstructor = new (options?: {
+  formats?: string[];
+}) => BarcodeDetectorInstance;
+
+function BarcodeScanner({
+  onDetected,
+  onClose,
+}: {
+  onDetected: (value: string) => void;
+  onClose: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [cameraError, setCameraError] = useState("");
+  const [starting, setStarting] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let intervalId: number | undefined;
+    let detecting = false;
+
+    const startScanner = async () => {
+      try {
+        const Detector = (
+          window as Window & {
+            BarcodeDetector?: BarcodeDetectorConstructor;
+          }
+        ).BarcodeDetector;
+
+        if (!Detector) {
+          throw new Error(
+            "Este navegador no admite el escáner integrado. Puedes escribir el código manualmente o probar con Chrome actualizado.",
+          );
+        }
+
+        if (!navigator.mediaDevices?.getUserMedia) {
+          throw new Error(
+            "La cámara no está disponible. Abre Pixel Perfect mediante una conexión HTTPS y revisa los permisos del navegador.",
+          );
+        }
+
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+          },
+        });
+
+        if (cancelled) {
+          stream.getTracks().forEach((track) => track.stop());
+          return;
+        }
+
+        const video = videoRef.current;
+
+        if (!video) {
+          throw new Error("No se pudo inicializar la vista de cámara.");
+        }
+
+        video.srcObject = stream;
+        await video.play();
+
+        const detector = new Detector({
+          formats: [
+            "ean_13",
+            "ean_8",
+            "upc_a",
+            "upc_e",
+            "code_128",
+            "code_39",
+            "itf",
+            "codabar",
+            "qr_code",
+          ],
+        });
+
+        setStarting(false);
+
+        intervalId = window.setInterval(async () => {
+          if (
+            cancelled ||
+            detecting ||
+            !videoRef.current ||
+            videoRef.current.readyState < 2
+          ) {
+            return;
+          }
+
+          detecting = true;
+
+          try {
+            const results = await detector.detect(videoRef.current);
+            const found = results.find(
+              (result) => result.rawValue?.trim(),
+            );
+
+            if (found?.rawValue && !cancelled) {
+              cancelled = true;
+              onDetected(found.rawValue.trim());
+            }
+          } catch {
+            // La detección puede fallar en un fotograma;
+            // se vuelve a intentar en el siguiente.
+          } finally {
+            detecting = false;
+          }
+        }, 250);
+      } catch (error) {
+        if (!cancelled) {
+          setCameraError(
+            error instanceof Error
+              ? error.message
+              : "No se pudo iniciar el escáner.",
+          );
+          setStarting(false);
+        }
+      }
+    };
+
+    void startScanner();
+
+    return () => {
+      cancelled = true;
+
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
+
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [onDetected]);
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-3">
+      <div className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b p-4">
+          <div className="flex items-center gap-2">
+            <Camera className="h-5 w-5 text-[#1a73e8]" />
+            <h3 className="font-bold">Escanear código</h3>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            aria-label="Cerrar escáner"
+          >
+            <X className="h-5 w-5" />
+          </Button>
+        </div>
+
+        <div className="space-y-3 p-4">
+          <div className="overflow-hidden rounded-xl bg-black">
+            <video
+              ref={videoRef}
+              autoPlay
+              muted
+              playsInline
+              className="aspect-video w-full object-cover"
+            />
+          </div>
+
+          {starting && (
+            <p className="text-sm text-muted-foreground">
+              Iniciando cámara…
+            </p>
+          )}
+
+          {cameraError && (
+            <div className="rounded-xl bg-red-50 p-3 text-sm text-red-700">
+              {cameraError}
+            </div>
+          )}
+
+          {!cameraError && !starting && (
+            <p className="text-sm text-muted-foreground">
+              Centra el código de barras dentro de la cámara y espera a que se detecte.
+            </p>
+          )}
+
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full"
+            onClick={onClose}
+          >
+            Cancelar
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+type ProductVariantRow = {
+  id: string;
+  product_id: string;
+  name: string;
+  sku: string | null;
+  barcode: string | null;
+  cost_override: number | null;
+  price_override: number | null;
+  image_url: string | null;
+};
+
+type VariantForm = {
+  id?: string;
+  name: string;
+  sku: string;
+  barcode: string;
+  price: string;
+  cost: string;
+  image_url: string;
+};
+
+const emptyVariantForm: VariantForm = {
+  name: "",
+  sku: "",
+  barcode: "",
+  price: "",
+  cost: "",
+  image_url: "",
+};
+
+type ProductMovementRow = {
+  id: string;
+  type: string;
+  quantity: number;
+  notes: string | null;
+  created_at: string;
+  reference_type: string | null;
+  branch_id: string;
+};
+
+const PRODUCT_MOVEMENT_LABELS: Record<string, string> = {
   sale: "Venta",
   return: "Devolución",
   purchase: "Compra",
-  adjustment_in: "Ajuste +",
-  adjustment_out: "Ajuste −",
+  adjustment_in: "Entrada (ajuste)",
+  adjustment_out: "Salida (ajuste)",
   transfer_in: "Entrada",
   transfer_out: "Salida",
 };
 
-function InventarioPage() {
+
+export function ProductosPage({
+  embedded = false,
+}: {
+  embedded?: boolean;
+}) {
   const { isManager, can } = useAuth();
-  const canViewProducts = can("productos.view");
+
+  const canCreate = can("productos.create");
+  const canEdit = can("productos.edit");
+  const canDelete = can("productos.delete");
+  const canPrice = can("productos.price");
+
+  const priceOnly = canPrice && !canEdit && !isManager;
+  const canOpenForm = canEdit || canPrice || isManager;
+  const canCreateProduct = !priceOnly && (canCreate || isManager);
+  const canEditProduct = canEdit || isManager;
+  const canAdjustStock = isManager;
+
   const { branchId, branches, loading: branchLoading } = useBranch();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const qc = useQueryClient();
 
-  const activeBranch = branches.find(
-    (branch) => branch.id === branchId,
-  );
-
-  const [adjustProduct, setAdjustProduct] = useState("");
-  const [topChromeHidden, setTopChromeHidden] = useState(false);
+  const [form, setForm] = useState<ProductForm>(emptyProduct);
+  const [catName, setCatName] = useState("");
+  const [catParent, setCatParent] = useState("none");
+  const [search, setSearch] = useState("");
+  const [chromeHidden, setChromeHidden] = useState(false);
   const lastScrollYRef = useRef(0);
 
   useEffect(() => {
     const onScroll = () => {
       const y = window.scrollY || document.documentElement.scrollTop;
-      const dy = y - lastScrollYRef.current;
+      const last = lastScrollYRef.current;
+      const dy = y - last;
       lastScrollYRef.current = y;
       if (y < 24) {
-        setTopChromeHidden(false);
+        setChromeHidden(false);
         return;
       }
-      if (dy > 12) setTopChromeHidden(true);
-      else if (dy < -12) setTopChromeHidden(false);
+      if (dy > 12) setChromeHidden(true);
+      else if (dy < -12) setChromeHidden(false);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  const [adjustQuantity, setAdjustQuantity] = useState("");
+  const [stockFilter, setStockFilter] =
+    useState<"all" | "low" | "out">("all");
+  const [activeTab, setActiveTab] =
+    useState<"lista" | "form" | "categorias">("lista");
+  const [selectedCategoryId, setSelectedCategoryId] =
+    useState<string | null>(null);
+  const [scannerOpen, setScannerOpen] = useState(false);
+  const [variantForm, setVariantForm] = useState<VariantForm>(emptyVariantForm);
+  const [variantModalOpen, setVariantModalOpen] = useState(false);
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustDir, setAdjustDir] = useState<"in" | "out">("in");
   const [adjustNotes, setAdjustNotes] = useState("");
-  const [adjustDirection, setAdjustDirection] =
-    useState<"in" | "out">("in");
-
-  const [limitProduct, setLimitProduct] = useState("");
-  const [limitMin, setLimitMin] = useState("0");
-  const [limitMax, setLimitMax] = useState("");
-
-  const [countFilter, setCountFilter] = useState("");
-  /** Filtro visual de existencias (client-side, no cambia consulta). */
-  const [stockStatusFilter, setStockStatusFilter] = useState<
-    "all" | "low" | "out"
+  /** Variante seleccionada por producto en la lista (null = base / primera). */
+  const [selectedVariantByProduct, setSelectedVariantByProduct] = useState<
+    Record<string, string | null>
+  >({});
+  const [movementFilter, setMovementFilter] = useState<
+    "all" | "sales" | "in" | "out" | "adjust"
   >("all");
-  const [countNotes, setCountNotes] = useState("");
-
-  const [physicalCount, setPhysicalCount] =
-    useState<Record<string, string>>({});
-
-  const [selectedVariantByProduct, setSelectedVariantByProduct] =
-    useState<Record<string, string | null>>({});
-
-  const invalidateInventory = () => {
-    void queryClient.invalidateQueries({
-      queryKey: ["shared-inventory"],
-    });
-
-    void queryClient.invalidateQueries({
-      queryKey: ["pos-products-shared"],
-    });
-
-    void queryClient.invalidateQueries({
-      queryKey: ["pos-variant-inventory-shared"],
-    });
-
-    void queryClient.invalidateQueries({
-      queryKey: ["inventory-movements"],
-    });
-
-    void queryClient.invalidateQueries({
-      queryKey: ["inventory-counts"],
-    });
-
-    void queryClient.invalidateQueries({
-      queryKey: ["inventory-count-items"],
-    });
-  };
 
   const {
-    data: inventory = [],
-    isLoading: inventoryLoading,
-    error: inventoryError,
+    data: categories = [],
+    isLoading: categoriesLoading,
   } = useQuery({
-    queryKey: ["operational-inventory"],
-    staleTime: 15_000,
-    queryFn: getOperationalInventory,
-  });
-
-  const { data: products = [] } = useQuery({
-    queryKey: ["inv-products-shared"],
-
+    queryKey: ["categories"],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("products")
-        .select("id,name,sku,barcode")
-        .eq("is_active", true)
+        .from("categories")
+        .select("id, name, parent_id")
         .order("name");
 
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return data ?? [];
     },
   });
 
-  const { data: movements = [] } = useQuery({
-    queryKey: ["inventory-movements", branchId],
-    enabled: !!branchId && !branchLoading,
-
+  const {
+    data: products = [],
+    isLoading: productsLoading,
+  } = useQuery<ProductRow[]>({
+    queryKey: ["products"],
+    staleTime: 20_000,
     queryFn: async () => {
+      const pageSize = 500;
+      const allProducts: ProductRow[] = [];
+
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("products")
+          .select(`
+            id,
+            sku,
+            barcode,
+            name,
+            description,
+            category_id,
+            price,
+            cost,
+            tax_rate,
+            emoji,
+            image_url,
+            is_active,
+            categories(name)
+          `)
+          .order("name", { ascending: true })
+          .order("id", { ascending: true })
+          .range(from, from + pageSize - 1);
+
+        if (error) throw error;
+
+        const page = (data ?? []) as ProductRow[];
+        allProducts.push(...page);
+
+        if (page.length < pageSize) break;
+      }
+
+      return allProducts;
+    },
+  });
+
+  const {
+    data: sharedInventory = [],
+    isLoading: inventoryLoading,
+    refetch: refetchInventory,
+  } = useQuery<SharedInventoryRow[]>({
+    queryKey: ["operational-inventory", "products"],
+    queryFn: getOperationalInventory,
+  });
+
+  const {
+    data: productVariants = [],
+    isLoading: variantsLoading,
+  } = useQuery<ProductVariantRow[]>({
+    queryKey: ["product-variants", form.id ?? "none"],
+    enabled: Boolean(form.id),
+    queryFn: async () => {
+      if (!form.id) return [];
+      const { data, error } = await (supabase as any)
+        .from("product_variants")
+        .select(
+          "id, product_id, name, sku, barcode, cost_override, price_override, image_url",
+        )
+        .eq("product_id", form.id)
+        .order("name");
+
+      if (error) throw error;
+      return (data ?? []) as ProductVariantRow[];
+    },
+  });
+
+  const {
+    data: productMovements = [],
+    isLoading: movementsLoading,
+  } = useQuery<ProductMovementRow[]>({
+    queryKey: ["product-movements", form.id ?? "none", branchId],
+    enabled: Boolean(form.id) && !!branchId && !branchLoading,
+    staleTime: 15_000,
+    queryFn: async () => {
+      if (!form.id) return [];
       const origin = requireInventoryBranch(branchId, branches, branchLoading);
       const { data, error } = await supabase
         .from("inventory_movements")
         .select(
-          "id,type,quantity,notes,created_at,branch_id,variant_id,products(name)",
+          "id, type, quantity, notes, created_at, reference_type, branch_id",
         )
+        .eq("product_id", form.id)
         .eq("branch_id", origin)
-        .order("created_at", {
-          ascending: false,
-        })
-        .limit(100);
+        .order("created_at", { ascending: false })
+        .limit(50);
 
-      if (error) {
-        throw error;
-      }
-
-      return data ?? [];
+      if (error) throw error;
+      return (data ?? []) as ProductMovementRow[];
     },
   });
 
-  const {
-    data: inventoryCounts = [],
-    isLoading: countsLoading,
-  } = useQuery({
-    queryKey: ["inventory-counts", branchId],
-    enabled: !!branchId,
-
-    queryFn: async () => {
-      if (!branchId) return [];
-      const { data, error } =
-        await (supabase as any)
-          .from("inventory_counts")
-          .select(
-            `
-            id,
-            branch_id,
-            status,
-            notes,
-            started_by,
-            completed_by,
-            started_at,
-            completed_at
-          `,
-          )
-          .eq("branch_id", branchId)
-          .order("started_at", {
-            ascending: false,
-          })
-          .limit(30);
-
-      if (error) {
-        throw error;
+  const filteredProductMovements = useMemo(() => {
+    if (movementFilter === "all") return productMovements;
+    return productMovements.filter((m) => {
+      if (movementFilter === "sales") {
+        return m.type === "sale" || m.type === "return";
       }
-
-      return (data ?? []) as CountRow[];
-    },
-  });
-
-  const activeCount =
-    inventoryCounts.find(
-      (count) => count.status === "counting",
-    ) ?? null;
-
-  const {
-    data: activeCountItems = [],
-    isLoading: activeCountItemsLoading,
-  } = useQuery({
-    queryKey: [
-      "inventory-count-items",
-      activeCount?.id,
-    ],
-
-    enabled: !!activeCount?.id,
-
-    queryFn: async () => {
-      if (!activeCount) return [];
-      const { data, error } =
-        await (supabase as any)
-          .from("inventory_count_items")
-          .select(
-            `
-            id,
-            count_id,
-            product_id,
-            variant_id,
-            system_stock,
-            counted_stock,
-            difference,
-            unit_cost,
-            difference_value,
-            counted_at,
-            products(name,sku)
-          `,
-          )
-          .eq("count_id", activeCount.id)
-          .order("product_id");
-
-      if (error) {
-        throw error;
+      if (movementFilter === "in") {
+        return (
+          m.type === "purchase" ||
+          m.type === "transfer_in" ||
+          m.type === "adjustment_in" ||
+          Number(m.quantity) > 0
+        );
       }
-
-      return (data ?? []) as CountItemRow[];
-    },
-  });
-
-  const lowStock = useMemo(
-    () =>
-      inventory.filter(
-        (row) =>
-          Number(row.available_stock) <=
-          Number(row.min_stock),
-      ),
-    [inventory],
-  );
-
-  const filteredInventory = useMemo(() => {
-    if (stockStatusFilter === "all") return inventory;
-    return inventory.filter((row) => {
-      const available = Number(row.available_stock);
-      const minimum = Number(row.min_stock);
-      if (stockStatusFilter === "out") return available <= 0;
-      if (stockStatusFilter === "low")
-        return available > 0 && available <= minimum;
+      if (movementFilter === "out") {
+        return (
+          m.type === "sale" ||
+          m.type === "transfer_out" ||
+          m.type === "adjustment_out" ||
+          Number(m.quantity) < 0
+        );
+      }
+      if (movementFilter === "adjust") {
+        return (
+          m.type === "adjustment_in" ||
+          m.type === "adjustment_out"
+        );
+      }
       return true;
     });
-  }, [inventory, stockStatusFilter]);
+  }, [productMovements, movementFilter]);
 
-  const groupedInventory = useMemo(
-    () => groupInventoryByProduct(filteredInventory),
-    [filteredInventory],
-  );
+  const branchNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const b of branches) {
+      map.set(b.id, b.name);
+    }
+    return map;
+  }, [branches]);
 
-  const filteredCountItems = useMemo(() => {
-    const query = countFilter.trim().toLowerCase();
 
-    if (!query) {
-      return activeCountItems;
+  const stockMap = useMemo(() => {
+    const map = new Map<
+      string,
+      {
+        stock: number;
+        reservedStock: number;
+        availableStock: number;
+        variants: number;
+        hasVariants: boolean;
+      }
+    >();
+
+    for (const row of sharedInventory) {
+      const current = map.get(row.product_id);
+
+      if (!current) {
+        map.set(row.product_id, {
+          stock: Number(row.stock ?? 0),
+          reservedStock: Number(row.reserved_stock ?? 0),
+          availableStock: Number(row.available_stock ?? 0),
+          variants: row.variant_id ? 1 : 0,
+          hasVariants: Boolean(row.variant_id),
+        });
+        continue;
+      }
+
+      current.stock += Number(row.stock ?? 0);
+      current.reservedStock += Number(row.reserved_stock ?? 0);
+      current.availableStock += Number(row.available_stock ?? 0);
+
+      if (row.variant_id) {
+        current.variants += 1;
+        current.hasVariants = true;
+      }
     }
 
-    return activeCountItems.filter((item) => {
-      const name = item.products?.name ?? "";
-      const sku = item.products?.sku ?? "";
+    return map;
+  }, [sharedInventory]);
 
-      return (
-        name.toLowerCase().includes(query) ||
-        sku.toLowerCase().includes(query)
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    // Sin espacios ni guiones: facilita escanear / pegar códigos de barras
+    const qCompact = q.replace(/[\s-]/g, "");
+
+    return products.filter((p) => {
+      if (selectedCategoryId && p.category_id !== selectedCategoryId) {
+        return false;
+      }
+
+      if (q) {
+        const name = (p.name ?? "").toLowerCase();
+        const sku = (p.sku ?? "").toLowerCase();
+        const barcode = (p.barcode ?? "").toLowerCase();
+        const skuC = sku.replace(/[\s-]/g, "");
+        const barcodeC = barcode.replace(/[\s-]/g, "");
+
+        const matchProduct =
+          name.includes(q) ||
+          sku.includes(q) ||
+          barcode.includes(q) ||
+          (qCompact.length > 0 &&
+            (skuC.includes(qCompact) || barcodeC.includes(qCompact)));
+
+        const matchVariant = sharedInventory.some((row) => {
+          if (row.product_id !== p.id) return false;
+          const rSku = (row.sku ?? "").toLowerCase();
+          const rBarcode = (row.barcode ?? "").toLowerCase();
+          const rName = (row.product_name ?? "").toLowerCase();
+          return (
+            rSku.includes(q) ||
+            rBarcode.includes(q) ||
+            rName.includes(q) ||
+            (qCompact.length > 0 &&
+              (rSku.replace(/[\s-]/g, "").includes(qCompact) ||
+                rBarcode.replace(/[\s-]/g, "").includes(qCompact)))
+          );
+        });
+
+        if (!matchProduct && !matchVariant) return false;
+      }
+
+      if (stockFilter === "all") return true;
+
+      const stock = stockMap.get(p.id);
+      const available = Number(stock?.availableStock ?? 0);
+
+      const isLow = sharedInventory.some(
+        (row) =>
+          row.product_id === p.id &&
+          row.stock_status === "low_stock",
       );
+
+      if (stockFilter === "out") return available <= 0;
+      if (stockFilter === "low") return isLow && available > 0;
+
+      return true;
     });
-  }, [activeCountItems, countFilter]);
+  }, [
+    products,
+    search,
+    stockFilter,
+    stockMap,
+    sharedInventory,
+    selectedCategoryId,
+  ]);
 
-  const countSummary = useMemo(() => {
-    const total = activeCountItems.length;
-
-    const counted = activeCountItems.filter(
-      (item) => item.counted_stock !== null,
-    ).length;
-
-    const pending = total - counted;
-
-    const shortageUnits =
-      activeCountItems.reduce((sum, item) => {
-        const diff = Number(item.difference ?? 0);
-
-        return (
-          sum +
-          (diff < 0 ? Math.abs(diff) : 0)
-        );
-      }, 0);
-
-    const surplusUnits =
-      activeCountItems.reduce((sum, item) => {
-        const diff = Number(item.difference ?? 0);
-
-        return sum + (diff > 0 ? diff : 0);
-      }, 0);
-
-    const shortageValue =
-      activeCountItems.reduce((sum, item) => {
-        const value = Number(
-          item.difference_value ?? 0,
-        );
-
-        return (
-          sum +
-          (value < 0 ? Math.abs(value) : 0)
-        );
-      }, 0);
-
-    const surplusValue =
-      activeCountItems.reduce((sum, item) => {
-        const value = Number(
-          item.difference_value ?? 0,
-        );
-
-        return sum + (value > 0 ? value : 0);
-      }, 0);
-
-    return {
-      total,
-      counted,
-      pending,
-      shortageUnits,
-      surplusUnits,
-      shortageValue,
-      surplusValue,
-    };
-  }, [activeCountItems]);
-
-  const startCount = useMutation({
+  const saveProduct = useMutation({
     mutationFn: async () => {
-      if (!isManager) {
-        throw new Error(
-          "No tienes permisos para iniciar un inventario físico.",
-        );
+      if (!form.id) {
+        if (priceOnly || !canCreateProduct) {
+          throw new Error("No tienes permiso para crear productos.");
+        }
+      } else if (priceOnly) {
+        if (!canPrice) {
+          throw new Error("No tienes permiso para modificar precios.");
+        }
+      } else if (!canEditProduct) {
+        throw new Error("No tienes permiso para editar este producto.");
       }
 
-      if (!branchId) {
-        throw new Error(
-          "Selecciona una sucursal activa antes de continuar.",
-        );
+      if (!form.name.trim()) {
+        throw new Error("Nombre requerido");
       }
 
-      if (activeCount) {
-        throw new Error(
-          "Ya existe un inventario físico abierto.",
-        );
+      const barcodeValue = form.barcode.trim();
+
+      if (barcodeValue && !priceOnly) {
+        let q = supabase
+          .from("products")
+          .select("id")
+          .eq("barcode", barcodeValue);
+
+        if (form.id) q = q.neq("id", form.id);
+
+        const { data: clash, error: barcodeError } =
+          await q.maybeSingle();
+
+        if (barcodeError) throw barcodeError;
+
+        if (clash) {
+          throw new Error(
+            "Ese código de barras ya existe en otro producto. Genera uno nuevo.",
+          );
+        }
       }
 
-      const { data, error } =
-        await (supabase as any).rpc(
-          "start_inventory_count",
+      if (form.id && priceOnly) {
+        const { error } = await (supabase as any).rpc(
+          "update_product_prices",
           {
-            _branch_id: branchId,
-            _notes: countNotes || null,
+            _product_id: form.id,
+            _price: Number(form.price) || 0,
+            _cost: Number(form.cost) || 0,
+            _tax_rate: Number(form.tax_rate) || 0,
           },
         );
 
-      if (error) {
-        throw error;
+        if (error) throw error;
+        return;
       }
 
-      return data as string;
+      if (form.image_url.trim() && !validImageRef(form.image_url.trim())) {
+        throw new Error("Imagen inválida. Usa una URL http/https o una foto subida desde el dispositivo.");
+      }
+      const payload = {
+        sku: form.sku.trim() || null,
+        barcode: form.barcode.trim() || null,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        category_id:
+          form.category_id === "none" ? null : form.category_id,
+        price: Number(form.price) || 0,
+        cost: Number(form.cost) || 0,
+        tax_rate: Number(form.tax_rate) || 0,
+        emoji: form.emoji || "📦",
+        image_url: form.image_url.trim() || null,
+        is_active: true,
+      };
+
+      if (form.id) {
+        const { error } = await supabase
+          .from("products")
+          .update(payload)
+          .eq("id", form.id);
+
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await supabase.from("products").insert(payload);
+      if (error) throw error;
     },
 
     onSuccess: () => {
-      toast.success(
-        "Inventario físico iniciado.",
-      );
+      toast.success(form.id ? "Producto actualizado" : "Producto creado");
+      setForm(emptyProduct);
 
-      setCountNotes("");
-      invalidateInventory();
-    },
-
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
-  });
-
-  const setCountItem = useMutation({
-    mutationFn: async ({
-      itemId,
-      value,
-    }: {
-      itemId: string;
-      value: number;
-    }) => {
-      if (!isManager) {
-        throw new Error(
-          "No tienes permisos para capturar inventario físico.",
-        );
-      }
-
-      if (!activeCount) {
-        throw new Error(
-          "No existe un inventario físico activo.",
-        );
-      }
-
-      if (
-        !Number.isFinite(value) ||
-        value < 0
-      ) {
-        throw new Error(
-          "La cantidad física no es válida.",
-        );
-      }
-
-      const { error } =
-        await (supabase as any).rpc(
-          "set_inventory_count_item",
-          {
-            _count_id: activeCount.id,
-            _item_id: itemId,
-            _counted_stock: value,
-          },
-        );
-
-      if (error) {
-        throw error;
-      }
-    },
-
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: [
-          "inventory-count-items",
-          activeCount?.id,
-        ],
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
+      void qc.invalidateQueries({ queryKey: ["inv-products"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory", "products"],
       });
     },
 
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
-  const completeCount = useMutation({
-    mutationFn: async () => {
-      if (!isManager) {
-        throw new Error(
-          "No tienes permisos para cerrar el inventario físico.",
-        );
+  const removeProduct = useMutation({
+    mutationFn: async (id: string) => {
+      if (!canDelete && !isManager) {
+        throw new Error("No tienes permiso para desactivar productos.");
       }
 
-      if (!activeCount) {
-        throw new Error(
-          "No existe un inventario físico activo.",
-        );
-      }
+      const { error } = await (supabase as any).rpc(
+        "deactivate_product",
+        { _product_id: id },
+      );
 
-      if (countSummary.pending > 0) {
-        throw new Error(
-          `Faltan ${countSummary.pending} productos por contar.`,
-        );
-      }
-
-      const { error } =
-        await (supabase as any).rpc(
-          "complete_inventory_count",
-          {
-            _count_id: activeCount.id,
-          },
-        );
-
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
     },
 
     onSuccess: () => {
-      toast.success(
-        "Inventario físico cerrado y diferencias aplicadas.",
-      );
-
-      setPhysicalCount({});
-      setCountFilter("");
-
-      invalidateInventory();
+      toast.success("Producto desactivado");
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory", "products"],
+      });
     },
 
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
 
-  const adjustInventory = useMutation({
+  const saveCategory = useMutation({
     mutationFn: async () => {
       if (!isManager) {
-        throw new Error(
-          "No tienes permisos para ajustar inventario.",
-        );
+        throw new Error("Solo un administrador puede crear categorías.");
       }
 
-      if (!branchId) {
-        throw new Error(
-          "Selecciona una sucursal activa antes de continuar.",
-        );
+      if (!catName.trim()) {
+        throw new Error("Nombre de categoría requerido");
       }
 
-      if (!adjustProduct) {
-        throw new Error(
-          "Selecciona un producto.",
-        );
-      }
+      const { error } = await supabase.from("categories").insert({
+        name: catName.trim(),
+        parent_id: catParent === "none" ? null : catParent,
+      });
 
-      const quantity = Math.abs(
-        Number(adjustQuantity),
-      );
-
-      if (
-        !Number.isFinite(quantity) ||
-        quantity <= 0
-      ) {
-        throw new Error(
-          "La cantidad debe ser mayor que cero.",
-        );
-      }
-
-      const signedQuantity =
-        adjustDirection === "in"
-          ? quantity
-          : -quantity;
-
-      const { error } = await supabase.rpc(
-        "adjust_stock",
-        {
-          _branch_id: branchId,
-          _product_id: adjustProduct,
-          _quantity: signedQuantity,
-          _notes:
-            adjustNotes ||
-            (adjustDirection === "in"
-              ? "Ajuste de entrada"
-              : "Ajuste de salida"),
-        },
-      );
-
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
     },
 
     onSuccess: () => {
-      toast.success(
-        "Inventario compartido ajustado correctamente.",
-      );
-
-      setAdjustQuantity("");
-      setAdjustNotes("");
-
-      invalidateInventory();
+      toast.success("Categoría creada");
+      setCatName("");
+      setCatParent("none");
+      void qc.invalidateQueries({ queryKey: ["categories"] });
     },
 
-    onError: (error: Error) => {
-      toast.error(error.message);
-    },
+    onError: (e: Error) => toast.error(e.message),
   });
-
-  const updateLimits = useMutation({
+  const saveVariant = useMutation({
     mutationFn: async () => {
-      if (!isManager) {
+      if (!form.id) {
         throw new Error(
-          "No tienes permisos para modificar límites.",
+          "Primero guarda el producto y después agrega variantes.",
         );
       }
 
-      if (!limitProduct) {
-        throw new Error(
-          "Selecciona un producto.",
-        );
+      if (!canEditProduct && !isManager) {
+        throw new Error("No tienes permiso para gestionar variantes.");
       }
 
-      const min = Number(limitMin);
-
-      if (
-        !Number.isFinite(min) ||
-        min < 0
-      ) {
-        throw new Error(
-          "El mínimo no es válido.",
-        );
+      const name = variantForm.name.trim();
+      if (!name) {
+        throw new Error("Nombre de variante requerido");
       }
 
-      const max =
-        limitMax.trim() === ""
+      const priceVal =
+        variantForm.price.trim() === ""
           ? null
-          : Number(limitMax);
+          : Number(variantForm.price);
+      const costVal =
+        variantForm.cost.trim() === ""
+          ? null
+          : Number(variantForm.cost);
 
-      if (
-        max !== null &&
-        (!Number.isFinite(max) ||
-          max < 0)
-      ) {
-        throw new Error(
-          "El máximo no es válido.",
-        );
+      if (priceVal != null && (!Number.isFinite(priceVal) || priceVal < 0)) {
+        throw new Error("Precio de variante no válido");
+      }
+      if (costVal != null && (!Number.isFinite(costVal) || costVal < 0)) {
+        throw new Error("Costo de variante no válido");
       }
 
-      if (
-        max !== null &&
-        max < min
-      ) {
-        throw new Error(
-          "El máximo no puede ser menor que el mínimo.",
-        );
+      const barcodeValue = variantForm.barcode.trim();
+
+      // Unicidad de barcode en productos y variantes (código independiente).
+      if (barcodeValue && !priceOnly) {
+        const { data: productClash, error: pErr } = await supabase
+          .from("products")
+          .select("id")
+          .eq("barcode", barcodeValue)
+          .maybeSingle();
+        if (pErr) throw pErr;
+        if (productClash) {
+          throw new Error(
+            "Ese código de barras ya pertenece a otro producto.",
+          );
+        }
+
+        let vq = (supabase as any)
+          .from("product_variants")
+          .select("id")
+          .eq("barcode", barcodeValue);
+        if (variantForm.id) {
+          vq = vq.neq("id", variantForm.id);
+        }
+        const { data: variantClash, error: vErr } = await vq.maybeSingle();
+        if (vErr) throw vErr;
+        if (variantClash) {
+          throw new Error(
+            "Ese código de barras ya pertenece a otra variante.",
+          );
+        }
       }
 
-      await setSharedInventoryLimits(
-        limitProduct,
-        null,
-        min,
-        max,
-      );
+      if (priceOnly) {
+        if (!variantForm.id) {
+          throw new Error(
+            "No tienes permiso para crear variantes.",
+          );
+        }
+        const { error } = await (supabase as any)
+          .from("product_variants")
+          .update({
+            price_override: priceVal,
+            cost_override: costVal,
+          })
+          .eq("id", variantForm.id)
+          .eq("product_id", form.id);
+        if (error) throw error;
+        return;
+      }
+
+      if (variantForm.image_url.trim() && !validImageRef(variantForm.image_url.trim())) {
+        throw new Error("Imagen de variante inválida. Usa una URL http/https o una foto subida desde el dispositivo.");
+      }
+      const payload = {
+        product_id: form.id,
+        name,
+        sku: variantForm.sku.trim() || null,
+        barcode: barcodeValue || null,
+        price_override: priceVal,
+        cost_override: costVal,
+        image_url: variantForm.image_url.trim() || null,
+      };
+
+      if (variantForm.id) {
+        const { error } = await (supabase as any)
+          .from("product_variants")
+          .update({
+            name: payload.name,
+            sku: payload.sku,
+            barcode: payload.barcode,
+            price_override: payload.price_override,
+            cost_override: payload.cost_override,
+            image_url: payload.image_url,
+          })
+          .eq("id", variantForm.id)
+          .eq("product_id", form.id);
+
+        if (error) throw error;
+        return;
+      }
+
+      const { error } = await (supabase as any)
+        .from("product_variants")
+        .insert(payload);
+
+      if (error) throw error;
+
+      // Marcar el producto como con variantes (columna existente).
+      const { error: flagError } = await supabase
+        .from("products")
+        .update({ has_variants: true })
+        .eq("id", form.id);
+
+      if (flagError) {
+        throw new Error(`Variante guardada, pero no se pudo actualizar el producto: ${flagError.message}. No repitas la creación.`);
+      }
     },
 
     onSuccess: () => {
       toast.success(
-        "Límites actualizados.",
+        variantForm.id ? "Variante actualizada" : "Variante creada",
       );
-
-      invalidateInventory();
+      setVariantForm(emptyVariantForm);
+      setVariantModalOpen(false);
+      void qc.invalidateQueries({
+        queryKey: ["product-variants", form.id ?? "none"],
+      });
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
     },
 
-    onError: (error: Error) => {
-      toast.error(error.message);
+    onError: (e: Error) => {
+      toast.error(e.message);
     },
   });
 
-  const productOptions = products.map(
-    (product) => (
-      <SelectItem
-        key={product.id}
-        value={product.id}
-      >
-        {product.name}
-        {product.sku
-          ? ` (${product.sku})`
-          : ""}
-      </SelectItem>
-    ),
-  );
+  const removeVariant = useMutation({
+    mutationFn: async (_variantId: string) => {
+      throw new Error("No se eliminan variantes: deben conservarse sus existencias y relaciones históricas.");
+    },
 
-  return (
-    <PageShell>
+    onSuccess: () => {
+      toast.success("Variante eliminada");
+      setVariantModalOpen(false);
+      setVariantForm(emptyVariantForm);
+      void qc.invalidateQueries({
+        queryKey: ["product-variants", form.id ?? "none"],
+      });
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["products"] });
+      void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory", "products"],
+      });
+    },
+
+    onError: (e: Error) => {
+      toast.error(e.message);
+    },
+  });
+
+
+
+  const adjustProductStock = useMutation({
+    mutationFn: async () => {
+      if (!canAdjustStock) {
+        throw new Error("Solo un administrador puede ajustar existencias.");
+      }
+      if (!branchId) {
+        throw new Error("Selecciona una sucursal activa antes de ajustar.");
+      }
+      if (!form.id) {
+        throw new Error("Guarda el producto antes de ajustar stock.");
+      }
+      const quantity = Math.abs(Number(adjustQty));
+      if (!Number.isFinite(quantity) || quantity <= 0) {
+        throw new Error("La cantidad debe ser mayor que cero.");
+      }
+      const signed = adjustDir === "in" ? quantity : -quantity;
+      const { error } = await supabase.rpc("adjust_stock", {
+        _branch_id: branchId,
+        _product_id: form.id,
+        _quantity: signed,
+        _notes:
+          adjustNotes.trim() ||
+          (adjustDir === "in" ? "Ajuste de entrada" : "Ajuste de salida"),
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Existencias actualizadas.");
+      setAdjustQty("");
+      setAdjustNotes("");
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory", "products"],
+      });
+      void qc.invalidateQueries({ queryKey: ["inventory-movements"] });
+      void qc.invalidateQueries({ queryKey: ["product-movements"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const editProduct = (p: ProductRow) => {
+    if (!canOpenForm) {
+      toast.error("No tienes permiso para abrir este producto.");
+      return;
+    }
+
+    setForm({
+      id: p.id,
+      sku: p.sku ?? "",
+      barcode: p.barcode ?? "",
+      name: p.name,
+      description: p.description ?? "",
+      category_id: p.category_id ?? "none",
+      price: String(p.price ?? 0),
+      cost: String(p.cost ?? 0),
+      tax_rate: String(p.tax_rate ?? 0),
+      emoji: p.emoji ?? "📦",
+      image_url: p.image_url ?? "",
+    });
+
+    setActiveTab("form");
+  };
+
+  const startNewProduct = () => {
+    if (!canCreateProduct) {
+      toast.error("No tienes permiso para crear productos.");
+      return;
+    }
+
+    setForm(emptyProduct);
+    setActiveTab("form");
+  };
+
+  const selectedCategoryName = useMemo(() => {
+    if (!selectedCategoryId) return null;
+
+    return (
+      categories.find((c) => c.id === selectedCategoryId)?.name ?? null
+    );
+  }, [categories, selectedCategoryId]);
+
+  const inventorySummary = useMemo(() => {
+    let totalUnits = 0;
+    let totalAvailable = 0;
+    let totalReserved = 0;
+    let outOfStock = 0;
+    let lowStock = 0;
+
+    for (const item of stockMap.values()) {
+      totalUnits += item.stock;
+      totalAvailable += item.availableStock;
+      totalReserved += item.reservedStock;
+
+      if (item.availableStock <= 0) outOfStock += 1;
+    }
+
+    for (const row of sharedInventory) {
+      if (row.stock_status === "low_stock") lowStock += 1;
+    }
+
+    return {
+      totalUnits,
+      totalAvailable,
+      totalReserved,
+      outOfStock,
+      lowStock,
+    };
+  }, [sharedInventory, stockMap]);
+
+  const loading = productsLoading || inventoryLoading;
+
+  const handleBarcodeDetected = (value: string) => {
+    if (variantModalOpen) {
+      setVariantForm((current) => ({ ...current, barcode: value }));
+    } else {
+      setForm((current) => ({ ...current, barcode: value }));
+    }
+    setScannerOpen(false);
+    toast.success(`Código leído: ${value}`);
+  };
+
+  const handleDownloadLabel = () => {
+    try {
+      downloadBarcodeLabel(form.name, form.price, form.barcode);
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "No se pudo generar la etiqueta.",
+      );
+    }
+  };
+
+  const content = (
+    <>
+      {!embedded && (
+        <PageHeader
+          icon={Package}
+          title="Artículos"
+          description="Catálogo, precios y existencias (inventario compartido)."
+        />
+      )}
+
+      {/* Chrome colapsable: stats + pestañas + buscador */}
       <div
         className={
           "overflow-hidden transition-all duration-300 ease-out " +
-          (topChromeHidden
+          (chromeHidden
             ? "max-h-0 opacity-0 -translate-y-2 pointer-events-none"
-            : "max-h-[280px] opacity-100 translate-y-0")
+            : "max-h-[900px] opacity-100 translate-y-0")
         }
       >
-        <PageHeader
-          icon={Boxes}
-          title="Inventario"
-          description="Centro de control de productos, existencias y movimientos de Lula Shop."
-          action={
-            lowStock.length > 0 ? (
-              <Badge
-                variant="destructive"
-                className="min-h-8 gap-1 rounded-full px-3"
-              >
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {lowStock.length} bajo mínimo
-              </Badge>
-            ) : undefined
-          }
-        />
-      </div>
-
-      {inventoryError && (
-        <Card className="border-destructive/30">
-          <CardContent className="pt-5 text-sm text-destructive sm:pt-6">
-            Error al cargar inventario:{" "}
-            {(inventoryError as Error).message}
+      <div className="mb-3 grid grid-cols-2 gap-2 sm:gap-2.5 md:grid-cols-4">
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
+              Productos
+            </p>
+            <p className="text-xl font-bold text-[#1a73e8] sm:text-2xl">
+              {products.length}
+            </p>
           </CardContent>
         </Card>
-      )}
 
-      <Tabs defaultValue={canViewProducts ? "productos" : "existencias"}>
-                <div
-          className={
-            "overflow-hidden transition-all duration-300 ease-out " +
-            (topChromeHidden
-              ? "max-h-0 opacity-0 pointer-events-none"
-              : "max-h-[120px] opacity-100")
-          }
-        >
-<div className="-mx-1 overflow-x-auto px-1 pb-1">
-          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm">
-            {canViewProducts && (
-              <TabsTrigger
-                value="productos"
-                className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
-              >
-                <Package className="mr-1 h-3.5 w-3.5" />
-                Productos
-              </TabsTrigger>
-            )}
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
+              Disponibles
+            </p>
+            <p className="text-xl font-bold text-[#212121] sm:text-2xl">
+              {inventorySummary.totalAvailable}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
+              Reservado
+            </p>
+            <p className="text-xl font-bold text-[#212121] sm:text-2xl">
+              {inventorySummary.totalReserved}
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#e0e0e0] shadow-sm">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-[#757575] sm:text-xs">
+              Agotados
+            </p>
+            <p className="text-xl font-bold text-[#c2185b] sm:text-2xl">
+              {inventorySummary.outOfStock}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+      </div>
+
+      {/* Tirador: jala / toca para mostrar u ocultar el menú superior */}
+      <button
+        type="button"
+        onClick={() => setChromeHidden((v) => !v)}
+        className="mb-2 flex w-full flex-col items-center gap-0.5 py-1 text-[#9e9e9e] active:bg-[#f5f5f5]"
+        aria-label={chromeHidden ? "Mostrar menú de inventario" : "Ocultar menú de inventario"}
+      >
+        <span className="h-1 w-10 rounded-full bg-[#cfd8dc]" />
+        <span className="text-[10px] font-medium tracking-wide">
+          {chromeHidden ? "↓ Desliza o toca para ver menú" : "↑ Ocultar menú"}
+        </span>
+      </button>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) =>
+          setActiveTab(value as "lista" | "form" | "categorias")
+        }
+      >
+        <div className="-mx-1 overflow-x-auto px-1 pb-1">
+          <TabsList className="flex h-auto w-max min-w-full flex-nowrap gap-1 rounded-xl border border-[#e0e0e0] bg-white p-1 shadow-sm sm:w-full">
             <TabsTrigger
-              value="existencias"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              value="lista"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              Stock actual
+              Artículos
             </TabsTrigger>
-
             <TabsTrigger
-              value="ajuste"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              value="form"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              Ajuste
+              {form.id ? "Editar" : "Nuevo"}
             </TabsTrigger>
-
             <TabsTrigger
-              value="limites"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
+              value="categorias"
+              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-4 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
             >
-              Límites
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="conteo"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
-            >
-              <ClipboardList className="mr-1 h-3.5 w-3.5" />
-              Inventario físico
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="historial"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
-            >
-              <History className="mr-1 h-3.5 w-3.5" />
-              Historial físico
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="movimientos"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
-            >
-              Movimientos
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="reposicion"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
-            >
-              <ClipboardList className="mr-1 h-3.5 w-3.5" />
-              Reposición
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="importar"
-              className="min-h-10 shrink-0 touch-manipulation rounded-lg px-3 text-xs data-[state=active]:bg-[#1a73e8] data-[state=active]:text-white sm:text-sm"
-            >
-              <FileSpreadsheet className="mr-1 h-3.5 w-3.5" />
-              Importar / Exportar
+              Categoría
             </TabsTrigger>
           </TabsList>
         </div>
-        </div>
-        <button
-          type="button"
-          onClick={() => setTopChromeHidden((v) => !v)}
-          className="mb-1 flex w-full flex-col items-center gap-0.5 py-1 text-[#9e9e9e] active:bg-[#f5f5f5]"
-          aria-label={topChromeHidden ? "Mostrar menú" : "Ocultar menú"}
-        >
-          <span className="h-1 w-10 rounded-full bg-[#cfd8dc]" />
-          <span className="text-[10px] font-medium">
-            {topChromeHidden ? "↓ Menú inventario" : "↑ Ocultar menú"}
-          </span>
-        </button>
 
+        <TabsContent value="lista" className="mt-3 space-y-3 sm:mt-4 sm:space-y-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="relative w-full sm:max-w-md md:max-w-lg">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-11 rounded-xl border border-[#e0e0e0] bg-white pl-9 shadow-sm placeholder:text-[#9e9e9e]"
+                placeholder="Buscar por nombre, SKU o código de barras…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
 
-        {canViewProducts && (
-          <TabsContent value="productos" className="mt-3 sm:mt-4">
-            <ProductosPage embedded />
-          </TabsContent>
-        )}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-11 w-11 shrink-0 touch-manipulation rounded-xl"
+              onClick={() => void refetchInventory()}
+              title="Actualizar existencias"
+              aria-label="Actualizar existencias"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+          </div>
 
-        {/* =====================================================
-         * EXISTENCIAS
-         * ===================================================== */}
-        <TabsContent
-          value="existencias"
-          className="mt-3 sm:mt-4"
-        >
-          <Card className="overflow-hidden border-[#e0e0e0] shadow-sm">
-            <CardHeader className="border-b border-[#f0f0f0] pb-3">
-              <CardTitle className="text-base font-bold text-[#212121]">
-                Existencias compartidas
-              </CardTitle>
+          <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
+            {(
+              [
+                ["all", "Todos"],
+                ["low", "Inventario bajo"],
+                ["out", "Agotado"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setStockFilter(key)}
+                className={
+                  stockFilter === key
+                    ? "shrink-0 rounded-full bg-[#7c4dff] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
+                    : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
+                }
+              >
+                {label}
+              </button>
+            ))}
+          </div>
 
-              <p className="text-xs leading-5 text-[#757575]">
-                Una sola existencia para ambas sucursales.
-              </p>
-            </CardHeader>
+          {loading && (
+            <div className="rounded-xl border p-10 text-center text-sm text-muted-foreground">
+              Cargando...
+            </div>
+          )}
 
-            <CardContent className="px-3 pt-3 sm:px-6">
-              <div className="mb-3 flex gap-2 overflow-x-auto pb-0.5 scrollbar-none">
-                {(
-                  [
-                    ["all", "Todos"],
-                    ["low", "Inventario bajo"],
-                    ["out", "Agotado"],
-                  ] as const
-                ).map(([key, label]) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setStockStatusFilter(key)}
-                    className={
-                      stockStatusFilter === key
-                        ? "shrink-0 rounded-full bg-[#7c4dff] px-3.5 py-1.5 text-[12px] font-semibold text-white shadow-sm"
-                        : "shrink-0 rounded-full bg-[#eeeeee] px-3.5 py-1.5 text-[12px] font-medium text-[#616161]"
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
+          {selectedCategoryName && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[#e3f2fd] bg-[#e3f2fd]/60 px-3 py-2">
+              <span className="text-sm text-[#1565c0]">
+                Categoría: <strong>{selectedCategoryName}</strong>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-lg border-[#90caf9] text-[#1565c0]"
+                onClick={() => setSelectedCategoryId(null)}
+              >
+                Ver todos
+              </Button>
+            </div>
+          )}
+
+          {!loading && filtered.length === 0 && (
+            <div className="flex flex-col items-center gap-3 rounded-2xl border border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm sm:px-6 sm:py-14">
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-[#e8f0fe] text-4xl">
+                📦
               </div>
-
-              {/* CELULAR / TABLET — PRODUCTOS AGRUPADOS */}
-              <div className="grid gap-3 lg:hidden">
-                {inventoryLoading && (
-                  <div className="rounded-xl border bg-white p-8 text-center">
-                    <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                    <p className="text-sm text-gray-500">
-                      Cargando inventario...
-                    </p>
-                  </div>
+              <div>
+                <p className="text-base font-bold text-[#212121]">
+                  Sin artículos
+                </p>
+                <p className="mt-1 max-w-sm text-sm leading-5 text-[#757575]">
+                  Crea un producto en la pestaña Nuevo o ajusta la búsqueda.
+                </p>
+                {canCreateProduct && (
+                  <Button className="mt-3 rounded-xl" onClick={startNewProduct}>
+                    + Crear nuevo
+                  </Button>
                 )}
+              </div>
+            </div>
+          )}
 
-                {!inventoryLoading && inventory.length === 0 && (
-                  <div className="rounded-xl border border-dashed bg-white p-8 text-center">
-                    <Package className="mx-auto mb-2 h-9 w-9 text-gray-400" />
-                    <p className="font-semibold">Sin productos registrados</p>
-                  </div>
-                )}
+          {!loading && filtered.length > 0 && (
+            <div className="grid grid-cols-1 gap-2 pb-20 sm:grid-cols-2 xl:grid-cols-3">
+              {filtered.map((p) => {
+                // Todas las filas de inventario de este producto (base + variantes)
+                const allRows = sharedInventory.filter(
+                  (row) => row.product_id === p.id,
+                );
+                const variantRows = allRows.filter((row) => row.variant_id);
+                const baseRow = allRows.find((row) => !row.variant_id) ?? null;
+                const hasVariants = variantRows.length > 0;
 
-                {!inventoryLoading &&
-                  filteredInventory.length === 0 &&
-                  inventory.length > 0 && (
-                    <div className="rounded-xl border border-dashed bg-white p-8 text-center">
-                      No hay productos en este filtro.
-                    </div>
-                  )}
+                // Chips: variantes si existen; si no, SKU/barcode del producto
+                const chipRows =
+                  variantRows.length > 0
+                    ? variantRows
+                    : baseRow
+                      ? [baseRow]
+                      : [];
 
-                {!inventoryLoading &&
-                  groupedInventory.map((group) => {
-                    const hasSelection = Object.prototype.hasOwnProperty.call(
-                      selectedVariantByProduct,
-                      group.productId,
-                    );
+                const hasSelection = Object.prototype.hasOwnProperty.call(
+                  selectedVariantByProduct,
+                  p.id,
+                );
+                const selectedId = hasSelection
+                  ? selectedVariantByProduct[p.id]
+                  : (chipRows[0]?.variant_id ?? null);
 
-                    const selectedId = hasSelection
-                      ? selectedVariantByProduct[group.productId]
-                      : group.variants[0]?.variant_id ?? null;
+                const selectedRow =
+                  chipRows.find(
+                    (row) => (row.variant_id ?? null) === selectedId,
+                  ) ??
+                  chipRows[0] ??
+                  null;
 
-                    const selectedRow =
-                      group.variants.find(
-                        (variant) =>
-                          (variant.variant_id ?? null) === selectedId,
-                      ) ?? group.variants[0];
+                // Precio / costo / stock según variante seleccionada (o producto base)
+                const displayPrice = selectedRow
+                  ? Number(selectedRow.price ?? p.price ?? 0)
+                  : Number(p.price ?? 0);
+                const displayCost = selectedRow
+                  ? Number(selectedRow.cost ?? p.cost ?? 0)
+                  : Number(p.cost ?? 0);
+                const available = selectedRow
+                  ? Number(selectedRow.available_stock ?? 0)
+                  : Number(stockMap.get(p.id)?.availableStock ?? 0);
+                const reserved = selectedRow
+                  ? Number(selectedRow.reserved_stock ?? 0)
+                  : Number(stockMap.get(p.id)?.reservedStock ?? 0);
+                const minimum = selectedRow
+                  ? Number(selectedRow.min_stock ?? 0)
+                  : 0;
 
-                    if (!selectedRow) return null;
+                const agotado = available <= 0;
+                const lowStock =
+                  !agotado && minimum > 0 && available <= minimum;
 
-                    const available = Number(selectedRow.available_stock);
-                    const minimum = Number(selectedRow.min_stock);
-                    const stock = Number(selectedRow.stock);
-                    const reserved = Number(selectedRow.reserved_stock);
-                    const price = Number(selectedRow.price ?? 0);
-                    const cost = Number(selectedRow.cost ?? 0);
+                const marginPct =
+                  displayPrice > 0
+                    ? (
+                        ((displayPrice - displayCost) / displayPrice) *
+                        100
+                      ).toFixed(3)
+                    : null;
 
-                    const isOut = available <= 0;
-                    const isLow = available > 0 && available <= minimum;
-
-                    const margin =
-                      price > 0
-                        ? ((price - cost) / price) * 100
-                        : 0;
-
+                const getChipLabel = (row: (typeof chipRows)[number]) => {
+                  if (row.sku) return row.sku;
+                  if (row.barcode) return row.barcode;
+                  if (row.product_name?.includes("—")) {
                     return (
-                      <div
-                        key={group.productId}
-                        className={cn(
-                          "rounded-xl border bg-white p-3 shadow-sm",
-                          isOut && "border-pink-300",
-                          isLow && "border-orange-300 bg-orange-50/40",
-                        )}
-                      >
-                        <div className="flex items-start gap-3">
-                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-2xl">
-                            {selectedRow.emoji ?? "📦"}
-                          </div>
+                      row.product_name.split("—").pop()?.trim() || "Var"
+                    );
+                  }
+                  return p.sku || p.barcode || "Base";
+                };
 
+                return (
+                  <div
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    className={cn(
+                      "rounded-xl border border-[#e8e8e8] bg-white px-3 py-3 shadow-sm transition",
+                      canOpenForm &&
+                        "cursor-pointer touch-manipulation active:scale-[0.995] hover:border-[#90caf9] hover:shadow",
+                      !p.is_active && "opacity-50",
+                    )}
+                    onClick={() => {
+                      if (canOpenForm) editProduct(p);
+                    }}
+                    onKeyDown={(e) => {
+                      if (
+                        (e.key === "Enter" || e.key === " ") &&
+                        canOpenForm
+                      ) {
+                        e.preventDefault();
+                        editProduct(p);
+                      }
+                    }}
+                  >
+                    <div className="flex gap-3">
+                      {/* Imagen */}
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] sm:h-[72px] sm:w-[72px]">
+                        <ProductImage
+                          src={selectedRow?.image_url || p.image_url}
+                          emoji={p.emoji}
+                          name={p.name}
+                        />
+                      </div>
+
+                      {/* Contenido principal */}
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0 flex-1">
-                            <p className="break-words text-sm font-bold text-gray-900">
-                              {selectedRow.product_name}
+                            <p className="break-words text-[15px] font-semibold leading-snug text-[#212121]">
+                              {p.name}
                             </p>
-
-                            {selectedRow.sku && (
-                              <p className="mt-1 text-xs text-gray-500">
-                                SKU: {selectedRow.sku}
-                              </p>
-                            )}
-
-                            {selectedRow.barcode && (
-                              <p className="font-mono text-xs text-gray-500">
-                                Código: {selectedRow.barcode}
-                              </p>
-                            )}
-
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <span className="text-sm font-bold text-blue-700">
-                                ${price.toFixed(2)}
-                              </span>
-
-                              <span className="text-xs text-gray-500">
-                                Margen {margin.toFixed(1)}%
-                              </span>
-                            </div>
+                            <p className="mt-0.5 text-[15px] font-bold text-[#1a73e8]">
+                              {money(displayPrice)}
+                              {marginPct !== null && (
+                                <span className="ml-1 text-[12px] font-semibold text-[#34a853]">
+                                  ({marginPct}%)
+                                </span>
+                              )}
+                            </p>
                           </div>
 
-                          <div className="shrink-0">
-                            {isOut ? (
-                              <span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-bold text-pink-700">
+                          <div className="shrink-0 pt-0.5 text-right">
+                            {agotado ? (
+                              <span className="text-[13px] font-medium text-[#e53935]">
                                 Agotado
                               </span>
-                            ) : isLow ? (
-                              <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">
-                                Bajo
+                            ) : lowStock ? (
+                              <span className="text-[13px] font-medium text-[#ef6c00]">
+                                {available} En existencia
                               </span>
                             ) : (
-                              <span className="rounded-full bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700">
-                                OK
+                              <span className="text-[13px] font-medium text-[#757575]">
+                                {available} En existencia
+                              </span>
+                            )}
+                            {reserved > 0 && (
+                              <p className="text-[11px] text-[#9e9e9e]">
+                                {reserved} res.
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Chips seleccionables de variante / SKU (estilo captura) */}
+                        {(chipRows.length > 0 || p.sku || p.barcode) && (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-[#eeeeee] pt-2.5">
+                            {chipRows.length > 0
+                              ? chipRows.slice(0, 12).map((row) => {
+                                  const isSelected =
+                                    (row.variant_id ?? null) === selectedId;
+                                  const label = getChipLabel(row);
+                                  return (
+                                    <button
+                                      key={
+                                        row.id ??
+                                        `${row.product_id}-${row.variant_id ?? "base"}`
+                                      }
+                                      type="button"
+                                      title={
+                                        [row.sku, row.barcode, row.product_name]
+                                          .filter(Boolean)
+                                          .join(" · ") || label
+                                      }
+                                      className={cn(
+                                        "inline-flex max-w-[160px] truncate rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                                        isSelected
+                                          ? "bg-[#1a73e8] text-white"
+                                          : "bg-[#f1f3f4] text-[#5f6368] hover:bg-[#e8eaed]",
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedVariantByProduct(
+                                          (prev) => ({
+                                            ...prev,
+                                            [p.id]: row.variant_id ?? null,
+                                          }),
+                                        );
+                                      }}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })
+                              : (p.sku || p.barcode) && (
+                                  <span className="inline-flex max-w-[160px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white">
+                                    {p.sku || p.barcode}
+                                  </span>
+                                )}
+                            {hasVariants && chipRows.length > 12 && (
+                              <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
+                                +{chipRows.length - 12}
                               </span>
                             )}
                           </div>
-                        </div>
-
-                        {group.variants.length > 1 && (
-                          <div className="mt-3 border-t border-gray-100 pt-3">
-                            <p className="mb-2 text-xs font-semibold text-gray-500">
-                              VARIANTES ({group.variants.length})
-                            </p>
-
-                            <div className="flex flex-wrap gap-2">
-                              {group.variants.map((variant) => {
-                                const isSelected =
-                                  (variant.variant_id ?? null) ===
-                                  (selectedRow.variant_id ?? null);
-
-                                return (
-                                  <button
-                                    key={`${variant.product_id}-${variant.variant_id ?? "base"}`}
-                                    type="button"
-                                    onClick={() =>
-                                      setSelectedVariantByProduct((previous) => ({
-                                        ...previous,
-                                        [group.productId]:
-                                          variant.variant_id ?? null,
-                                      }))
-                                    }
-                                    className={cn(
-                                      "max-w-full rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
-                                      isSelected
-                                        ? "border-blue-600 bg-blue-600 text-white"
-                                        : "border-gray-200 bg-gray-100 text-gray-700",
-                                    )}
-                                  >
-                                    {getVariantLabel(variant)}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </div>
                         )}
-
-                        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
-                          <div className="rounded-lg bg-gray-50 p-2 text-center">
-                            <p className="text-[10px] text-gray-500">Stock</p>
-                            <p className="text-base font-bold text-gray-900">
-                              {stock}
-                            </p>
-                          </div>
-
-                          <div className="rounded-lg bg-gray-50 p-2 text-center">
-                            <p className="text-[10px] text-gray-500">Reservado</p>
-                            <p className="text-base font-bold text-gray-900">
-                              {reserved}
-                            </p>
-                          </div>
-
-                          <div
-                            className={cn(
-                              "rounded-lg p-2 text-center",
-                              isLow || isOut
-                                ? "bg-orange-50"
-                                : "bg-green-50",
-                            )}
-                          >
-                            <p className="text-[10px] text-gray-500">
-                              Disponible
-                            </p>
-                            <p
-                              className={cn(
-                                "text-base font-bold",
-                                isLow || isOut
-                                  ? "text-orange-700"
-                                  : "text-green-700",
-                              )}
-                            >
-                              {available}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => navigate({ to: "/productos" })}
-                          className="mt-3 w-full rounded-lg border border-gray-200 py-2 text-xs font-semibold text-blue-700"
-                        >
-                          Ver en Artículos
-                        </button>
                       </div>
-                    );
-                  })}
-              </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-              {/* PANTALLA GRANDE */}
-              <div className="hidden overflow-x-auto lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>
-                        Producto
-                      </TableHead>
-
-                      <TableHead>
-                        SKU
-                      </TableHead>
-
-                      <TableHead className="text-right">
-                        Stock
-                      </TableHead>
-
-                      <TableHead className="text-right">
-                        Reservado
-                      </TableHead>
-
-                      <TableHead className="text-right">
-                        Disponible
-                      </TableHead>
-
-                      <TableHead className="text-right">
-                        Mín.
-                      </TableHead>
-
-                      <TableHead className="text-right">
-                        Estado
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {inventoryLoading && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={7}
-                          className="py-10 text-center"
-                        >
-                          Cargando inventario...
-                        </TableCell>
-                      </TableRow>
-                    )}
-
-                    {!inventoryLoading &&
-                      inventory.length === 0 && (
-                        <TableRow>
-                          <TableCell
-                            colSpan={7}
-                            className="py-10 text-center text-muted-foreground"
-                          >
-                            <Package className="mx-auto mb-2 h-8 w-8 opacity-40" />
-                            Sin existencias registradas.
-                          </TableCell>
-                        </TableRow>
-                      )}
-
-                    {filteredInventory.map(
-                      (row: InventoryRow) => {
-                        const available =
-                          Number(
-                            row.available_stock,
-                          );
-
-                        const minimum =
-                          Number(
-                            row.min_stock,
-                          );
-
-                        const isOut =
-                          available <= 0;
-
-                        const isLow =
-                          available <= minimum;
-
-                        return (
-                          <TableRow
-                            key={`${row.product_id}-${row.variant_id ?? "base"}`}
-                            className={cn(
-                              isLow &&
-                                "bg-destructive/5",
-                            )}
-                          >
-                            <TableCell className="font-medium">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <span>
-                                  {row.emoji ?? "📦"}{" "}
-                                  {row.product_name}
-                                </span>
-                                {row.variant_id && (
-                                  <Badge
-                                    variant="outline"
-                                  >
-                                    Variante
-                                  </Badge>
-                                )}
-                                <button
-                                  type="button"
-                                  className="text-xs font-semibold text-[#1a73e8] hover:underline"
-                                  onClick={() =>
-                                    navigate({ to: "/productos" })
-                                  }
-                                >
-                                  Ver en Artículos
-                                </button>
-                              </div>
-                            </TableCell>
-
-                            <TableCell className="font-mono text-xs text-muted-foreground">
-                              {row.sku ?? "—"}
-                            </TableCell>
-
-                            <TableCell className="text-right font-semibold">
-                              {Number(row.stock)}
-                            </TableCell>
-
-                            <TableCell className="text-right">
-                              {Number(
-                                row.reserved_stock,
-                              )}
-                            </TableCell>
-
-                            <TableCell className="text-right font-semibold">
-                              {available}
-                            </TableCell>
-
-                            <TableCell className="text-right">
-                              {minimum}
-                            </TableCell>
-
-                            <TableCell className="text-right">
-                              {isOut ? (
-                                <Badge variant="destructive">
-                                  Agotado
-                                </Badge>
-                              ) : isLow ? (
-                                <Badge variant="destructive">
-                                  Bajo
-                                </Badge>
-                              ) : (
-                                <Badge variant="secondary">
-                                  OK
-                                </Badge>
-                              )}
-                            </TableCell>
-                          </TableRow>
-                        );
-                      },
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+          {/* FAB estilo Zobaze */}
+          <div className="pointer-events-none fixed bottom-20 right-4 z-40 flex flex-col items-end gap-3 sm:bottom-6">
+            {canCreateProduct && (
+              <button
+                type="button"
+                className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#1a73e8] text-2xl font-light text-white shadow-lg transition hover:bg-[#1557b0] active:scale-95"
+                onClick={startNewProduct}
+                aria-label="Crear producto"
+              >
+                +
+              </button>
+            )}
+          </div>
         </TabsContent>
 
-        {/* =====================================================
-         * AJUSTE
-         * ===================================================== */}
-        <TabsContent
-          value="ajuste"
-          className="mt-3 sm:mt-4"
-        >
-          <Card className="w-full lg:max-w-lg">
-            <CardHeader>
-              <CardTitle className="text-base">
-                Ajuste directo
-              </CardTitle>
-            </CardHeader>
+        <TabsContent value="form" className="mt-3 sm:mt-4">
+          <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-[#e0e0e0] bg-white shadow-sm">
+            {/* Barra superior estilo Zobaze */}
+            <div className="flex items-center gap-2 border-b border-[#e8e8e8] bg-white px-3 py-2.5">
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full text-[#616161] hover:bg-[#f5f5f5]"
+                onClick={() => {
+                  setForm(emptyProduct);
+                  setActiveTab("lista");
+                }}
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
 
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>
-                  Producto
+              {form.id && (canDelete || isManager) && (
+                <Button
+                  type="button"
+                  className="h-9 rounded-md bg-[#e53935] px-4 text-sm font-bold text-white hover:bg-[#c62828]"
+                  disabled={removeProduct.isPending}
+                  onClick={() => {
+                    if (form.id) removeProduct.mutate(form.id);
+                  }}
+                >
+                  BORRAR
+                </Button>
+              )}
+
+              <h2 className="flex-1 text-center text-[15px] font-bold uppercase tracking-wide text-[#1a73e8]">
+                {form.id ? "Gestionar artículo" : "Nuevo artículo"}
+              </h2>
+
+              {form.id && canCreateProduct && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 rounded-lg border-[#1a73e8] text-[#1a73e8]"
+                  onClick={startNewProduct}
+                >
+                  + Nuevo
+                </Button>
+              )}
+            </div>
+
+            <div className="space-y-4 p-3.5 sm:p-5">
+              <div className="grid grid-cols-[64px_minmax(0,1fr)] gap-3 sm:grid-cols-[76px_minmax(0,1fr)]">
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-[#757575]">Emoji</Label>
+                  <Input
+                    value={form.emoji}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, emoji: e.target.value }))
+                    }
+                    className="h-11 rounded-xl border-[#e0e0e0] text-center text-lg"
+                    disabled={priceOnly}
+                  />
+                </div>
+
+                <div className="min-w-0 space-y-1.5">
+                  <Label className="text-xs text-[#757575]">Nombre *</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                    placeholder="Nombre del producto"
+                    className="h-11 rounded-xl border-[#e0e0e0]"
+                    disabled={priceOnly}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-[#757575]">
+                  Imagen del producto
                 </Label>
 
-                <Select
-                  value={adjustProduct}
-                  onValueChange={
-                    setAdjustProduct
-                  }
-                >
-                  <SelectTrigger className="min-h-11 w-full rounded-xl">
-                    <SelectValue placeholder="Selecciona producto" />
-                  </SelectTrigger>
+                <div className="flex items-center gap-3">
+                  <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] text-2xl">
+                    <ProductImage src={form.image_url} emoji={form.emoji} name={form.name} />
+                  </div>
 
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="product-image-url">URL de imagen</Label>
+                    <Input
+                      id="product-image-url"
+                      type="url"
+                      value={form.image_url}
+                      placeholder="https://…"
+                      disabled={priceOnly || !(canCreateProduct || canEditProduct) || saveProduct.isPending}
+                      aria-invalid={Boolean(form.image_url.trim() && !validImageRef(form.image_url.trim()))}
+                      onChange={(event) => setForm((f) => ({ ...f, image_url: event.target.value }))}
+                    />
+                    {form.image_url.trim() && !validImageRef(form.image_url.trim()) && <p className="text-xs text-destructive">Imagen inválida: usa una URL http/https o sube una foto.</p>}
+                    {form.id ? (
+                      <ProductImageUploader
+                        productId={form.id}
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct) ||
+                          saveProduct.isPending
+                        }
+                        onUploaded={(url) =>
+                          setForm((current) => ({
+                            ...current,
+                            image_url: url,
+                          }))
+                        }
+                      />
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Guarda primero el producto. Después podrás subir su fotografía.
+                      </p>
+                    )}
+
+                    {form.image_url && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 rounded-lg"
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct)
+                        }
+                        onClick={() =>
+                          setForm((f) => ({ ...f, image_url: "" }))
+                        }
+                      >
+                        Quitar imagen
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Códigos
+                </p>
+
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">SKU</Label>
+                    <Input
+                      value={form.sku}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, sku: e.target.value }))
+                      }
+                      placeholder="SKU-001"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Código de barras
+                    </Label>
+
+                    <Input
+                      value={form.barcode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          barcode: e.target.value.slice(0, 64),
+                        }))
+                      }
+                      placeholder="EAN / UPC o código interno"
+                      maxLength={64}
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 rounded-xl border-[#e0e0e0]"
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct) ||
+                          saveProduct.isPending
+                        }
+                        onClick={async () => {
+                          try {
+                            const code = await generateUniqueBarcode(10);
+                            setForm((f) => ({ ...f, barcode: code }));
+                            toast.success(`Código generado: ${code}`);
+                          } catch (error) {
+                            toast.error(
+                              error instanceof Error
+                                ? error.message
+                                : "No se pudo generar el código",
+                            );
+                          }
+                        }}
+                      >
+                        <Hash className="mr-2 h-4 w-4" />
+                        Generar
+                      </Button>
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-11 rounded-xl border-[#e0e0e0]"
+                        disabled={
+                          priceOnly ||
+                          !(canCreateProduct || canEditProduct) ||
+                          saveProduct.isPending
+                        }
+                        onClick={() => setScannerOpen(true)}
+                      >
+                        <ScanLine className="mr-2 h-4 w-4" />
+                        Escanear
+                      </Button>
+                    </div>
+
+                    <Button
+                      type="button"
+                      className="h-11 w-full rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
+                      disabled={!form.barcode.trim()}
+                      onClick={handleDownloadLabel}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Descargar etiqueta PNG HD
+                    </Button>
+
+                    <p className="text-[10px] text-[#757575]">
+                      Etiqueta HD con franjas negras a ambos lados (Code 128 Set C).
+                      El texto se ajusta solo para no cortarse. Lista para térmica.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-[#757575]">
+                  Descripción
+                </Label>
+                <Input
+                  value={form.description}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      description: e.target.value,
+                    }))
+                  }
+                  className="h-11 rounded-xl border-[#e0e0e0]"
+                  disabled={priceOnly}
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs text-[#757575]">Categoría</Label>
+                <Select
+                  value={form.category_id}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, category_id: v }))
+                  }
+                  disabled={priceOnly}
+                >
+                  <SelectTrigger className="h-11 rounded-xl border-[#e0e0e0]">
+                    <SelectValue placeholder="Sin categoría" />
+                  </SelectTrigger>
                   <SelectContent>
-                    {productOptions}
+                    <SelectItem value="none">Sin categoría</SelectItem>
+                    {categories.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>
-                    Dirección
-                  </Label>
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Precios
+                </p>
 
-                  <Select
-                    value={adjustDirection}
-                    onValueChange={(value) =>
-                      setAdjustDirection(
-                        value as
-                          | "in"
-                          | "out",
-                      )
-                    }
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Precio venta
+                    </Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.price}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, price: e.target.value }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white text-base font-bold text-[#1a73e8]"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">Costo</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.cost}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, cost: e.target.value }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">IVA</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={form.tax_rate}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, tax_rate: e.target.value }))
+                      }
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white"
+                    />
+                  </div>
+                </div>
+
+                {Number(form.price) > 0 && Number(form.cost) >= 0 && (
+                  <p className="mt-2 break-words text-xs text-[#757575]">
+                    Margen aprox.:{" "}
+                    <span className="font-semibold text-[#34a853]">
+                      {money(Number(form.price) - Number(form.cost))}
+                    </span>{" "}
+                    (
+                    {(
+                      ((Number(form.price) - Number(form.cost)) /
+                        Number(form.price)) *
+                      100
+                    ).toFixed(0)}
+                    %)
+                  </p>
+                )}
+              </div>
+
+              {/* EXISTENCIAS — solo lectura desde shared_inventory */}
+              {form.id && (
+                <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                    Existencias
+                  </p>
+                  {(() => {
+                    const stock = form.id ? stockMap.get(form.id) : undefined;
+                    const available = Number(stock?.availableStock ?? 0);
+                    const reserved = Number(stock?.reservedStock ?? 0);
+                    const physical = Number(stock?.stock ?? 0);
+                    const isLow = sharedInventory.some(
+                      (row) =>
+                        row.product_id === form.id &&
+                        row.stock_status === "low_stock",
+                    );
+                    const agotado = available <= 0;
+                    const statusLabel = agotado
+                      ? "Agotado"
+                      : isLow
+                        ? "Inventario bajo"
+                        : "OK";
+                    const statusClass = agotado
+                      ? "text-[#e53935]"
+                      : isLow
+                        ? "text-[#ef6c00]"
+                        : "text-[#34a853]";
+
+                    return (
+                      <>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Disponibles
+                            </p>
+                            <p
+                              className={`text-lg font-bold ${
+                                agotado ? "text-[#e53935]" : "text-[#212121]"
+                              }`}
+                            >
+                              {available}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Reservado
+                            </p>
+                            <p className="text-lg font-bold text-[#212121]">
+                              {reserved}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Físico
+                            </p>
+                            <p className="text-lg font-bold text-[#212121]">
+                              {physical}
+                            </p>
+                          </div>
+                          <div className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2">
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Estado
+                            </p>
+                            <p className={`text-lg font-bold ${statusClass}`}>
+                              {statusLabel}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] leading-4 text-[#9e9e9e]">
+                          Existencias globales compartidas. La sucursal identifica el origen de los movimientos, no un inventario separado.
+                        </p>
+
+                        {canAdjustStock ? (
+                          <div className="mt-3 space-y-2 rounded-xl border border-[#e0e0e0] bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                              Ajuste rápido
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setAdjustDir("in")}
+                                className={
+                                  adjustDir === "in"
+                                    ? "rounded-full bg-[#34a853] px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-full bg-[#eeeeee] px-3 py-1.5 text-xs font-medium text-[#616161]"
+                                }
+                              >
+                                Entrada +
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAdjustDir("out")}
+                                className={
+                                  adjustDir === "out"
+                                    ? "rounded-full bg-[#e53935] px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-full bg-[#eeeeee] px-3 py-1.5 text-xs font-medium text-[#616161]"
+                                }
+                              >
+                                Salida −
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                placeholder="Cantidad"
+                                value={adjustQty}
+                                onChange={(e) => setAdjustQty(e.target.value)}
+                                className="h-11 rounded-xl"
+                              />
+                              <Input
+                                placeholder="Nota (opcional)"
+                                value={adjustNotes}
+                                onChange={(e) => setAdjustNotes(e.target.value)}
+                                className="h-11 rounded-xl"
+                              />
+                              <Button
+                                type="button"
+                                className="h-11 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
+                                disabled={true}
+                                onClick={() => adjustProductStock.mutate()}
+                              >
+                                {adjustProductStock.isPending
+                                  ? "Aplicando…"
+                                  : "Aplicar"}
+                              </Button>
+                            </div>
+                            <p className="text-[10px] text-[#9e9e9e]">
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="mt-2 text-[11px] text-[#9e9e9e]">
+                            Solo un administrador puede ajustar existencias desde
+                            aquí o en Movimientos.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {!form.id && (
+                <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-2 text-xs text-[#757575]">
+                  Guarda el artículo para ver existencias del inventario
+                  compartido.
+                </p>
+              )}
+
+              {/* VARIANTES estilo Zobaze — sin límite */}
+              {form.id && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                      Variantes
+                    </p>
+                    {(canEditProduct || isManager) && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-lg bg-[#1a73e8] text-white hover:bg-[#1557b0]"
+                        onClick={() => {
+                          setVariantForm({
+                            ...emptyVariantForm,
+                            price: form.price,
+                            cost: form.cost,
+                            image_url: form.image_url || "",
+                          });
+                          setVariantModalOpen(true);
+                        }}
+                      >
+                        <Plus className="mr-1 h-4 w-4" />
+                        Agregar variante
+                      </Button>
+                    )}
+                  </div>
+
+                  {!form.id ? null : variantsLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Cargando variantes…
+                    </p>
+                  ) : productVariants.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-[#e0e0e0] px-3 py-6 text-center text-sm text-[#757575]">
+                      Sin variantes. Agrega todas las que necesites (sin
+                      límite).
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {productVariants.map((v) => {
+                        const inv = sharedInventory.find(
+                          (row) =>
+                            row.product_id === form.id &&
+                            row.variant_id === v.id,
+                        );
+                        const available = Number(
+                          inv?.available_stock ?? 0,
+                        );
+                        const price =
+                          v.price_override != null
+                            ? Number(v.price_override)
+                            : Number(form.price) || 0;
+                        const cost =
+                          v.cost_override != null
+                            ? Number(v.cost_override)
+                            : Number(form.cost) || 0;
+
+                        return (
+                          <button
+                            key={v.id}
+                            type="button"
+                            className="w-full rounded-xl border border-[#e8e8e8] bg-white p-3 text-left shadow-sm transition hover:border-[#90caf9]"
+                            onClick={() => {
+                              if (!(canEditProduct || isManager || canPrice)) {
+                                return;
+                              }
+                              setVariantForm({
+                                id: v.id,
+                                name: v.name,
+                                sku: v.sku ?? "",
+                                barcode: v.barcode ?? "",
+                                price:
+                                  v.price_override != null
+                                    ? String(v.price_override)
+                                    : form.price,
+                                cost:
+                                  v.cost_override != null
+                                    ? String(v.cost_override)
+                                    : form.cost,
+                                image_url: v.image_url ?? form.image_url ?? "",
+                              });
+                              setVariantModalOpen(true);
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] text-xl">
+                                <ProductImage src={v.image_url || form.image_url} emoji={form.emoji} name={v.name} />
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate font-semibold text-[#212121]">
+                                  {v.name}
+                                  {v.sku ? (
+                                    <span className="ml-1 font-normal text-[#757575]">
+                                      {v.sku}
+                                    </span>
+                                  ) : null}
+                                </p>
+                                {v.barcode ? (
+                                  <p className="truncate font-mono text-[11px] text-[#9e9e9e]">
+                                    {v.barcode}
+                                  </p>
+                                ) : null}
+                                <div className="mt-1 grid grid-cols-3 gap-1 text-[11px] text-[#757575]">
+                                  <span>
+                                    Venta{" "}
+                                    <strong className="text-[#1a73e8]">
+                                      {money(price)}
+                                    </strong>
+                                  </span>
+                                  <span>
+                                    Costo{" "}
+                                    <strong>{money(cost)}</strong>
+                                  </span>
+                                  <span className="text-right">
+                                    {available <= 0 ? (
+                                      <strong className="text-[#e53935]">
+                                        Agotado
+                                      </strong>
+                                    ) : (
+                                      <strong>{available} disp.</strong>
+                                    )}
+                                  </span>
+                                </div>
+                                {v.barcode ? (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    <span className="font-mono text-[10px] text-[#9e9e9e]">
+                                      {v.barcode}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="inline-flex items-center gap-1 rounded-md border border-[#34a853]/40 bg-[#e8f5e9] px-2 py-0.5 text-[10px] font-semibold text-[#2e7d32]"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        try {
+                                          const labelName = [
+                                            form.name?.trim(),
+                                            v.name,
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" — ");
+                                          downloadBarcodeLabel(
+                                            labelName || v.name,
+                                            String(price),
+                                            v.barcode!,
+                                          );
+                                        } catch (err) {
+                                          toast.error(
+                                            err instanceof Error
+                                              ? err.message
+                                              : "No se pudo crear la etiqueta",
+                                          );
+                                        }
+                                      }}
+                                    >
+                                      <Download className="h-3 w-3" />
+                                      Etiqueta
+                                    </button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!form.id && (canCreateProduct) && (
+                <p className="rounded-xl bg-[#e8f0fe] px-3 py-2 text-xs text-[#1565c0]">
+                  Guarda el producto primero para poder agregar variantes
+                  ilimitadas.
+                </p>
+              )}
+
+              {/* Historial de movimientos del producto */}
+              {form.id && (
+                <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                    Historial de movimientos
+                  </p>
+                  <p className="mb-3 text-[11px] leading-4 text-[#9e9e9e]">
+                    Ventas, compras, devoluciones, entradas y salidas de este
+                    producto. Incluye sucursal y notas de cada movimiento.
+                  </p>
+
+                  <div className="mb-3 flex flex-wrap gap-1.5">
+                    {(
+                      [
+                        ["all", "Todos"],
+                        ["sales", "Ventas"],
+                        ["in", "Entradas"],
+                        ["out", "Salidas"],
+                        ["adjust", "Ajustes"],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setMovementFilter(key)}
+                        className={
+                          movementFilter === key
+                            ? "rounded-full bg-[#1a73e8] px-3 py-1 text-[11px] font-semibold text-white"
+                            : "rounded-full bg-white px-3 py-1 text-[11px] font-medium text-[#616161] ring-1 ring-[#e0e0e0]"
+                        }
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {movementsLoading ? (
+                    <p className="text-sm text-muted-foreground">
+                      Cargando historial…
+                    </p>
+                  ) : productMovements.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-6 text-center text-sm text-muted-foreground">
+                      Sin movimientos registrados todavía.
+                    </p>
+                  ) : filteredProductMovements.length === 0 ? (
+                    <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-6 text-center text-sm text-muted-foreground">
+                      No hay movimientos con este filtro.
+                    </p>
+                  ) : (
+                    <div className="max-h-72 space-y-2 overflow-y-auto">
+                      {filteredProductMovements.map((m) => {
+                        const qty = Number(m.quantity) || 0;
+                        const label =
+                          PRODUCT_MOVEMENT_LABELS[m.type] ?? m.type;
+                        const when = new Date(m.created_at);
+                        const dateLabel = Number.isNaN(when.getTime())
+                          ? m.created_at
+                          : when.toLocaleString("es-MX", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                            });
+                        const branchName =
+                          branchNameById.get(m.branch_id) ?? null;
+                        return (
+                          <div
+                            key={m.id}
+                            className="rounded-xl border border-[#eeeeee] bg-white px-3 py-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-[#212121]">
+                                  {label}
+                                </p>
+                                <p className="text-[11px] text-[#9e9e9e]">
+                                  {dateLabel}
+                                  {branchName ? ` · ${branchName}` : ""}
+                                  {m.reference_type
+                                    ? ` · ${m.reference_type}`
+                                    : ""}
+                                </p>
+                              </div>
+                              <span
+                                className={
+                                  qty > 0
+                                    ? "shrink-0 text-sm font-bold text-[#34a853]"
+                                    : qty < 0
+                                      ? "shrink-0 text-sm font-bold text-[#e53935]"
+                                      : "shrink-0 text-sm font-bold text-[#212121]"
+                                }
+                              >
+                                {qty > 0 ? `+${qty}` : qty}
+                              </span>
+                            </div>
+                            {m.notes ? (
+                              <p className="mt-1.5 break-words text-xs text-[#616161]">
+                                {m.notes}
+                              </p>
+                            ) : (
+                              <p className="mt-1.5 text-xs text-[#bdbdbd]">
+                                Sin comentario
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-col gap-2 pt-1 sm:flex-row">
+                <Button
+                  className="min-h-11 w-full touch-manipulation rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0] sm:flex-1"
+                  disabled={
+                    saveProduct.isPending ||
+                    (form.id
+                      ? !(priceOnly ? canPrice : canEditProduct)
+                      : !canCreateProduct)
+                  }
+                  onClick={() => saveProduct.mutate()}
+                >
+                  {saveProduct.isPending
+                    ? "Guardando…"
+                    : form.id
+                      ? "Guardar cambios"
+                      : "Crear artículo"}
+                </Button>
+
+                {form.id && (
+                  <Button
+                    variant="outline"
+                    className="min-h-11 w-full touch-manipulation rounded-xl border-[#e0e0e0] sm:w-auto"
+                    onClick={() => {
+                      setForm(emptyProduct);
+                      setActiveTab("lista");
+                    }}
                   >
-                    <SelectTrigger className="min-h-11 w-full rounded-xl">
+                    Cancelar
+                  </Button>
+                )}
+
+                {canCreateProduct && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11 w-full touch-manipulation rounded-xl border-[#1a73e8] text-[#1a73e8] sm:w-auto"
+                    onClick={startNewProduct}
+                  >
+                    + Crear nuevo
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="categorias" className="mt-3 sm:mt-4">
+          <div className="grid gap-3 md:grid-cols-2 md:gap-4">
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  Nueva categoría
+                </CardTitle>
+              </CardHeader>
+
+              <CardContent className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Nombre</Label>
+                  <Input
+                    value={catName}
+                    onChange={(e) => setCatName(e.target.value)}
+                    className="h-11 rounded-xl"
+                    disabled={!isManager}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Padre (opcional)</Label>
+                  <Select
+                    value={catParent}
+                    onValueChange={setCatParent}
+                    disabled={!isManager}
+                  >
+                    <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue />
                     </SelectTrigger>
-
                     <SelectContent>
-                      <SelectItem value="in">
-                        Entrada (+)
-                      </SelectItem>
-
-                      <SelectItem value="out">
-                        Salida (−)
-                      </SelectItem>
+                      <SelectItem value="none">Ninguno</SelectItem>
+                      {categories.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label>
-                    Cantidad
-                  </Label>
+                <Button
+                  className="min-h-11 w-full touch-manipulation rounded-xl"
+                  disabled={!isManager || saveCategory.isPending}
+                  onClick={() => saveCategory.mutate()}
+                >
+                  {saveCategory.isPending ? "Creando…" : "Crear categoría"}
+                </Button>
+              </CardContent>
+            </Card>
 
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Listado</CardTitle>
+              </CardHeader>
+
+              <CardContent>
+                {categoriesLoading ? (
+                  <p className="text-sm text-muted-foreground">
+                    Cargando categorías…
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5 text-sm">
+                    {categories.map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          className="flex min-h-11 w-full items-center rounded-xl border px-3 py-2.5 text-left transition hover:border-[#1a73e8] hover:bg-[#e8f0fe] active:scale-[0.99]"
+                          onClick={() => {
+                            setSelectedCategoryId(c.id);
+                            setActiveTab("lista");
+                          }}
+                        >
+                          {c.name}
+                        </button>
+                      </li>
+                    ))}
+
+                    {!categories.length && (
+                      <li className="rounded-xl border border-dashed p-4 text-center text-sm text-muted-foreground">
+                        Sin categorías.
+                      </li>
+                    )}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+
+      {variantModalOpen && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4">
+          <div className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+            <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-white px-3 py-2.5">
+              <button
+                type="button"
+                className="flex h-9 w-9 items-center justify-center rounded-full hover:bg-[#f5f5f5]"
+                onClick={() => {
+                  setVariantModalOpen(false);
+                  setVariantForm(emptyVariantForm);
+                }}
+                aria-label="Cerrar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+              {variantForm.id && (canEditProduct || isManager) && (
+                <Button
+                  type="button"
+                  className="h-9 rounded-md bg-[#e53935] px-4 text-sm font-bold text-white hover:bg-[#c62828]"
+                  disabled={true}
+                  onClick={() => {
+                    if (variantForm.id) {
+                      removeVariant.mutate(variantForm.id);
+                    }
+                  }}
+                >
+                  BORRAR
+                </Button>
+              )}
+              <h3 className="flex-1 text-center text-[15px] font-bold uppercase tracking-wide text-[#1a73e8]">
+                {variantForm.id ? "Editar variante" : "Nueva variante"}
+              </h3>
+              <span className="w-9" />
+            </div>
+
+            <div className="space-y-4 p-4">
+              <div className="flex gap-3">
+                <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl border bg-[#f5f5f5] text-2xl">
+                  <ProductImage src={variantForm.image_url || form.image_url} emoji={form.emoji} name={variantForm.name} />
+                </div>
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <Label className="text-xs text-[#757575]">
+                    Nombre de variante *
+                  </Label>
+                  <Input
+                    value={variantForm.name}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        name: e.target.value,
+                      }))
+                    }
+                    placeholder="Ej. FB1027 / Rojo / Talla M"
+                    className="h-11 rounded-xl"
+                    disabled={priceOnly}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs text-[#757575]">
+                  Imagen de la variante
+                </Label>
+                <Input
+                  aria-label="URL de imagen de variante"
+                  type="url"
+                  value={variantForm.image_url}
+                  placeholder="https://…"
+                  disabled={priceOnly || !(canEditProduct || isManager) || saveVariant.isPending}
+                  onChange={(event) => setVariantForm((f) => ({ ...f, image_url: event.target.value }))}
+                />
+                <p className="text-xs text-muted-foreground">Carga desde dispositivo pendiente de almacenamiento autorizado.</p>
+
+                {variantForm.image_url && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 rounded-lg"
+                    disabled={priceOnly || !(canEditProduct || isManager)}
+                    onClick={() =>
+                      setVariantForm((f) => ({ ...f, image_url: "" }))
+                    }
+                  >
+                    Quitar imagen
+                  </Button>
+                )}
+              </div>
+
+              <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                  Códigos (independientes del producto)
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">SKU</Label>
+                    <Input
+                      value={variantForm.sku}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          sku: e.target.value,
+                        }))
+                      }
+                      placeholder="SKU variante"
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-[#757575]">
+                      Código de barras
+                    </Label>
+                    <Input
+                      value={variantForm.barcode}
+                      onChange={(e) =>
+                        setVariantForm((f) => ({
+                          ...f,
+                          barcode: e.target.value.slice(0, 64),
+                        }))
+                      }
+                      placeholder="EAN / UPC o genérico"
+                      maxLength={64}
+                      className="h-11 rounded-xl border-[#e0e0e0] bg-white font-mono text-sm"
+                      disabled={priceOnly}
+                    />
+                  </div>
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 rounded-xl border-[#e0e0e0]"
+                    disabled={
+                      priceOnly ||
+                      !(canEditProduct || isManager) ||
+                      saveVariant.isPending
+                    }
+                    onClick={async () => {
+                      try {
+                        const code = await generateUniqueBarcode(10);
+                        setVariantForm((f) => ({ ...f, barcode: code }));
+                        toast.success(`Código generado: ${code}`);
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "No se pudo generar el código",
+                        );
+                      }
+                    }}
+                  >
+                    <Hash className="mr-1 h-4 w-4" />
+                    Generar
+                  </Button>
+                  <Button
+                    type="button"
+                    className="h-10 rounded-xl bg-[#1a73e8] text-white hover:bg-[#1557b0]"
+                    disabled={
+                      priceOnly ||
+                      !(canEditProduct || isManager) ||
+                      saveVariant.isPending
+                    }
+                    onClick={() => setScannerOpen(true)}
+                  >
+                    <ScanLine className="mr-1 h-4 w-4" />
+                    Escanear
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-10 w-full rounded-xl border-[#34a853] text-[#2e7d32] sm:w-auto"
+                    disabled={!variantForm.barcode.trim()}
+                    onClick={() => {
+                      const code = variantForm.barcode.trim();
+                      if (!code) {
+                        toast.error(
+                          "Primero genera o escribe el código de barras de la variante.",
+                        );
+                        return;
+                      }
+                      try {
+                        // Nombre de variante + producto para identificarla al imprimir
+                        const labelName = [
+                          form.name?.trim(),
+                          variantForm.name.trim(),
+                        ]
+                          .filter(Boolean)
+                          .join(" — ");
+                        downloadBarcodeLabel(
+                          labelName || "Variante",
+                          variantForm.price || form.price,
+                          code,
+                        );
+                      } catch (err) {
+                        toast.error(
+                          err instanceof Error
+                            ? err.message
+                            : "No se pudo crear la etiqueta",
+                        );
+                      }
+                    }}
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    Descargar etiqueta PNG HD
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">
+                    Precio venta
+                  </Label>
                   <Input
                     type="number"
                     min="0"
                     step="0.01"
-                    value={adjustQuantity}
-                    onChange={(event) =>
-                      setAdjustQuantity(
-                        event.target.value,
-                      )
+                    value={variantForm.price}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        price: e.target.value,
+                      }))
                     }
-                    className="h-11 rounded-xl"
+                    className="h-11 rounded-xl font-bold text-[#1a73e8]"
                   />
                 </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>
-                  Motivo
-                </Label>
-
-                <Input
-                  value={adjustNotes}
-                  onChange={(event) =>
-                    setAdjustNotes(
-                      event.target.value,
-                    )
-                  }
-                  placeholder="Merma, daño, corrección..."
-                  className="h-11 rounded-xl"
-                />
-              </div>
-
-              <Button
-                className="min-h-11 w-full touch-manipulation rounded-xl"
-                disabled={
-                  true ||
-                  !isManager ||
-                  !branchId ||
-                  !adjustProduct ||
-                  !adjustQuantity ||
-                  adjustInventory.isPending
-                }
-                onClick={() =>
-                  adjustInventory.mutate()
-                }
-              >
-                {adjustInventory.isPending
-                  ? "Aplicando..."
-                  : "Aplicar ajuste"}
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* =====================================================
-         * LIMITES
-         * ===================================================== */}
-        <TabsContent
-          value="limites"
-          className="mt-3 sm:mt-4"
-        >
-          <Card className="w-full lg:max-w-lg">
-            <CardHeader>
-              <CardTitle className="text-base">
-                Mínimo / máximo
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="space-y-4">
-              <div className="space-y-1.5">
-                <Label>
-                  Producto
-                </Label>
-
-                <Select
-                  value={limitProduct}
-                  onValueChange={
-                    setLimitProduct
-                  }
-                >
-                  <SelectTrigger className="min-h-11 w-full rounded-xl">
-                    <SelectValue placeholder="Selecciona producto" />
-                  </SelectTrigger>
-
-                  <SelectContent>
-                    {productOptions}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>
-                    Mínimo
-                  </Label>
-
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">Costo</Label>
                   <Input
                     type="number"
                     min="0"
-                    value={limitMin}
-                    onChange={(event) =>
-                      setLimitMin(
-                        event.target.value,
-                      )
+                    step="0.01"
+                    value={variantForm.cost}
+                    onChange={(e) =>
+                      setVariantForm((f) => ({
+                        ...f,
+                        cost: e.target.value,
+                      }))
                     }
                     className="h-11 rounded-xl"
                   />
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label>
-                    Máximo
+                <div className="space-y-1">
+                  <Label className="text-xs text-[#757575]">
+                    Margen (%)
                   </Label>
-
-                  <Input
-                    type="number"
-                    min="0"
-                    value={limitMax}
-                    onChange={(event) =>
-                      setLimitMax(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Sin límite"
-                    className="h-11 rounded-xl"
-                  />
+                  <div className="flex h-11 items-center justify-center rounded-xl border bg-[#fafafa] text-sm font-semibold text-[#34a853]">
+                    {Number(variantForm.price) > 0
+                      ? (
+                          ((Number(variantForm.price) -
+                            Number(variantForm.cost || 0)) /
+                            Number(variantForm.price)) *
+                          100
+                        ).toFixed(3)
+                      : "—"}
+                  </div>
                 </div>
               </div>
 
-              <Button
-                className="min-h-11 w-full touch-manipulation rounded-xl"
-                disabled={
-                  true ||
-                  !isManager ||
-                  !limitProduct ||
-                  updateLimits.isPending
-                }
-                onClick={() =>
-                  updateLimits.mutate()
-                }
-              >
-                {updateLimits.isPending
-                  ? "Guardando..."
-                  : "Guardar límites"}
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* =====================================================
-         * INVENTARIO FISICO
-         * ===================================================== */}
-        <TabsContent
-          value="conteo"
-          className="mt-3 max-w-full overflow-x-hidden sm:mt-4"
-        >
-          {!activeCount ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
-                  <ClipboardList className="h-5 w-5 shrink-0" />
-                  Nuevo inventario físico
-                </CardTitle>
-              </CardHeader>
-
-              <CardContent className="w-full space-y-4 lg:max-w-xl">
-                <div className="rounded-xl border bg-muted/30 p-3.5 text-sm sm:p-4">
-                  <p className="font-medium">
-                    Antes de comenzar
+              {variantForm.id && (
+                <div className="rounded-xl border bg-[#fafafa] px-3 py-2">
+                  <p className="text-[10px] uppercase text-[#9e9e9e]">
+                    Existencias disponibles
                   </p>
-
-                  <p className="mt-1 leading-5 text-muted-foreground">
-                    Lula OS tomará una fotografía
-                    del stock teórico actual y
-                    después podrás capturar las
-                    existencias físicas.
-                  </p>
-
-                  <p className="mt-2 leading-5 text-muted-foreground">
-                    Al cerrar el conteo se
-                    calcularán automáticamente
-                    faltantes, sobrantes y su
-                    valor económico.
-                  </p>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>
-                    Notas del inventario
-                  </Label>
-
-                  <Input
-                    value={countNotes}
-                    onChange={(event) =>
-                      setCountNotes(
-                        event.target.value,
-                      )
-                    }
-                    placeholder="Ej. Inventario mensual septiembre"
-                    className="h-11 rounded-xl"
-                  />
-                </div>
-
-                <Button
-                  className="min-h-11 w-full touch-manipulation rounded-xl"
-                  disabled={
-                    !isManager ||
-                    !branchId ||
-                    startCount.isPending
-                  }
-                  onClick={() =>
-                    startCount.mutate()
-                  }
-                >
-                  <Play className="mr-2 h-4 w-4" />
-
-                  {startCount.isPending
-                    ? "Iniciando..."
-                    : "Iniciar inventario físico"}
-                </Button>
-
-                {!isManager && (
-                  <p className="text-xs text-muted-foreground">
-                    Solo managers pueden iniciar
-                    un inventario físico.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3 sm:space-y-4">
-              <PhysicalCountProgress
-                startedAt={
-                  activeCount.started_at
-                }
-                total={countSummary.total}
-                counted={countSummary.counted}
-                pending={countSummary.pending}
-                completed={false}
-              />
-
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <ClipboardList className="h-5 w-5 shrink-0" />
-                        Inventario físico en curso
-                      </CardTitle>
-
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Iniciado{" "}
-                        {shortDate(
-                          activeCount.started_at,
-                        )}
-                      </p>
-                    </div>
-
-                    <Button
-                      variant="outline"
-                      className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
-                      disabled={
-                        !isManager ||
-                        countSummary.pending >
-                          0 ||
-                        completeCount.isPending
-                      }
-                      onClick={() =>
-                        completeCount.mutate()
-                      }
-                    >
-                      <CheckCircle2 className="mr-2 h-4 w-4" />
-
-                      {completeCount.isPending
-                        ? "Cerrando..."
-                        : "Cerrar inventario"}
-                    </Button>
-                  </div>
-                </CardHeader>
-
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
-                    <CountKpi
-                      label="Productos"
-                      value={String(
-                        countSummary.total,
-                      )}
-                    />
-
-                    <CountKpi
-                      label="Contados"
-                      value={String(
-                        countSummary.counted,
-                      )}
-                    />
-
-                    <CountKpi
-                      label="Pendientes"
-                      value={String(
-                        countSummary.pending,
-                      )}
-                      danger={
-                        countSummary.pending > 0
-                      }
-                    />
-
-                    <CountKpi
-                      label="Faltante"
-                      value={`${countSummary.shortageUnits} uds`}
-                      danger={
-                        countSummary.shortageUnits >
-                        0
-                      }
-                    />
-
-                    <CountKpi
-                      label="Faltante $"
-                      value={money(
-                        countSummary.shortageValue,
-                      )}
-                      danger={
-                        countSummary.shortageValue >
-                        0
-                      }
-                    />
-                  </div>
-
-                  <div className="mt-3 grid gap-2.5 sm:grid-cols-2 sm:gap-3">
-                    <div className="rounded-xl border p-3.5">
-                      <p className="text-xs text-muted-foreground">
-                        Sobrante
-                      </p>
-
-                      <p className="text-lg font-bold">
-                        {
-                          countSummary.surplusUnits
-                        }{" "}
-                        uds
-                      </p>
-
-                      <p className="text-xs text-muted-foreground">
-                        {money(
-                          countSummary.surplusValue,
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl border p-3.5">
-                      <p className="text-xs text-muted-foreground">
-                        Valor económico faltante
-                      </p>
-
-                      <p className="text-lg font-bold text-destructive">
-                        {money(
-                          countSummary.shortageValue,
-                        )}
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <CardTitle className="text-base">
-                        Captura física
-                      </CardTitle>
-
-                      <p className="text-xs leading-5 text-muted-foreground">
-                        Captura la cantidad real
-                        encontrada.
-                      </p>
-                    </div>
-
-                    <Input
-                      value={countFilter}
-                      onChange={(event) =>
-                        setCountFilter(
-                          event.target.value,
-                        )
-                      }
-                      placeholder="Buscar producto o SKU..."
-                      className="h-11 w-full rounded-xl sm:w-64"
-                    />
-                  </div>
-                </CardHeader>
-
-                <CardContent className="px-3 sm:px-6">
-                  {activeCountItemsLoading ? (
-                    <div className="py-10 text-center text-sm text-muted-foreground">
-                      Cargando productos...
-                    </div>
-                  ) : (
-                    <>
-                      {/* CELULAR / TABLET */}
-                      <div className="grid gap-2.5 lg:hidden">
-                        {filteredCountItems.map(
-                          (item) => {
-                            const counted =
-                              item.counted_stock;
-
-                            const difference =
-                              Number(
-                                item.difference ??
-                                  0,
-                              );
-
-                            const differenceValue =
-                              Number(
-                                item.difference_value ??
-                                  0,
-                              );
-
-                            return (
-                              <div
-                                key={item.id}
-                                className="rounded-xl border bg-card p-3.5 shadow-sm"
-                              >
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="break-words text-sm font-bold leading-5">
-                                      {item.products
-                                        ?.name ??
-                                        "Producto"}
-                                    </p>
-
-                                    <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                                      {item.products
-                                        ?.sku && (
-                                        <span className="font-mono text-[11px] text-muted-foreground">
-                                          {
-                                            item
-                                              .products
-                                              .sku
-                                          }
-                                        </span>
-                                      )}
-
-                                      {item.variant_id && (
-                                        <Badge
-                                          variant="outline"
-                                          className="rounded-full text-[10px]"
-                                        >
-                                          Variante
-                                        </Badge>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  {item.counted_stock ===
-                                  null ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="shrink-0 rounded-full"
-                                    >
-                                      Pendiente
-                                    </Badge>
-                                  ) : difference <
-                                    0 ? (
-                                    <Badge
-                                      variant="destructive"
-                                      className="shrink-0 rounded-full"
-                                    >
-                                      Faltante
-                                    </Badge>
-                                  ) : difference >
-                                    0 ? (
-                                    <Badge
-                                      variant="secondary"
-                                      className="shrink-0 rounded-full"
-                                    >
-                                      Sobrante
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="secondary"
-                                      className="shrink-0 rounded-full"
-                                    >
-                                      Coincide
-                                    </Badge>
-                                  )}
-                                </div>
-
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  <div className="rounded-lg bg-muted/40 p-2.5">
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                      Teórico
-                                    </p>
-
-                                    <p className="mt-1 text-base font-bold">
-                                      {
-                                        item.system_stock
-                                      }
-                                    </p>
-                                  </div>
-
-                                  <div className="rounded-lg border p-2.5">
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                      Físico
-                                    </p>
-
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      className="mt-1 h-11 min-h-11 w-full touch-manipulation rounded-lg text-right text-base"
-                                      value={
-                                        physicalCount[
-                                          item.id
-                                        ] ??
-                                        (counted !==
-                                        null
-                                          ? String(
-                                              counted,
-                                            )
-                                          : "")
-                                      }
-                                      onChange={(
-                                        event,
-                                      ) => {
-                                        const value =
-                                          event
-                                            .target
-                                            .value;
-
-                                        setPhysicalCount(
-                                          (
-                                            previous,
-                                          ) => ({
-                                            ...previous,
-                                            [item.id]:
-                                              value,
-                                          }),
-                                        );
-                                      }}
-                                      onBlur={(
-                                        event,
-                                      ) => {
-                                        const value =
-                                          Number(
-                                            event
-                                              .target
-                                              .value,
-                                          );
-
-                                        if (
-                                          event
-                                            .target
-                                            .value ===
-                                          ""
-                                        ) {
-                                          return;
-                                        }
-
-                                        setCountItem.mutate(
-                                          {
-                                            itemId:
-                                              item.id,
-                                            value,
-                                          },
-                                        );
-                                      }}
-                                    />
-                                  </div>
-                                </div>
-
-                                <div className="mt-2 grid grid-cols-2 gap-2 border-t pt-3">
-                                  <div>
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                      Diferencia
-                                    </p>
-
-                                    <p
-                                      className={cn(
-                                        "mt-1 text-sm font-bold",
-                                        difference >
-                                          0 &&
-                                          "text-emerald-600",
-                                        difference <
-                                          0 &&
-                                          "text-destructive",
-                                      )}
-                                    >
-                                      {item.counted_stock ===
-                                      null
-                                        ? "—"
-                                        : difference >
-                                            0
-                                          ? `+${difference}`
-                                          : difference}
-                                    </p>
-                                  </div>
-
-                                  <div>
-                                    <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                      Diferencia $
-                                    </p>
-
-                                    <p
-                                      className={cn(
-                                        "mt-1 text-sm font-bold",
-                                        differenceValue >
-                                          0 &&
-                                          "text-emerald-600",
-                                        differenceValue <
-                                          0 &&
-                                          "text-destructive",
-                                      )}
-                                    >
-                                      {item.counted_stock ===
-                                      null
-                                        ? "—"
-                                        : money(
-                                            differenceValue,
-                                          )}
-                                    </p>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          },
-                        )}
-
-                        {!filteredCountItems.length && (
-                          <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                            No hay productos.
-                          </div>
-                        )}
-                      </div>
-
-                      {/* PANTALLA GRANDE */}
-                      <div className="hidden overflow-x-auto lg:block">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>
-                                Producto
-                              </TableHead>
-
-                              <TableHead className="text-right">
-                                Teórico
-                              </TableHead>
-
-                              <TableHead className="text-right">
-                                Físico
-                              </TableHead>
-
-                              <TableHead className="text-right">
-                                Diferencia
-                              </TableHead>
-
-                              <TableHead className="text-right">
-                                Diferencia $
-                              </TableHead>
-
-                              <TableHead>
-                                Estado
-                              </TableHead>
-                            </TableRow>
-                          </TableHeader>
-
-                          <TableBody>
-                            {filteredCountItems.map(
-                              (item) => {
-                                const counted =
-                                  item.counted_stock;
-
-                                const difference =
-                                  Number(
-                                    item.difference ??
-                                      0,
-                                  );
-
-                                const differenceValue =
-                                  Number(
-                                    item.difference_value ??
-                                      0,
-                                  );
-
-                                return (
-                                  <TableRow
-                                    key={item.id}
-                                  >
-                                    <TableCell className="font-medium">
-                                      {item.products
-                                        ?.name ??
-                                        "Producto"}
-
-                                      {item.products
-                                        ?.sku && (
-                                        <span className="ml-2 font-mono text-xs text-muted-foreground">
-                                          {
-                                            item
-                                              .products
-                                              .sku
-                                          }
-                                        </span>
-                                      )}
-
-                                      {item.variant_id && (
-                                        <Badge
-                                          variant="outline"
-                                          className="ml-2"
-                                        >
-                                          Variante
-                                        </Badge>
-                                      )}
-                                    </TableCell>
-
-                                    <TableCell className="text-right">
-                                      {
-                                        item.system_stock
-                                      }
-                                    </TableCell>
-
-                                    <TableCell className="text-right">
-                                      <Input
-                                        type="number"
-                                        min="0"
-                                        step="0.01"
-                                        className="ml-auto h-8 w-28 text-right"
-                                        value={
-                                          physicalCount[
-                                            item.id
-                                          ] ??
-                                          (counted !==
-                                          null
-                                            ? String(
-                                                counted,
-                                              )
-                                            : "")
-                                        }
-                                        onChange={(
-                                          event,
-                                        ) => {
-                                          const value =
-                                            event
-                                              .target
-                                              .value;
-
-                                          setPhysicalCount(
-                                            (
-                                              previous,
-                                            ) => ({
-                                              ...previous,
-                                              [item.id]:
-                                                value,
-                                            }),
-                                          );
-                                        }}
-                                        onBlur={(
-                                          event,
-                                        ) => {
-                                          const value =
-                                            Number(
-                                              event
-                                                .target
-                                                .value,
-                                            );
-
-                                          if (
-                                            event
-                                              .target
-                                              .value ===
-                                            ""
-                                          ) {
-                                            return;
-                                          }
-
-                                          setCountItem.mutate(
-                                            {
-                                              itemId:
-                                                item.id,
-                                              value,
-                                            },
-                                          );
-                                        }}
-                                      />
-                                    </TableCell>
-
-                                    <TableCell
-                                      className={cn(
-                                        "text-right font-semibold",
-                                        difference >
-                                          0 &&
-                                          "text-emerald-600",
-                                        difference <
-                                          0 &&
-                                          "text-destructive",
-                                      )}
-                                    >
-                                      {item.counted_stock ===
-                                      null
-                                        ? "—"
-                                        : difference >
-                                            0
-                                          ? `+${difference}`
-                                          : difference}
-                                    </TableCell>
-
-                                    <TableCell
-                                      className={cn(
-                                        "text-right font-semibold",
-                                        differenceValue >
-                                          0 &&
-                                          "text-emerald-600",
-                                        differenceValue <
-                                          0 &&
-                                          "text-destructive",
-                                      )}
-                                    >
-                                      {item.counted_stock ===
-                                      null
-                                        ? "—"
-                                        : money(
-                                            differenceValue,
-                                          )}
-                                    </TableCell>
-
-                                    <TableCell>
-                                      {item.counted_stock ===
-                                      null ? (
-                                        <Badge variant="outline">
-                                          Pendiente
-                                        </Badge>
-                                      ) : difference <
-                                        0 ? (
-                                        <Badge variant="destructive">
-                                          Faltante
-                                        </Badge>
-                                      ) : difference >
-                                        0 ? (
-                                        <Badge variant="secondary">
-                                          Sobrante
-                                        </Badge>
-                                      ) : (
-                                        <Badge variant="secondary">
-                                          Coincide
-                                        </Badge>
-                                      )}
-                                    </TableCell>
-                                  </TableRow>
-                                );
-                              },
-                            )}
-
-                            {!filteredCountItems.length && (
-                              <TableRow>
-                                <TableCell
-                                  colSpan={6}
-                                  className="py-10 text-center text-muted-foreground"
-                                >
-                                  No hay productos.
-                                </TableCell>
-                              </TableRow>
-                            )}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </TabsContent>
-
-        {/* =====================================================
-         * HISTORIAL FISICO
-         * ===================================================== */}
-        <TabsContent
-          value="historial"
-          className="mt-3 max-w-full overflow-x-hidden sm:mt-4"
-        >
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <History className="h-5 w-5 shrink-0" />
-                Historial de inventarios físicos
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="px-3 sm:px-6">
-              {countsLoading ? (
-                <div className="py-10 text-center text-sm text-muted-foreground">
-                  Cargando historial...
-                </div>
-              ) : (
-                <>
-                  {/* CELULAR / TABLET */}
-                  <div className="grid gap-2.5 lg:hidden">
-                    {inventoryCounts.map(
-                      (count) => (
-                        <div
-                          key={count.id}
-                          className="rounded-xl border p-3.5"
-                        >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                Fecha
-                              </p>
-
-                              <p className="mt-1 text-sm font-semibold">
-                                {shortDate(
-                                  count.started_at,
-                                )}
-                              </p>
-                            </div>
-
-                            {count.status ===
-                            "completed" ? (
-                              <Badge
-                                variant="secondary"
-                                className="shrink-0 rounded-full"
-                              >
-                                Completado
-                              </Badge>
-                            ) : count.status ===
-                              "counting" ? (
-                              <Badge className="shrink-0 rounded-full">
-                                En curso
-                              </Badge>
-                            ) : (
-                              <Badge
-                                variant="outline"
-                                className="shrink-0 rounded-full"
-                              >
-                                {count.status}
-                              </Badge>
-                            )}
-                          </div>
-
-                          <div className="mt-3 grid gap-2 border-t pt-3">
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                Notas
-                              </p>
-
-                              <p className="mt-1 break-words text-sm">
-                                {count.notes ??
-                                  "—"}
-                              </p>
-                            </div>
-
-                            <div>
-                              <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                Finalizado
-                              </p>
-
-                              <p className="mt-1 text-sm">
-                                {count.completed_at
-                                  ? shortDate(
-                                      count.completed_at,
-                                    )
-                                  : "—"}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      ),
+                  <p className="text-lg font-bold text-[#212121]">
+                    {Number(
+                      sharedInventory.find(
+                        (row) =>
+                          row.product_id === form.id &&
+                          row.variant_id === variantForm.id,
+                      )?.available_stock ?? 0,
                     )}
-
-                    {!inventoryCounts.length && (
-                      <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                        Todavía no hay inventarios
-                        físicos registrados.
-                      </div>
-                    )}
-                  </div>
-
-                  {/* PANTALLA GRANDE */}
-                  <div className="hidden overflow-x-auto lg:block">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>
-                            Fecha
-                          </TableHead>
-
-                          <TableHead>
-                            Estado
-                          </TableHead>
-
-                          <TableHead>
-                            Notas
-                          </TableHead>
-
-                          <TableHead>
-                            Finalizado
-                          </TableHead>
-                        </TableRow>
-                      </TableHeader>
-
-                      <TableBody>
-                        {inventoryCounts.map(
-                          (count) => (
-                            <TableRow
-                              key={count.id}
-                            >
-                              <TableCell className="whitespace-nowrap">
-                                {shortDate(
-                                  count.started_at,
-                                )}
-                              </TableCell>
-
-                              <TableCell>
-                                {count.status ===
-                                "completed" ? (
-                                  <Badge variant="secondary">
-                                    Completado
-                                  </Badge>
-                                ) : count.status ===
-                                  "counting" ? (
-                                  <Badge>
-                                    En curso
-                                  </Badge>
-                                ) : (
-                                  <Badge variant="outline">
-                                    {count.status}
-                                  </Badge>
-                                )}
-                              </TableCell>
-
-                              <TableCell className="max-w-[280px] truncate">
-                                {count.notes ??
-                                  "—"}
-                              </TableCell>
-
-                              <TableCell>
-                                {count.completed_at
-                                  ? shortDate(
-                                      count.completed_at,
-                                    )
-                                  : "—"}
-                              </TableCell>
-                            </TableRow>
-                          ),
-                        )}
-
-                        {!inventoryCounts.length && (
-                          <TableRow>
-                            <TableCell
-                              colSpan={4}
-                              className="py-10 text-center text-muted-foreground"
-                            >
-                              Todavía no hay
-                              inventarios físicos
-                              registrados.
-                            </TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </>
+                  </p>
+                  <p className="text-[10px] text-[#9e9e9e]">
+                    Solo lectura — se ajusta en inventario / compras
+                  </p>
+                </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {/* =====================================================
-         * MOVIMIENTOS
-         * ===================================================== */}
-        <TabsContent
-          value="movimientos"
-          className="mt-3 sm:mt-4"
-        >
-          <Card className="overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-base">
-                Historial de movimientos
-              </CardTitle>
-            </CardHeader>
-
-            <CardContent className="px-3 sm:px-6">
-              {/* CELULAR / TABLET */}
-              <div className="grid gap-2.5 lg:hidden">
-                {movements.map(
-                  (movement) => {
-                    const productName = (
-                      movement.products as
-                        | {
-                            name?: string;
-                          }
-                        | null
-                    )?.name ?? "—";
-
-                    return (
-                      <div
-                        key={movement.id}
-                        className="rounded-xl border p-3.5"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="break-words text-sm font-bold">
-                              {productName}
-                            </p>
-
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              {shortDate(
-                                movement.created_at,
-                              )}
-                            </p>
-                          </div>
-
-                          <Badge
-                            variant="outline"
-                            className="shrink-0 rounded-full text-[10px]"
-                          >
-                            {MOVEMENT_LABELS[
-                              movement.type
-                            ] ??
-                              movement.type}
-                          </Badge>
-                        </div>
-
-                        <div className="mt-3 grid grid-cols-2 gap-2 border-t pt-3">
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                              Cantidad
-                            </p>
-
-                            <p className="mt-1 text-sm font-bold">
-                              {Number(
-                                movement.quantity,
-                              ) > 0
-                                ? `+${movement.quantity}`
-                                : movement.quantity}
-                            </p>
-                          </div>
-
-                          <div className="min-w-0">
-                            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                              Notas
-                            </p>
-
-                            <p className="mt-1 break-words text-xs text-muted-foreground">
-                              {movement.notes ??
-                                "—"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  },
-                )}
-
-                {!movements.length && (
-                  <div className="rounded-xl border p-8 text-center text-sm text-muted-foreground">
-                    Sin movimientos todavía.
-                  </div>
-                )}
-              </div>
-
-              {/* PANTALLA GRANDE */}
-              <div className="hidden overflow-x-auto lg:block">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>
-                        Fecha
-                      </TableHead>
-
-                      <TableHead>
-                        Producto
-                      </TableHead>
-
-                      <TableHead>
-                        Tipo
-                      </TableHead>
-
-                      <TableHead className="text-right">
-                        Cantidad
-                      </TableHead>
-
-                      <TableHead>
-                        Notas
-                      </TableHead>
-                    </TableRow>
-                  </TableHeader>
-
-                  <TableBody>
-                    {movements.map(
-                      (movement) => (
-                        <TableRow
-                          key={movement.id}
-                        >
-                          <TableCell className="whitespace-nowrap text-xs">
-                            {shortDate(
-                              movement.created_at,
-                            )}
-                          </TableCell>
-
-                          <TableCell>
-                            {(
-                              movement.products as
-                                | {
-                                    name?: string;
-                                  }
-                                | null
-                            )?.name ?? "—"}
-                          </TableCell>
-
-                          <TableCell>
-                            <Badge variant="outline">
-                              {MOVEMENT_LABELS[
-                                movement.type
-                              ] ??
-                                movement.type}
-                            </Badge>
-                          </TableCell>
-
-                          <TableCell className="text-right font-medium">
-                            {Number(
-                              movement.quantity,
-                            ) > 0
-                              ? `+${movement.quantity}`
-                              : movement.quantity}
-                          </TableCell>
-
-                          <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
-                            {movement.notes ??
-                              "—"}
-                          </TableCell>
-                        </TableRow>
-                      ),
-                    )}
-
-                    {!movements.length && (
-                      <TableRow>
-                        <TableCell
-                          colSpan={5}
-                          className="py-8 text-center text-muted-foreground"
-                        >
-                          Sin movimientos
-                          todavía.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* =====================================================
-         * REPOSICION
-         * ===================================================== */}
-        <TabsContent
-          value="reposicion"
-          className="mt-3 sm:mt-4"
-        >
-          <RestockList inventory={inventory} />
-        </TabsContent>
-
-        {/* =====================================================
-         * IMPORTAR / EXPORTAR
-         * ===================================================== */}
-        <TabsContent
-          value="importar"
-          className="mt-3 sm:mt-4"
-        >
-          <ImportExportPanel />
-        </TabsContent>
-      </Tabs>
-    </PageShell>
-  );
-}
-
-function InventoryMetric({
-  label,
-  value,
-  emphasis = false,
-  danger = false,
-}: {
-  label: string;
-  value: string;
-  emphasis?: boolean;
-  danger?: boolean;
-}) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-        {label}
-      </p>
-
-      <p
-        className={cn(
-          "mt-1 break-words text-sm font-bold",
-          emphasis && "text-base",
-          danger && "text-destructive",
-        )}
-      >
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function CountKpi({
-  label,
-  value,
-  danger = false,
-}: {
-  label: string;
-  value: string;
-  danger?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "min-w-0 rounded-xl border p-3",
-        danger &&
-          "border-destructive/30 bg-destructive/5",
+              <Button
+                className="min-h-11 w-full rounded-xl bg-[#1a73e8] text-base font-semibold hover:bg-[#1557b0]"
+                disabled={
+                  saveVariant.isPending ||
+                  (!(canEditProduct || isManager) && !canPrice)
+                }
+                onClick={() => saveVariant.mutate()}
+              >
+                {saveVariant.isPending
+                  ? "Guardando…"
+                  : variantForm.id
+                    ? "Guardar variante"
+                    : "Crear variante"}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
-    >
-      <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground sm:text-xs">
-        {label}
-      </p>
 
-      <p
-        className={cn(
-          "mt-1 break-words text-base font-bold sm:text-lg",
-          danger && "text-destructive",
-        )}
-      >
-        {value}
-      </p>
-    </div>
+
+      {scannerOpen && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
+    </>
   );
-}  
+
+  if (embedded) {
+    return content;
+  }
+
+  return <PageShell>{content}</PageShell>;
+} 
