@@ -717,6 +717,8 @@ export function ProductosPage({
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustDir, setAdjustDir] = useState<"in" | "out">("in");
   const [adjustNotes, setAdjustNotes] = useState("");
+  /** Variante a la que se aplica el ajuste rápido (null = producto base). */
+  const [adjustVariantId, setAdjustVariantId] = useState<string | null>(null);
   /** Variante seleccionada por producto en la lista (null = base / primera). */
   const [selectedVariantByProduct, setSelectedVariantByProduct] = useState<
     Record<string, string | null>
@@ -1258,12 +1260,14 @@ export function ProductosPage({
           .eq("product_id", form.id);
 
         if (error) throw error;
-        return;
+        return variantForm.id as string;
       }
 
-      const { error } = await (supabase as any)
+      const { data: created, error } = await (supabase as any)
         .from("product_variants")
-        .insert(payload);
+        .insert(payload)
+        .select("id")
+        .single();
 
       if (error) throw error;
 
@@ -1276,12 +1280,66 @@ export function ProductosPage({
       if (flagError) {
         throw new Error(`Variante guardada, pero no se pudo actualizar el producto: ${flagError.message}. No repitas la creación.`);
       }
+
+      // Crear fila de inventario en 0 para que la variante aparezca y acepte existencias.
+      // adjust_stock con cantidad > 0 crea la fila si no existe; luego no dejamos stock fantasma.
+      const newVariantId = created?.id as string | undefined;
+      if (newVariantId && branchId) {
+        try {
+          const { error: seedError } = await supabase.rpc("adjust_stock", {
+            _branch_id: branchId,
+            _product_id: form.id,
+            _variant_id: newVariantId,
+            _quantity: 0,
+            _notes: "Alta de variante (stock inicial 0)",
+          });
+          // Si quantity 0 no crea fila, intentar insert directo en shared_inventory
+          if (seedError) {
+            await (supabase as any).from("shared_inventory").insert({
+              product_id: form.id,
+              variant_id: newVariantId,
+              stock: 0,
+              reserved_stock: 0,
+              min_stock: 0,
+            });
+          } else {
+            // quantity 0 puede no haber creado fila: asegurar con insert idempotente
+            const { data: existing } = await (supabase as any)
+              .from("shared_inventory")
+              .select("id")
+              .eq("product_id", form.id)
+              .eq("variant_id", newVariantId)
+              .maybeSingle();
+            if (!existing) {
+              await (supabase as any).from("shared_inventory").insert({
+                product_id: form.id,
+                variant_id: newVariantId,
+                stock: 0,
+                reserved_stock: 0,
+                min_stock: 0,
+              });
+            }
+          }
+        } catch {
+          // La variante ya quedó creada; el inventario operativo la mostrará en 0
+          // aunque falle el seed de shared_inventory.
+        }
+      }
+
+      return newVariantId as string | undefined;
     },
 
-    onSuccess: () => {
+    onSuccess: (newVariantId) => {
       toast.success(
         variantForm.id ? "Variante actualizada" : "Variante creada",
       );
+      if (newVariantId && form.id) {
+        setSelectedVariantByProduct((prev) => ({
+          ...prev,
+          [form.id!]: newVariantId,
+        }));
+        setAdjustVariantId(newVariantId);
+      }
       setVariantForm(emptyVariantForm);
       setVariantModalOpen(false);
       void qc.invalidateQueries({
@@ -1347,6 +1405,7 @@ export function ProductosPage({
       const { error } = await supabase.rpc("adjust_stock", {
         _branch_id: branchId,
         _product_id: form.id,
+        _variant_id: adjustVariantId,
         _quantity: signed,
         _notes:
           adjustNotes.trim() ||
@@ -1362,9 +1421,11 @@ export function ProductosPage({
       void qc.invalidateQueries({
         queryKey: ["shared-inventory", "products"],
       });
+      void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
       void qc.invalidateQueries({ queryKey: ["inventory-movements"] });
       void qc.invalidateQueries({ queryKey: ["product-movements"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -1389,6 +1450,9 @@ export function ProductosPage({
       image_url: p.image_url ?? "",
     });
 
+    setAdjustVariantId(null);
+    setAdjustQty("");
+    setAdjustNotes("");
     setActiveTab("form");
   };
 
@@ -2306,6 +2370,36 @@ export function ProductosPage({
                             <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
                               Ajuste rápido
                             </p>
+                            {productVariants.length > 0 && (
+                              <div className="space-y-1">
+                                <Label className="text-xs text-[#757575]">
+                                  Aplicar a
+                                </Label>
+                                <Select
+                                  value={adjustVariantId ?? "base"}
+                                  onValueChange={(value) =>
+                                    setAdjustVariantId(
+                                      value === "base" ? null : value,
+                                    )
+                                  }
+                                >
+                                  <SelectTrigger className="h-11 rounded-xl">
+                                    <SelectValue placeholder="Producto base" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="base">
+                                      Producto base (sin variante)
+                                    </SelectItem>
+                                    {productVariants.map((v) => (
+                                      <SelectItem key={v.id} value={v.id}>
+                                        {v.name}
+                                        {v.sku ? ` · ${v.sku}` : ""}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
                             <div className="flex flex-wrap gap-2">
                               <button
                                 type="button"
@@ -2349,7 +2443,11 @@ export function ProductosPage({
                               <Button
                                 type="button"
                                 className="h-11 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
-                                disabled={true}
+                                disabled={
+                                  adjustProductStock.isPending ||
+                                  !adjustQty ||
+                                  Number(adjustQty) <= 0
+                                }
                                 onClick={() => adjustProductStock.mutate()}
                               >
                                 {adjustProductStock.isPending
@@ -2358,6 +2456,11 @@ export function ProductosPage({
                               </Button>
                             </div>
                             <p className="text-[10px] text-[#9e9e9e]">
+                              {adjustVariantId
+                                ? "El ajuste se aplica solo a la variante seleccionada."
+                                : productVariants.length > 0
+                                  ? "Elige una variante arriba, o deja “Producto base”."
+                                  : "Ajuste sobre el producto base."}
                             </p>
                           </div>
                         ) : (
