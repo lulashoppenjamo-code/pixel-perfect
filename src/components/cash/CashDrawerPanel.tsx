@@ -113,6 +113,8 @@ const QUICK_REASONS: Record<MovementType, string[]> = {
   ],
 };
 
+type DenomLine = { label: string; value: number; qty: number; subtotal: number };
+
 type ArqueoPrintOpts = {
   branchLabel: string;
   openedAt: string;
@@ -128,6 +130,8 @@ type ArqueoPrintOpts = {
   expected: number;
   counted?: number | null;
   difference?: number | null;
+  /** Desglose de billetes/monedas contados al cerrar */
+  denominations?: DenomLine[];
   movements: {
     id: string;
     type: string;
@@ -136,6 +140,45 @@ type ArqueoPrintOpts = {
     created_at: string;
   }[];
 };
+
+const DENOM_STORAGE_PREFIX = "lula-cash-denoms:";
+
+function saveDenomCounts(sessionId: string, counts: Record<string, string>) {
+  try {
+    localStorage.setItem(
+      `${DENOM_STORAGE_PREFIX}${sessionId}`,
+      JSON.stringify(counts),
+    );
+  } catch {
+    /* ignore quota */
+  }
+}
+
+function loadDenomCounts(sessionId: string): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem(`${DENOM_STORAGE_PREFIX}${sessionId}`);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function denomLinesFromCounts(counts: Record<string, string>): DenomLine[] {
+  const lines: DenomLine[] = [];
+  for (const d of DENOMINATIONS) {
+    const qty = Number(counts[String(d.value)] || 0);
+    if (!Number.isFinite(qty) || qty <= 0) continue;
+    lines.push({
+      label: d.label,
+      value: d.value,
+      qty,
+      subtotal: Math.round(qty * d.value * 100) / 100,
+    });
+  }
+  return lines;
+}
 
 function shortTicketTime(iso: string) {
   try {
@@ -178,11 +221,23 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
           })
           .join("");
 
+  const denomHtml =
+    opts.denominations && opts.denominations.length > 0
+      ? `<div class="dash"></div>
+<div class="sec">Conteo efectivo</div>
+${opts.denominations
+  .map(
+    (d) =>
+      `<div class="row"><span>${esc(d.label)} x${d.qty}</span><span>${money(d.subtotal)}</span></div>`,
+  )
+  .join("")}`
+      : "";
+
   const countedBlock =
     opts.counted != null
       ? `<div class="dash"></div>
 <div class="row"><span>Contado</span><span>${money(opts.counted)}</span></div>
-<div class="row bold"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
+<div class="row bold"><span>Diferencia</span><span>${money(Number(opts.difference ?? opts.counted - opts.expected))}</span></div>`
       : "";
 
   return `<!DOCTYPE html>
@@ -261,14 +316,16 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
       : `<div class="center muted">Corte en curso</div>`
   }
   <div class="dash"></div>
-  <div class="sec">Resumen</div>
+  <div class="sec">Detalle del cuadre</div>
   <div class="row"><span>Fondo inicial</span><span>${money(opts.opening)}</span></div>
-  <div class="row"><span>Ventas efectivo</span><span>+${money(opts.cashSales + opts.mixedCash)}</span></div>
-  <div class="row"><span>Entradas</span><span>+${money(opts.deposits)}</span></div>
-  <div class="row"><span>Salidas</span><span>-${money(opts.withdrawals)}</span></div>
+  <div class="row"><span>Ventas efectivo</span><span>+${money(opts.cashSales)}</span></div>
+  <div class="row"><span>Mixto (efectivo)</span><span>+${money(opts.mixedCash)}</span></div>
+  <div class="row"><span>Entradas caja</span><span>+${money(opts.deposits)}</span></div>
+  <div class="row"><span>Salidas caja</span><span>-${money(opts.withdrawals)}</span></div>
   <div class="row"><span>Gastos efectivo</span><span>-${money(opts.cashExpenses)}</span></div>
   <div class="dash"></div>
   <div class="row bold"><span>Debe haber</span><span>${money(opts.expected)}</span></div>
+  ${denomHtml}
   ${countedBlock}
   <div class="dash"></div>
   <div class="sec">Movimientos del dia</div>
@@ -296,17 +353,30 @@ function buildCorteText(opts: ArqueoPrintOpts): string {
     lines.push("Corte en curso");
   }
   lines.push("--------------------------------");
-  lines.push("RESUMEN");
+  lines.push("DETALLE DEL CUADRE");
   lines.push(`Fondo inicial    ${moneyFmt(opts.opening)}`);
-  lines.push(`Ventas efectivo  +${moneyFmt(opts.cashSales + opts.mixedCash)}`);
-  lines.push(`Entradas         +${moneyFmt(opts.deposits)}`);
-  lines.push(`Salidas          -${moneyFmt(opts.withdrawals)}`);
+  lines.push(`Ventas efectivo  +${moneyFmt(opts.cashSales)}`);
+  lines.push(`Mixto (efectivo) +${moneyFmt(opts.mixedCash)}`);
+  lines.push(`Entradas caja    +${moneyFmt(opts.deposits)}`);
+  lines.push(`Salidas caja     -${moneyFmt(opts.withdrawals)}`);
   lines.push(`Gastos efectivo  -${moneyFmt(opts.cashExpenses)}`);
   lines.push("--------------------------------");
   lines.push(`DEBE HABER       ${moneyFmt(opts.expected)}`);
+  if (opts.denominations && opts.denominations.length > 0) {
+    lines.push("CONTEO EFECTIVO");
+    for (const d of opts.denominations) {
+      lines.push(
+        `${d.label} x${d.qty}`.padEnd(16) + moneyFmt(d.subtotal),
+      );
+    }
+  }
   if (opts.counted != null) {
     lines.push(`Contado          ${moneyFmt(opts.counted)}`);
-    lines.push(`Diferencia       ${moneyFmt(Number(opts.difference ?? 0))}`);
+    lines.push(
+      `Diferencia       ${moneyFmt(
+        Number(opts.difference ?? opts.counted - opts.expected),
+      )}`,
+    );
   }
   lines.push("--------------------------------");
   lines.push("MOVIMIENTOS");
@@ -525,6 +595,7 @@ export function CashDrawerPanel({
         loadSessionPrintData(closedSession.id),
         resolveProfileName(closedSession.opened_by),
       ]);
+      const savedDenoms = loadDenomCounts(closedSession.id);
       openTicketPreview(
         {
           branchLabel,
@@ -546,6 +617,9 @@ export function CashDrawerPanel({
                 detail.withdrawals -
                 detail.cashExpenses,
           ),
+          denominations: savedDenoms
+            ? denomLinesFromCounts(savedDenoms)
+            : undefined,
           counted:
             closedSession.closing_amount != null
               ? Number(closedSession.closing_amount)
@@ -930,7 +1004,7 @@ export function CashDrawerPanel({
    */
 
   const closeBox = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (opts?: { printAfter?: boolean }) => {
       if (!session) {
         throw new Error(
           "La caja está cerrada.",
@@ -947,6 +1021,9 @@ export function CashDrawerPanel({
           "Escribe el efectivo contado.",
         );
       }
+
+      // Guardar desglose de billetes/monedas del cuadre (local, por sesión)
+      saveDenomCounts(session.id, denomCounts);
 
       const { error } =
         await supabase.rpc(
@@ -967,7 +1044,7 @@ export function CashDrawerPanel({
       } = await supabase
         .from("cash_sessions")
         .select(
-          "expected_amount, difference",
+          "id, opened_at, closed_at, opened_by, opening_amount, expected_amount, closing_amount, difference",
         )
         .eq("id", session.id)
         .maybeSingle();
@@ -976,10 +1053,11 @@ export function CashDrawerPanel({
         throw rowErr;
       }
 
-      return row;
+      return { row, printAfter: Boolean(opts?.printAfter), sessionSnapshot: session, denomSnapshot: { ...denomCounts }, amount };
     },
 
-    onSuccess: (row) => {
+    onSuccess: async (result) => {
+      const row = result?.row;
       const diff = Number(
         row?.difference ?? 0,
       );
@@ -994,11 +1072,48 @@ export function CashDrawerPanel({
               )} en el cajón.`;
 
       toast.success(
-        `Caja cerrada · ${msg}`,
+        `Corte cerrado · ${msg}`,
       );
 
       setCloseOpen(false);
+
+      if (result?.printAfter && result.sessionSnapshot) {
+        const sess = result.sessionSnapshot;
+        const openedByName = await resolveProfileName(sess.opened_by);
+        const denoms = denomLinesFromCounts(result.denomSnapshot);
+        openTicketPreview(
+          {
+            branchLabel,
+            openedAt: sess.opened_at,
+            closedAt: row?.closed_at ?? new Date().toISOString(),
+            openedByName,
+            opening: Number(sess.opening_amount ?? 0),
+            cashSales: summary?.cashSales ?? 0,
+            mixedCash: summary?.mixedCash ?? 0,
+            deposits: summary?.deposits ?? 0,
+            withdrawals: summary?.withdrawals ?? 0,
+            cashExpenses: summary?.cashExpenses ?? 0,
+            expected: Number(
+              row?.expected_amount ?? summary?.expected ?? 0,
+            ),
+            counted: result.amount,
+            difference: diff,
+            denominations: denoms,
+            movements: (summary?.movements ?? []).map((m) => ({
+              id: m.id,
+              type: m.type,
+              amount: Number(m.amount ?? 0),
+              reason: m.reason ?? null,
+              created_at: m.created_at,
+            })),
+          },
+          "Corte cerrado",
+        );
+      }
+
+      setCloseOpen(false);
       setCounted("");
+      setDenomCounts(emptyDenomCounts());
 
       invalidate();
     },
@@ -1101,6 +1216,7 @@ export function CashDrawerPanel({
                     const openedByName = await resolveProfileName(
                       session.opened_by,
                     );
+                    const saved = loadDenomCounts(session.id);
                     openTicketPreview(
                       {
                         branchLabel,
@@ -1113,6 +1229,14 @@ export function CashDrawerPanel({
                         withdrawals: summary?.withdrawals ?? 0,
                         cashExpenses: summary?.cashExpenses ?? 0,
                         expected: summary?.expected ?? 0,
+                        counted: counted !== "" ? Number(counted) : null,
+                        difference:
+                          counted !== ""
+                            ? Number(counted) - (summary?.expected ?? 0)
+                            : null,
+                        denominations: saved
+                          ? denomLinesFromCounts(saved)
+                          : denomLinesFromCounts(denomCounts),
                         movements: (summary?.movements ?? []).map((m) => ({
                           id: m.id,
                           type: m.type,
@@ -1132,12 +1256,22 @@ export function CashDrawerPanel({
               <Button
                 variant="outline"
                 className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d] sm:w-auto"
-                onClick={() =>
-                  setCloseOpen(true)
-                }
+                onClick={() => {
+                  if (session?.id) {
+                    const saved = loadDenomCounts(session.id);
+                    if (saved) {
+                      setDenomCounts(saved);
+                      setCounted(String(sumDenominations(saved)));
+                    } else {
+                      setDenomCounts(emptyDenomCounts());
+                      setCounted("");
+                    }
+                  }
+                  setCloseOpen(true);
+                }}
               >
                 <Lock className="mr-2 h-4 w-4" />
-                Cerrar turno / Corte
+                Cerrar corte
               </Button>
             </div>
           )}
@@ -1511,18 +1645,72 @@ export function CashDrawerPanel({
         <DialogContent className="max-h-[92vh] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto rounded-2xl sm:w-full">
           <DialogHeader>
             <DialogTitle className="text-base sm:text-lg">
-              Cerrar caja — conteo
+              Cerrar corte — detalle y conteo
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-3 py-1">
+            {/* Resumen completo del turno */}
+            <div className="rounded-xl border border-[#e8ecf4] bg-[#fafbfe] p-3 text-sm">
+              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#4169e2]">
+                Información del corte
+              </p>
+              <div className="space-y-1.5">
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#757575]">Fondo inicial</span>
+                  <span className="font-semibold">{money(Number(session?.opening_amount ?? 0))}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#757575]">Ventas en efectivo</span>
+                  <span className="font-semibold text-[#2e7d32]">+{money(summary?.cashSales ?? 0)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#757575]">Mixto (parte efectivo)</span>
+                  <span className="font-semibold text-[#2e7d32]">+{money(summary?.mixedCash ?? 0)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#757575]">Entradas a caja</span>
+                  <span className="font-semibold text-[#2e7d32]">+{money(summary?.deposits ?? 0)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#757575]">Salidas de caja</span>
+                  <span className="font-semibold text-[#c62828]">−{money(summary?.withdrawals ?? 0)}</span>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <span className="text-[#757575]">Gastos en efectivo</span>
+                  <span className="font-semibold text-[#c62828]">−{money(summary?.cashExpenses ?? 0)}</span>
+                </div>
+                <div className="mt-1 flex justify-between gap-2 border-t border-[#e8ecf4] pt-2">
+                  <span className="font-bold text-[#1a1d26]">Debe haber</span>
+                  <span className="text-base font-black text-[#4169e2]">{money(expected)}</span>
+                </div>
+              </div>
+              {(summary?.movements?.length ?? 0) > 0 && (
+                <div className="mt-3 border-t border-[#e8ecf4] pt-2">
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                    Movimientos ({summary?.movements?.length})
+                  </p>
+                  <ul className="max-h-28 space-y-1 overflow-y-auto text-[11px]">
+                    {(summary?.movements ?? []).map((m) => (
+                      <li key={m.id} className="flex justify-between gap-2">
+                        <span className="min-w-0 truncate text-[#616161]">
+                          {m.type === "deposit" ? "Entrada" : "Salida"}
+                          {m.reason ? ` · ${m.reason}` : ""}
+                        </span>
+                        <span className={m.type === "deposit" ? "shrink-0 font-semibold text-[#2e7d32]" : "shrink-0 font-semibold text-[#c62828]"}>
+                          {m.type === "deposit" ? "+" : "−"}
+                          {money(Number(m.amount))}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
             <p className="text-sm leading-6 text-muted-foreground">
-              Debe haber{" "}
-              <span className="font-bold text-foreground">
-                {money(expected)}
-              </span>
-              . Cuenta billetes y monedas; el
-              total se calcula solo.
+              Cuenta el efectivo del cajón. El total se calcula con billetes y
+              monedas; también puedes ajustar el monto a mano.
             </p>
 
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
@@ -1556,6 +1744,9 @@ export function CashDrawerPanel({
                         setCounted(
                           String(sumDenominations(next)),
                         );
+                        if (session?.id) {
+                          saveDenomCounts(session.id, next);
+                        }
                       }}
                       placeholder="0"
                       className="mt-1 h-9 rounded-lg text-sm"
@@ -1570,7 +1761,7 @@ export function CashDrawerPanel({
 
             <div className="rounded-xl border border-[#4169e2]/25 bg-[#eef2fe] p-3">
               <p className="text-[11px] font-bold uppercase tracking-wide text-[#4169e2]">
-                Total contado
+                Total contado (cuadre)
               </p>
               <p className="text-2xl font-black text-[#4169e2]">
                 {money(countedNum)}
@@ -1585,12 +1776,11 @@ export function CashDrawerPanel({
               onChange={(event) =>
                 setCounted(event.target.value)
               }
-              placeholder="Ajuste manual (opcional)"
+              placeholder="Ajuste manual del total (opcional)"
               className="h-11 rounded-xl text-sm"
             />
             <p className="text-[11px] text-[#9aa3b8]">
-              Si prefieres, puedes corregir el
-              total a mano.
+              Este monto es el efectivo real del corte y se guarda al cerrar.
             </p>
 
             {counted !== "" && (
@@ -1627,7 +1817,7 @@ export function CashDrawerPanel({
             )}
           </div>
 
-          <DialogFooter className="flex-col gap-2 sm:flex-row">
+          <DialogFooter className="flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button
               variant="outline"
               className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
@@ -1642,17 +1832,33 @@ export function CashDrawerPanel({
             </Button>
 
             <Button
+              variant="outline"
               className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
               disabled={
-                closeBox.isPending
+                closeBox.isPending || counted === ""
               }
               onClick={() =>
-                closeBox.mutate()
+                closeBox.mutate({ printAfter: false })
               }
             >
               {closeBox.isPending
                 ? "Cerrando…"
-                : "Cerrar caja"}
+                : "Cerrar corte"}
+            </Button>
+
+            <Button
+              className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
+              disabled={
+                closeBox.isPending || counted === ""
+              }
+              onClick={() =>
+                closeBox.mutate({ printAfter: true })
+              }
+            >
+              <Printer className="mr-2 h-4 w-4" />
+              {closeBox.isPending
+                ? "Cerrando…"
+                : "Cerrar e imprimir"}
             </Button>
           </DialogFooter>
         </DialogContent>
