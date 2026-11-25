@@ -1833,9 +1833,17 @@ export function ProductosPage({
                     : null;
 
                 const getChipLabel = (row: (typeof chipRows)[number]) => {
-                  // Producto principal
+                  // Producto base: nombre del producto (o SKU / código)
                   if (row.variant_id == null) {
-                    return "Principal";
+                    const baseName = (p.name || "").trim();
+                    if (baseName) {
+                      return baseName.length > 22
+                        ? `${baseName.slice(0, 20).trim()}…`
+                        : baseName;
+                    }
+                    if (p.sku) return p.sku;
+                    if (p.barcode) return p.barcode;
+                    return "Base";
                   }
                   // Nombre de variante: "Producto — NombreVariante"
                   if (row.product_name?.includes("—")) {
@@ -1850,6 +1858,11 @@ export function ProductosPage({
                 const selectedLabel = selectedRow
                   ? getChipLabel(selectedRow)
                   : null;
+                // No repetir el nombre del producto en el título si está seleccionada la base
+                const showSelectedInTitle =
+                  Boolean(selectedLabel) &&
+                  hasVariants &&
+                  selectedRow?.variant_id != null;
 
                 return (
                   <div
@@ -1891,7 +1904,7 @@ export function ProductosPage({
                           <div className="min-w-0 flex-1">
                             <p className="break-words text-[15px] font-semibold leading-snug text-[#212121]">
                               {p.name}
-                              {selectedLabel && hasVariants ? (
+                              {showSelectedInTitle ? (
                                 <span className="font-normal text-[#757575]">
                                   {" "}
                                   {selectedLabel}
