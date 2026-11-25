@@ -4,27 +4,25 @@
  *
  * Control de caja por sucursal:
  * - Una sola sesión abierta por sucursal.
- * - Apertura con fondo (inicio del día).
- * - Apertura por relevo (continúa con el efectivo del turno anterior).
+ * - Apertura con fondo al inicio del día.
+ * - Apertura por relevo únicamente dentro del mismo día.
  * - Entradas y salidas manuales.
- * - Ventas en efectivo (asignadas al colaborador de la sesión abierta).
- * - Pagos mixtos.
+ * - Ventas en efectivo y pagos mixtos.
  * - Devoluciones y reembolsos en efectivo.
  * - Gastos pagados en efectivo.
  * - Cierre de turno / corte con efectivo contado.
  * - Diferencia contra efectivo esperado.
  *
- * Flujo de relevo (sin mezclar sucursales):
- * 1) Colaborador A abre con fondo.
- * 2) A cierra turno (corte) → sesión cerrada.
- * 3) Colaborador B abre por relevo con el monto contado por A.
- * 4) B cierra turno; A puede volver a abrir por relevo.
- * 5) Al final del día, el historial de sesiones cerradas es el corte general.
+ * Regla diaria:
+ * - Cada día comienza con un fondo nuevo.
+ * - Los relevos solo heredan el efectivo del último corte cerrado HOY.
+ * - Una caja abierta de un día anterior bloquea nuevas operaciones.
+ * - Nunca se cierra ni modifica automáticamente una sesión pendiente.
  *
  * IMPORTANTE:
  * El inventario sigue siendo compartido entre sucursales.
- * Caja sí permanece separada por sucursal.
- * Persiste closing_denominations en cash_sessions y cierra mediante close_cash_session.
+ * Caja permanece separada por sucursal.
+ * Persiste closing_denominations y cierra mediante close_cash_session.
  */
 
 import { useState } from "react";
@@ -57,10 +55,38 @@ import {
 
 type MovementType = "deposit" | "withdrawal";
 
-
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString("es-MX");
 
+/** Inicio del día según la hora local del dispositivo */
+function getLocalDayStart(): Date {
+  const now = new Date();
+  return new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0,
+    0,
+    0,
+    0,
+  );
+}
+
+/** Comprueba si una fecha pertenece al día local actual */
+function isTodayLocal(value: string | null | undefined): boolean {
+  if (!value) return false;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+
+  const now = new Date();
+
+  return (
+    date.getFullYear() === now.getFullYear() &&
+    date.getMonth() === now.getMonth() &&
+    date.getDate() === now.getDate()
+  );
+}
 
 /** Fondo fijo de apertura (pesos) */
 const DEFAULT_FONDO = 400;
@@ -113,13 +139,17 @@ const QUICK_REASONS: Record<MovementType, string[]> = {
   ],
 };
 
-type DenomLine = { label: string; value: number; qty: number; subtotal: number };
+type DenomLine = {
+  label: string;
+  value: number;
+  qty: number;
+  subtotal: number;
+};
 
 type ArqueoPrintOpts = {
   branchLabel: string;
   openedAt: string;
   closedAt?: string | null;
-  /** Nombre de quien abrió la sesión de caja */
   openedByName?: string | null;
   opening: number;
   cashSales: number;
@@ -130,7 +160,6 @@ type ArqueoPrintOpts = {
   expected: number;
   counted?: number | null;
   difference?: number | null;
-  /** Desglose de billetes/monedas contados al cerrar */
   denominations?: DenomLine[];
   movements: {
     id: string;
@@ -141,21 +170,28 @@ type ArqueoPrintOpts = {
   }[];
 };
 
-function parseDenomCounts(raw: unknown): Record<string, string> | null {
+function parseDenomCounts(
+  raw: unknown,
+): Record<string, string> | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
   const src = raw as Record<string, unknown>;
   const result = emptyDenomCounts();
   let hasAny = false;
+
   for (const d of DENOMINATIONS) {
     const key = String(d.value);
     const val = src[key];
+
     if (val === undefined || val === null || val === "") continue;
+
     const num = Number(val);
     if (Number.isFinite(num) && num > 0) {
       result[key] = String(num);
       hasAny = true;
     }
   }
+
   return hasAny ? result : null;
 }
 
@@ -164,14 +200,17 @@ function serializeDenomCounts(
 ): Record<string, number> | null {
   const out: Record<string, number> = {};
   let hasAny = false;
+
   for (const d of DENOMINATIONS) {
     const key = String(d.value);
     const num = Number(counts[key] || 0);
+
     if (Number.isFinite(num) && num > 0) {
       out[key] = num;
       hasAny = true;
     }
   }
+
   return hasAny ? out : null;
 }
 
@@ -179,10 +218,13 @@ function denomLinesFromCounts(
   counts: Record<string, string> | null | undefined,
 ): DenomLine[] {
   if (!counts) return [];
+
   const lines: DenomLine[] = [];
+
   for (const d of DENOMINATIONS) {
     const qty = Number(counts[String(d.value)] || 0);
     if (!Number.isFinite(qty) || qty <= 0) continue;
+
     lines.push({
       label: d.label,
       value: d.value,
@@ -190,6 +232,7 @@ function denomLinesFromCounts(
       subtotal: Math.round(qty * d.value * 100) / 100,
     });
   }
+
   return lines;
 }
 
@@ -226,6 +269,7 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
             const reason = esc(
               (m.reason && m.reason.trim()) || "Sin motivo",
             );
+
             return `<div class="mv">
   <div class="row"><span class="bold">${tipo}</span><span>${signo}${money(Number(m.amount))}</span></div>
   <div class="muted">${shortTicketTime(m.created_at)}</div>
@@ -350,21 +394,23 @@ ${opts.denominations
 </html>`;
 }
 
-
 function buildCorteText(opts: ArqueoPrintOpts): string {
   const moneyFmt = (n: number) => `$${Number(n || 0).toFixed(2)}`;
   const lines: string[] = [];
+
   lines.push("CORTE DE CAJA");
   lines.push(opts.branchLabel);
   lines.push("Lula Shop");
   lines.push("--------------------------------");
   lines.push(`Abierta: ${shortTicketTime(opts.openedAt)}`);
   lines.push(`Responsable: ${(opts.openedByName || "—").slice(0, 18)}`);
+
   if (opts.closedAt) {
     lines.push(`Cerrada: ${shortTicketTime(opts.closedAt)}`);
   } else {
     lines.push("Corte en curso");
   }
+
   lines.push("--------------------------------");
   lines.push("DETALLE DEL CUADRE");
   lines.push(`Fondo inicial    ${moneyFmt(opts.opening)}`);
@@ -375,6 +421,7 @@ function buildCorteText(opts: ArqueoPrintOpts): string {
   lines.push(`Gastos efectivo  -${moneyFmt(opts.cashExpenses)}`);
   lines.push("--------------------------------");
   lines.push(`DEBE HABER       ${moneyFmt(opts.expected)}`);
+
   if (opts.denominations && opts.denominations.length > 0) {
     lines.push("CONTEO EFECTIVO");
     for (const d of opts.denominations) {
@@ -383,6 +430,7 @@ function buildCorteText(opts: ArqueoPrintOpts): string {
       );
     }
   }
+
   if (opts.counted != null) {
     lines.push(`Contado          ${moneyFmt(opts.counted)}`);
     lines.push(
@@ -391,27 +439,31 @@ function buildCorteText(opts: ArqueoPrintOpts): string {
       )}`,
     );
   }
+
   lines.push("--------------------------------");
   lines.push("MOVIMIENTOS");
+
   if (opts.movements.length === 0) {
     lines.push("Sin entradas ni salidas");
   } else {
     for (const m of opts.movements) {
       const tipo = m.type === "deposit" ? "ENTRADA" : "SALIDA";
       const signo = m.type === "deposit" ? "+" : "-";
+
       lines.push(`${tipo} ${signo}${moneyFmt(Number(m.amount))}`);
       lines.push(`  ${shortTicketTime(m.created_at)}`);
       lines.push(`  ${(m.reason && m.reason.trim()) || "Sin motivo"}`);
     }
   }
+
   lines.push("--------------------------------");
   lines.push("Fin del corte");
   lines.push("");
+
   return lines.join("\n");
 }
 
 function printTicket58Html(html: string) {
-  // 1) Intentar iframe (mejor en móvil que window.open)
   try {
     const iframe = document.createElement("iframe");
     iframe.setAttribute(
@@ -419,17 +471,21 @@ function printTicket58Html(html: string) {
       "position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;pointer-events:none;",
     );
     document.body.appendChild(iframe);
+
     const doc = iframe.contentDocument || iframe.contentWindow?.document;
     if (!doc) {
       throw new Error("No se pudo crear el documento de impresión.");
     }
+
     doc.open();
     doc.write(html);
     doc.close();
+
     const win = iframe.contentWindow;
     if (!win) {
       throw new Error("No se pudo abrir la vista de impresión.");
     }
+
     setTimeout(() => {
       try {
         win.focus();
@@ -437,25 +493,30 @@ function printTicket58Html(html: string) {
       } catch {
         // ignore
       }
+
       setTimeout(() => {
         iframe.remove();
       }, 1500);
     }, 300);
+
     return;
   } catch {
-    // 2) Fallback ventana
+    // Fallback a ventana de impresión
   }
 
   const w = window.open("", "_blank");
+
   if (!w) {
     toast.error(
       "No se pudo abrir la impresión. Revisa si el navegador bloqueó ventanas emergentes.",
     );
     return;
   }
+
   w.document.open();
   w.document.write(html);
   w.document.close();
+
   setTimeout(() => {
     try {
       w.focus();
@@ -466,39 +527,45 @@ function printTicket58Html(html: string) {
   }, 300);
 }
 
-
-async function resolveProfileName(userId: string | null | undefined): Promise<string> {
+async function resolveProfileName(
+  userId: string | null | undefined,
+): Promise<string> {
   if (!userId) return "—";
+
   const { data, error } = await supabase
     .from("profiles")
     .select("full_name")
     .eq("id", userId)
     .maybeSingle();
+
   if (error) return "—";
+
   const name = (data?.full_name ?? "").trim();
   return name || "—";
 }
 
 async function loadSessionPrintData(sessionId: string) {
-
   const [mvRes, cashRes, mixedRes, expRes] = await Promise.all([
     supabase
       .from("cash_movements")
       .select("id, type, amount, reason, created_at")
       .eq("cash_session_id", sessionId)
       .order("created_at", { ascending: true }),
+
     supabase
       .from("sales")
       .select("total")
       .eq("cash_session_id", sessionId)
       .eq("payment_method", "cash")
       .in("status", ["completed", "partially_refunded", "refunded"]),
+
     supabase
       .from("sales")
       .select("cash_received")
       .eq("cash_session_id", sessionId)
       .eq("payment_method", "mixed")
       .in("status", ["completed", "partially_refunded", "refunded"]),
+
     supabase
       .from("expenses")
       .select("amount")
@@ -507,26 +574,29 @@ async function loadSessionPrintData(sessionId: string) {
   ]);
 
   for (const res of [mvRes, cashRes, mixedRes, expRes]) {
-    if (res.error) {
-      throw res.error;
-    }
+    if (res.error) throw res.error;
   }
 
   const movements = mvRes.data ?? [];
+
   const deposits = movements
     .filter((m) => m.type === "deposit")
     .reduce((t, m) => t + Number(m.amount ?? 0), 0);
+
   const withdrawals = movements
     .filter((m) => m.type === "withdrawal")
     .reduce((t, m) => t + Number(m.amount ?? 0), 0);
+
   const cashSales = (cashRes.data ?? []).reduce(
     (t, r) => t + Number(r.total ?? 0),
     0,
   );
+
   const mixedCash = (mixedRes.data ?? []).reduce(
     (t, r) => t + Number(r.cash_received ?? 0),
     0,
   );
+
   const cashExpenses = (expRes.data ?? []).reduce(
     (t, r) => t + Number(r.amount ?? 0),
     0,
@@ -555,8 +625,10 @@ export function CashDrawerPanel({
 }) {
   const { branchId, branches } = useBranch();
   const { user } = useAuth();
+
   const branchLabel =
     branches.find((b) => b.id === branchId)?.name ?? "Sucursal";
+
   const qc = useQueryClient();
 
   const [opening, setOpening] = useState(String(DEFAULT_FONDO));
@@ -575,24 +647,16 @@ export function CashDrawerPanel({
   const [ticketOpts, setTicketOpts] = useState<ArqueoPrintOpts | null>(null);
 
   const invalidate = () => {
-    void qc.invalidateQueries({
-      queryKey: ["cash-session"],
-    });
-
-    void qc.invalidateQueries({
-      queryKey: ["cash-session-totals"],
-    });
-
-    void qc.invalidateQueries({
-      queryKey: ["closed-sessions"],
-    });
-
-    void qc.invalidateQueries({
-      queryKey: ["last-closed-session-today"],
-    });
+    void qc.invalidateQueries({ queryKey: ["cash-session"] });
+    void qc.invalidateQueries({ queryKey: ["cash-session-totals"] });
+    void qc.invalidateQueries({ queryKey: ["closed-sessions"] });
+    void qc.invalidateQueries({ queryKey: ["last-closed-session-today"] });
   };
 
-  const openTicketPreview = (opts: ArqueoPrintOpts, title = "Corte de caja") => {
+  const openTicketPreview = (
+    opts: ArqueoPrintOpts,
+    title = "Corte de caja",
+  ) => {
     const html = buildTicket58Html(opts);
     setTicketTitle(title);
     setTicketOpts(opts);
@@ -612,11 +676,16 @@ export function CashDrawerPanel({
   }) => {
     try {
       setPrintingClosedId(closedSession.id);
+
       const [detail, openedByName] = await Promise.all([
         loadSessionPrintData(closedSession.id),
         resolveProfileName(closedSession.opened_by),
       ]);
-      const savedDenoms = parseDenomCounts(closedSession.closing_denominations);
+
+      const savedDenoms = parseDenomCounts(
+        closedSession.closing_denominations,
+      );
+
       openTicketPreview(
         {
           branchLabel,
@@ -658,17 +727,19 @@ export function CashDrawerPanel({
       );
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : "No se pudo cargar el corte.";
+        e instanceof Error
+          ? e.message
+          : "No se pudo cargar el corte.";
+
       toast.error(msg);
     } finally {
       setPrintingClosedId(null);
     }
   };
 
-
   /*
    * ============================================================
-   * CAJA ABIERTA
+   * SESIÓN ABIERTA Y CONTROL DEL DÍA
    * ============================================================
    */
 
@@ -684,27 +755,30 @@ export function CashDrawerPanel({
         .select("*")
         .eq("branch_id", branchId!)
         .eq("status", "open")
-        .order("opened_at", {
-          ascending: false,
-        })
+        .order("opened_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       return data;
     },
   });
 
-  // Última sesión cerrada HOY en esta sucursal (para apertura por relevo)
+  const hasPreviousDayOpenSession =
+    !!session && !isTodayLocal(session.opened_at);
+
+  const activeSession =
+    session && isTodayLocal(session.opened_at)
+      ? session
+      : null;
+
+  // Último corte cerrado HOY. Nunca hereda dinero de ayer.
   const { data: lastClosedToday } = useQuery({
     queryKey: ["last-closed-session-today", branchId],
     enabled: !!branchId && !session,
     queryFn: async () => {
-      const start = new Date();
-      start.setHours(0, 0, 0, 0);
+      const start = getLocalDayStart();
 
       const { data, error } = await supabase
         .from("cash_sessions")
@@ -719,6 +793,7 @@ export function CashDrawerPanel({
         .maybeSingle();
 
       if (error) throw error;
+
       return data;
     },
   });
@@ -730,10 +805,10 @@ export function CashDrawerPanel({
    */
 
   const { data: summary } = useQuery({
-    queryKey: ["cash-session-totals", session?.id],
-    enabled: !!session?.id,
+    queryKey: ["cash-session-totals", activeSession?.id],
+    enabled: !!activeSession?.id,
     queryFn: async () => {
-      const id = session!.id;
+      const id = activeSession!.id;
 
       const [
         cashRes,
@@ -765,13 +840,9 @@ export function CashDrawerPanel({
 
         supabase
           .from("cash_movements")
-          .select(
-            "id, type, amount, reason, created_at",
-          )
+          .select("id, type, amount, reason, created_at")
           .eq("cash_session_id", id)
-          .order("created_at", {
-            ascending: false,
-          }),
+          .order("created_at", { ascending: false }),
 
         supabase
           .from("expenses")
@@ -786,62 +857,43 @@ export function CashDrawerPanel({
         mvRes,
         expRes,
       ]) {
-        if (res.error) {
-          throw res.error;
-        }
+        if (res.error) throw res.error;
       }
 
-      const cashSales = (
-        cashRes.data ?? []
-      ).reduce(
-        (total, row) =>
-          total + Number(row.total ?? 0),
+      const cashSales = (cashRes.data ?? []).reduce(
+        (total, row) => total + Number(row.total ?? 0),
         0,
       );
 
-      const mixedCash = (
-        mixedRes.data ?? []
-      ).reduce(
-        (total, row) =>
-          total + Number(row.cash_received ?? 0),
+      const mixedCash = (mixedRes.data ?? []).reduce(
+        (total, row) => total + Number(row.cash_received ?? 0),
         0,
       );
 
       const movements = mvRes.data ?? [];
 
       const deposits = movements
-        .filter(
-          (movement) =>
-            movement.type === "deposit",
-        )
+        .filter((movement) => movement.type === "deposit")
         .reduce(
-          (total, movement) =>
-            total + Number(movement.amount ?? 0),
+          (total, movement) => total + Number(movement.amount ?? 0),
           0,
         );
 
       const withdrawals = movements
-        .filter(
-          (movement) =>
-            movement.type === "withdrawal",
-        )
+        .filter((movement) => movement.type === "withdrawal")
         .reduce(
-          (total, movement) =>
-            total + Number(movement.amount ?? 0),
+          (total, movement) => total + Number(movement.amount ?? 0),
           0,
         );
 
-      const cashExpenses = (
-        expRes.data ?? []
-      ).reduce(
-        (total, row) =>
-          total + Number(row.amount ?? 0),
+      const cashExpenses = (expRes.data ?? []).reduce(
+        (total, row) => total + Number(row.amount ?? 0),
         0,
       );
 
       const expected =
         Math.round(
-          (Number(session!.opening_amount ?? 0) +
+          (Number(activeSession!.opening_amount ?? 0) +
             cashSales +
             mixedCash +
             deposits -
@@ -868,9 +920,7 @@ export function CashDrawerPanel({
    * ============================================================
    */
 
-  const {
-    data: closedSessions = [],
-  } = useQuery({
+  const { data: closedSessions = [] } = useQuery({
     queryKey: ["closed-sessions", branchId],
     enabled: !!branchId,
     queryFn: async () => {
@@ -879,14 +929,10 @@ export function CashDrawerPanel({
         .select("*")
         .eq("branch_id", branchId!)
         .eq("status", "closed")
-        .order("closed_at", {
-          ascending: false,
-        })
-        .limit(8);
+        .order("closed_at", { ascending: false })
+        .limit(50);
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       return data ?? [];
     },
@@ -901,9 +947,7 @@ export function CashDrawerPanel({
   const openBox = useMutation({
     mutationFn: async (overrideAmount?: number) => {
       if (!branchId) {
-        throw new Error(
-          "No hay una sucursal activa.",
-        );
+        throw new Error("No hay una sucursal activa.");
       }
 
       if (!user) {
@@ -912,14 +956,37 @@ export function CashDrawerPanel({
         );
       }
 
-      // Fondo fijo de operación: $400 (se puede ajustar si hace falta)
-      // overrideAmount se usa en apertura por relevo para no depender del state async
+      // Verificación en base de datos antes de abrir.
+      // No se cierra ni modifica ninguna sesión pendiente.
+      const { data: openSessions, error: checkError } = await supabase
+        .from("cash_sessions")
+        .select("id, opened_at")
+        .eq("branch_id", branchId)
+        .eq("status", "open");
+
+      if (checkError) throw checkError;
+
+      if (openSessions && openSessions.length > 0) {
+        const pending = openSessions[0];
+
+        if (!isTodayLocal(pending.opened_at)) {
+          throw new Error(
+            "Hay una caja abierta de un día anterior. Debe revisarse y cerrarse expresamente antes de iniciar la caja de hoy.",
+          );
+        }
+
+        throw new Error(
+          "Ya existe una caja abierta en esta sucursal.",
+        );
+      }
+
       const raw =
         overrideAmount != null
           ? overrideAmount
           : Number(opening);
+
       const amount =
-        Number(raw) >= 0 && Number.isFinite(Number(raw))
+        Number.isFinite(Number(raw)) && Number(raw) >= 0
           ? Number(raw)
           : DEFAULT_FONDO;
 
@@ -932,26 +999,21 @@ export function CashDrawerPanel({
           status: "open",
         });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
     },
 
     onSuccess: () => {
       toast.success("Caja abierta correctamente.");
-
       setOpening(String(DEFAULT_FONDO));
-
       invalidate();
     },
 
     onError: (error: Error) => {
-      const message =
+      toast.error(
         getSupabaseErrorMessage(error) ||
-        error.message ||
-        "No se pudo abrir la caja.";
-
-      toast.error(message);
+          error.message ||
+          "No se pudo abrir la caja.",
+      );
 
       invalidate();
     },
@@ -965,62 +1027,48 @@ export function CashDrawerPanel({
 
   const addMovement = useMutation({
     mutationFn: async () => {
-      if (!session) {
+      if (!activeSession) {
         throw new Error(
-          "La caja está cerrada.",
+          "No hay una caja abierta válida para el día de hoy.",
         );
       }
 
       if (!user) {
-        throw new Error(
-          "Tu sesión no es válida.",
-        );
+        throw new Error("Tu sesión no es válida.");
       }
 
       const amount = Number(mvAmount);
 
-      if (
-        !Number.isFinite(amount) ||
-        amount <= 0
-      ) {
-        throw new Error(
-          "Escribe una cantidad mayor a 0.",
-        );
+      if (!Number.isFinite(amount) || amount <= 0) {
+        throw new Error("Escribe una cantidad mayor a 0.");
       }
 
       const { error } = await supabase
         .from("cash_movements")
         .insert({
-          cash_session_id: session.id,
+          cash_session_id: activeSession.id,
           type: mvType,
           amount,
           reason: mvReason.trim() || null,
           created_by: user.id,
         });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
     },
 
     onSuccess: () => {
-      toast.success(
-        "Movimiento registrado.",
-      );
-
+      toast.success("Movimiento registrado.");
       setMvAmount("");
       setMvReason("");
-
       invalidate();
     },
 
     onError: (error: Error) => {
-      const message =
+      toast.error(
         getSupabaseErrorMessage(error) ||
-        error.message ||
-        "No se pudo registrar el movimiento.";
-
-      toast.error(message);
+          error.message ||
+          "No se pudo registrar el movimiento.",
+      );
     },
   });
 
@@ -1032,47 +1080,37 @@ export function CashDrawerPanel({
 
   const closeBox = useMutation({
     mutationFn: async (opts?: { printAfter?: boolean }) => {
-      if (!session) {
+      if (!activeSession) {
         throw new Error(
-          "La caja está cerrada.",
+          "No hay una caja abierta válida para el día de hoy.",
         );
       }
 
       const amount = Number(counted);
 
-      if (
-        !Number.isFinite(amount) ||
-        amount < 0
-      ) {
-        throw new Error(
-          "Escribe el efectivo contado.",
-        );
+      if (!Number.isFinite(amount) || amount < 0) {
+        throw new Error("Escribe el efectivo contado.");
       }
 
-      // Persistir desglose de billetes/monedas en la sesión antes de cerrar
       const serializedDenoms = serializeDenomCounts(denomCounts);
+
       const { error: denomErr } = await supabase
         .from("cash_sessions")
         .update({ closing_denominations: serializedDenoms })
-        .eq("id", session.id)
+        .eq("id", activeSession.id)
         .eq("status", "open");
 
-      if (denomErr) {
-        throw denomErr;
-      }
+      if (denomErr) throw denomErr;
 
-      const { error } =
-        await supabase.rpc(
-          "close_cash_session",
-          {
-            _session_id: session.id,
-            _closing_amount: amount,
-          },
-        );
+      const { error } = await supabase.rpc(
+        "close_cash_session",
+        {
+          _session_id: activeSession.id,
+          _closing_amount: amount,
+        },
+      );
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
       const {
         data: row,
@@ -1082,43 +1120,44 @@ export function CashDrawerPanel({
         .select(
           "id, opened_at, closed_at, opened_by, opening_amount, expected_amount, closing_amount, difference, closing_denominations",
         )
-        .eq("id", session.id)
+        .eq("id", activeSession.id)
         .maybeSingle();
 
-      if (rowErr) {
-        throw rowErr;
-      }
+      if (rowErr) throw rowErr;
 
-      return { row, printAfter: Boolean(opts?.printAfter), sessionSnapshot: session, denomSnapshot: { ...denomCounts }, amount };
+      return {
+        row,
+        printAfter: Boolean(opts?.printAfter),
+        sessionSnapshot: activeSession,
+        denomSnapshot: { ...denomCounts },
+        amount,
+      };
     },
 
     onSuccess: async (result) => {
       const row = result?.row;
-      const diff = Number(
-        row?.difference ?? 0,
-      );
+      const diff = Number(row?.difference ?? 0);
 
       const msg =
         Math.abs(diff) < 0.01
           ? "Caja cuadrada, sin diferencia."
           : diff > 0
             ? `Sobran ${money(diff)} en el cajón.`
-            : `Faltan ${money(
-                Math.abs(diff),
-              )} en el cajón.`;
+            : `Faltan ${money(Math.abs(diff))} en el cajón.`;
 
-      toast.success(
-        `Corte cerrado · ${msg}`,
-      );
-
+      toast.success(`Corte cerrado · ${msg}`);
       setCloseOpen(false);
 
       if (result?.printAfter && result.sessionSnapshot) {
         const sess = result.sessionSnapshot;
         const openedByName = await resolveProfileName(sess.opened_by);
+
         const persistedDenoms =
-          parseDenomCounts(row?.closing_denominations) ?? result.denomSnapshot;
+          parseDenomCounts(row?.closing_denominations) ??
+          result.denomSnapshot;
+
         const denoms = denomLinesFromCounts(persistedDenoms);
+
         openTicketPreview(
           {
             branchLabel,
@@ -1152,27 +1191,22 @@ export function CashDrawerPanel({
       setCloseOpen(false);
       setCounted("");
       setDenomCounts(emptyDenomCounts());
-
       invalidate();
     },
 
     onError: (error: Error) => {
-      const message =
+      toast.error(
         getSupabaseErrorMessage(error) ||
-        error.message ||
-        "No se pudo cerrar la caja.";
-
-      toast.error(message);
+          error.message ||
+          "No se pudo cerrar la caja.",
+      );
 
       invalidate();
     },
   });
 
-  const expected =
-    summary?.expected ?? 0;
-
-  const countedNum =
-    Number(counted) || 0;
+  const expected = summary?.expected ?? 0;
+  const countedNum = Number(counted) || 0;
 
   /*
    * ============================================================
@@ -1194,12 +1228,12 @@ export function CashDrawerPanel({
             <div
               className={cn(
                 "flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl",
-                session
+                activeSession
                   ? "bg-[#e8f7ee] text-[#30a46c]"
                   : "bg-[#f1f3f9] text-[#9aa3b8]",
               )}
             >
-              {session ? (
+              {activeSession ? (
                 <Unlock className="h-5 w-5" />
               ) : (
                 <Lock className="h-5 w-5" />
@@ -1211,56 +1245,70 @@ export function CashDrawerPanel({
                 <p className="text-sm font-bold text-[#1a1d26] sm:text-base">
                   {sessionLoading
                     ? "Consultando caja…"
-                    : session
-                      ? "Caja abierta"
-                      : "Caja cerrada"}
+                    : hasPreviousDayOpenSession
+                      ? "Caja pendiente de día anterior"
+                      : activeSession
+                        ? "Caja abierta"
+                        : "Caja cerrada"}
                 </p>
+
                 {!sessionLoading && (
                   <span
                     className={
-                      session
+                      activeSession
                         ? "rounded-full bg-[#e8f5e9] px-2.5 py-0.5 text-[11px] font-semibold text-[#2e7d32]"
-                        : "rounded-full bg-[#eeeeee] px-2.5 py-0.5 text-[11px] font-semibold text-[#757575]"
+                        : hasPreviousDayOpenSession
+                          ? "rounded-full bg-[#fff0f0] px-2.5 py-0.5 text-[11px] font-semibold text-[#c62828]"
+                          : "rounded-full bg-[#eeeeee] px-2.5 py-0.5 text-[11px] font-semibold text-[#757575]"
                     }
                   >
-                    {session ? "ABIERTA" : "CERRADA"}
+                    {activeSession
+                      ? "ABIERTA"
+                      : hasPreviousDayOpenSession
+                        ? "REVISIÓN REQUERIDA"
+                        : "CERRADA"}
                   </span>
                 )}
               </div>
 
               <p className="mt-0.5 break-words text-xs leading-5 text-[#9aa3b8]">
-                {session
-                  ? `Abierta el ${dateTime(
-                      session.opened_at,
-                    )} · inicial ${money(
-                      Number(
-                        session.opening_amount,
-                      ),
+                {activeSession
+                  ? `Abierta el ${dateTime(activeSession.opened_at)} · inicial ${money(
+                      Number(activeSession.opening_amount),
                     )}`
-                  : "Abre la caja para poder cobrar"}
+                  : hasPreviousDayOpenSession
+                    ? `La sesión pendiente se abrió el ${dateTime(
+                        session!.opened_at,
+                      )}. No se puede usar para operar hoy.`
+                    : "Abre la caja para poder cobrar"}
               </p>
             </div>
           </div>
 
-          {session && (
+          {activeSession && (
             <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
               <Button
                 type="button"
                 variant="outline"
                 className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] sm:w-auto"
                 onClick={() => {
-                  if (!session) return;
+                  if (!activeSession) return;
+
                   void (async () => {
                     const openedByName = await resolveProfileName(
-                      session.opened_by,
+                      activeSession.opened_by,
                     );
-                    const saved = parseDenomCounts(session.closing_denominations);
+
+                    const saved = parseDenomCounts(
+                      activeSession.closing_denominations,
+                    );
+
                     openTicketPreview(
                       {
                         branchLabel,
-                        openedAt: session.opened_at,
+                        openedAt: activeSession.opened_at,
                         openedByName,
-                        opening: Number(session.opening_amount ?? 0),
+                        opening: Number(activeSession.opening_amount ?? 0),
                         cashSales: summary?.cashSales ?? 0,
                         mixedCash: summary?.mixedCash ?? 0,
                         deposits: summary?.deposits ?? 0,
@@ -1291,12 +1339,16 @@ export function CashDrawerPanel({
                 <Printer className="mr-2 h-4 w-4" />
                 Imprimir corte
               </Button>
+
               <Button
                 variant="outline"
                 className="min-h-11 w-full touch-manipulation rounded-xl border-[#e2e8f0] text-[#e5484d] hover:text-[#e5484d] sm:w-auto"
                 onClick={() => {
-                  if (session?.id) {
-                    const saved = parseDenomCounts(session.closing_denominations);
+                  if (activeSession.id) {
+                    const saved = parseDenomCounts(
+                      activeSession.closing_denominations,
+                    );
+
                     if (saved) {
                       setDenomCounts(saved);
                       setCounted(String(sumDenominations(saved)));
@@ -1305,6 +1357,7 @@ export function CashDrawerPanel({
                       setCounted("");
                     }
                   }
+
                   setCloseOpen(true);
                 }}
               >
@@ -1316,12 +1369,25 @@ export function CashDrawerPanel({
         </div>
       </div>
 
-      {!session ? (
+      {hasPreviousDayOpenSession && (
+        <div className="rounded-2xl border border-[#e5484d]/30 bg-[#fff0f0] p-4">
+          <p className="text-sm font-bold text-[#c62828]">
+            No se puede iniciar la caja de hoy
+          </p>
+          <p className="mt-1 text-sm leading-6 text-[#7f1d1d]">
+            Existe un corte que quedó abierto desde un día anterior. Un
+            responsable debe revisar esa sesión y resolverla expresamente.
+            El sistema no la cerrará ni cambiará su efectivo automáticamente.
+          </p>
+        </div>
+      )}
+
+      {!activeSession && !hasPreviousDayOpenSession ? (
         /* ======================================================
-         * ABRIR CAJA — fondo o relevo
+         * ABRIR CAJA — FONDO O RELEVO DEL MISMO DÍA
          * ====================================================== */
         <div className="space-y-4">
-          {/* —— Apertura con fondo (inicio del día) —— */}
+          {/* Apertura con fondo al inicio del día */}
           <div className="rounded-2xl border border-[#e2e8f0] bg-white p-4 sm:p-5">
             <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26] sm:text-base">
               <Wallet className="h-4 w-4 shrink-0 text-[#4169e2]" />
@@ -1329,11 +1395,11 @@ export function CashDrawerPanel({
             </h2>
 
             <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
-              Solo al inicio del día. Fondo fijo:{" "}
+              Para iniciar el día. Fondo fijo:{" "}
               <strong className="text-[#1a1d26]">
                 {money(DEFAULT_FONDO)}
               </strong>
-              . Solo cambia el monto si ese día el fondo es distinto.
+              . No se hereda efectivo de días anteriores.
             </p>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -1342,29 +1408,22 @@ export function CashDrawerPanel({
                 min="0"
                 step="0.01"
                 value={opening}
-                onChange={(event) =>
-                  setOpening(event.target.value)
-                }
+                onChange={(event) => setOpening(event.target.value)}
                 placeholder={String(DEFAULT_FONDO)}
                 className="h-11 w-full rounded-xl border-[#e2e8f0] sm:w-40"
               />
 
               <Button
                 className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
-                disabled={
-                  openBox.isPending ||
-                  sessionLoading
-                }
-                onClick={() => openBox.mutate(undefined as never)}
+                disabled={openBox.isPending || sessionLoading}
+                onClick={() => openBox.mutate(undefined)}
               >
-                {openBox.isPending
-                  ? "Abriendo…"
-                  : "Abrir con fondo"}
+                {openBox.isPending ? "Abriendo…" : "Abrir con fondo"}
               </Button>
             </div>
           </div>
 
-          {/* —— Apertura por relevo (después de corte / cierre de turno) —— */}
+          {/* Relevo únicamente después de un corte cerrado hoy */}
           {lastClosedToday?.closing_amount != null && (
             <div className="rounded-2xl border border-[#4169e2]/30 bg-[#4169e2]/5 p-4 sm:p-5">
               <h2 className="flex items-center gap-2 text-sm font-bold text-[#1a1d26] sm:text-base">
@@ -1373,8 +1432,8 @@ export function CashDrawerPanel({
               </h2>
 
               <p className="mt-1 text-xs leading-5 text-[#9aa3b8] sm:text-sm">
-                Continúa con el efectivo que dejó el turno anterior en esta
-                sucursal.
+                Continúa con el efectivo que dejó el turno anterior hoy en
+                esta sucursal.
               </p>
 
               <div className="mt-3 rounded-xl border border-[#e2e8f0] bg-white px-3 py-2 text-sm">
@@ -1384,13 +1443,14 @@ export function CashDrawerPanel({
                     {money(Number(lastClosedToday.closing_amount))}
                   </span>
                 </div>
+
                 {lastClosedToday.closed_at && (
                   <div className="mt-1 flex items-center justify-between gap-2 text-xs text-[#9aa3b8]">
                     <span>Cerrada</span>
                     <span>
-                      {new Date(
-                        lastClosedToday.closed_at,
-                      ).toLocaleString("es-MX")}
+                      {new Date(lastClosedToday.closed_at).toLocaleString(
+                        "es-MX",
+                      )}
                     </span>
                   </div>
                 )}
@@ -1399,26 +1459,23 @@ export function CashDrawerPanel({
               <Button
                 className="mt-4 min-h-11 w-full touch-manipulation rounded-xl border border-[#4169e2] bg-white text-[#4169e2] hover:bg-[#4169e2]/10 sm:w-auto"
                 variant="outline"
-                disabled={
-                  openBox.isPending ||
-                  sessionLoading
-                }
+                disabled={openBox.isPending || sessionLoading}
                 onClick={() => {
-                  const monto = Number(
-                    lastClosedToday.closing_amount,
-                  );
+                  const monto = Number(lastClosedToday.closing_amount);
                   setOpening(String(monto));
                   openBox.mutate(monto);
                 }}
               >
                 {openBox.isPending
                   ? "Abriendo…"
-                  : `Abrir por relevo (${money(Number(lastClosedToday.closing_amount))})`}
+                  : `Abrir por relevo (${money(
+                      Number(lastClosedToday.closing_amount),
+                    )})`}
               </Button>
             </div>
           )}
         </div>
-      ) : (
+      ) : activeSession ? (
         <>
           {/* ==================================================
            * RESUMEN
@@ -1426,48 +1483,34 @@ export function CashDrawerPanel({
           <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3">
             <Stat
               label="Efectivo inicial"
-              value={money(
-                Number(
-                  session.opening_amount,
-                ),
-              )}
+              value={money(Number(activeSession.opening_amount))}
             />
 
             <Stat
               label="Ventas en efectivo"
               value={money(
-                (summary?.cashSales ?? 0) +
-                  (summary?.mixedCash ?? 0),
+                (summary?.cashSales ?? 0) + (summary?.mixedCash ?? 0),
               )}
               hint={
-                summary &&
-                summary.mixedCash > 0
-                  ? `Incluye ${money(
-                      summary.mixedCash,
-                    )} de pagos mixtos`
+                summary && summary.mixedCash > 0
+                  ? `Incluye ${money(summary.mixedCash)} de pagos mixtos`
                   : undefined
               }
             />
 
             <Stat
               label="Gastos en efectivo"
-              value={`− ${money(
-                summary?.cashExpenses ?? 0,
-              )}`}
+              value={`− ${money(summary?.cashExpenses ?? 0)}`}
             />
 
             <Stat
               label="Entradas"
-              value={`+ ${money(
-                summary?.deposits ?? 0,
-              )}`}
+              value={`+ ${money(summary?.deposits ?? 0)}`}
             />
 
             <Stat
               label="Salidas"
-              value={`− ${money(
-                summary?.withdrawals ?? 0,
-              )}`}
+              value={`− ${money(summary?.withdrawals ?? 0)}`}
             />
 
             <div className="rounded-2xl border border-[#4169e2]/30 bg-[#eef2fe] p-3.5 sm:p-4">
@@ -1493,19 +1536,13 @@ export function CashDrawerPanel({
               <div className="grid grid-cols-2 gap-2">
                 <Button
                   size="sm"
-                  variant={
-                    mvType === "deposit"
-                      ? "default"
-                      : "outline"
-                  }
+                  variant={mvType === "deposit" ? "default" : "outline"}
                   className={cn(
                     "min-h-11 touch-manipulation rounded-xl",
                     mvType === "deposit" &&
                       "bg-[#30a46c] hover:bg-[#30a46c]/90",
                   )}
-                  onClick={() =>
-                    setMvType("deposit")
-                  }
+                  onClick={() => setMvType("deposit")}
                 >
                   <ArrowUpRight className="mr-1 h-4 w-4" />
                   Entrada
@@ -1513,22 +1550,13 @@ export function CashDrawerPanel({
 
                 <Button
                   size="sm"
-                  variant={
-                    mvType === "withdrawal"
-                      ? "default"
-                      : "outline"
-                  }
+                  variant={mvType === "withdrawal" ? "default" : "outline"}
                   className={cn(
                     "min-h-11 touch-manipulation rounded-xl",
-                    mvType ===
-                      "withdrawal" &&
+                    mvType === "withdrawal" &&
                       "bg-[#e5484d] hover:bg-[#e5484d]/90",
                   )}
-                  onClick={() =>
-                    setMvType(
-                      "withdrawal",
-                    )
-                  }
+                  onClick={() => setMvType("withdrawal")}
                 >
                   <ArrowDownLeft className="mr-1 h-4 w-4" />
                   Salida
@@ -1540,22 +1568,14 @@ export function CashDrawerPanel({
                 min="0"
                 step="0.01"
                 value={mvAmount}
-                onChange={(event) =>
-                  setMvAmount(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setMvAmount(event.target.value)}
                 placeholder="Cantidad"
                 className="h-11 w-full rounded-xl border-[#e2e8f0]"
               />
 
               <Input
                 value={mvReason}
-                onChange={(event) =>
-                  setMvReason(
-                    event.target.value,
-                  )
-                }
+                onChange={(event) => setMvReason(event.target.value)}
                 placeholder="Motivo (opcional)"
                 className="h-11 w-full rounded-xl border-[#e2e8f0]"
               />
@@ -1563,16 +1583,10 @@ export function CashDrawerPanel({
               <Button
                 size="sm"
                 className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 md:w-auto"
-                disabled={
-                  addMovement.isPending
-                }
-                onClick={() =>
-                  addMovement.mutate()
-                }
+                disabled={addMovement.isPending}
+                onClick={() => addMovement.mutate()}
               >
-                {addMovement.isPending
-                  ? "Guardando…"
-                  : "Agregar"}
+                {addMovement.isPending ? "Guardando…" : "Agregar"}
               </Button>
             </div>
 
@@ -1600,16 +1614,12 @@ export function CashDrawerPanel({
             </p>
 
             <div className="mt-4 space-y-2">
-              {(summary?.movements ?? [])
-                .length === 0 ? (
+              {(summary?.movements ?? []).length === 0 ? (
                 <p className="py-5 text-center text-sm text-[#9aa3b8]">
-                  Sin entradas ni salidas
-                  registradas
+                  Sin entradas ni salidas registradas
                 </p>
               ) : (
-                (
-                  summary?.movements ?? []
-                ).map((movement) => (
+                (summary?.movements ?? []).map((movement) => (
                   <div
                     key={movement.id}
                     className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[#f0f0f0] bg-[#fafafa] px-3 py-2.5"
@@ -1619,51 +1629,37 @@ export function CashDrawerPanel({
                         <span
                           className={cn(
                             "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                            movement.type ===
-                              "deposit"
+                            movement.type === "deposit"
                               ? "bg-[#e8f5e9] text-[#2e7d32]"
                               : "bg-[#ffebee] text-[#c62828]",
                           )}
                         >
-                          {movement.type ===
-                          "deposit"
-                            ? "Entrada"
-                            : "Salida"}
+                          {movement.type === "deposit" ? "Entrada" : "Salida"}
                         </span>
+
                         <p className="break-words text-sm font-medium leading-5 text-[#1a1d26]">
                           {movement.reason ||
-                            (movement.type ===
-                            "deposit"
+                            (movement.type === "deposit"
                               ? "Entrada de efectivo"
                               : "Salida de efectivo")}
                         </p>
                       </div>
 
                       <p className="mt-0.5 text-xs text-[#9aa3b8]">
-                        {dateTime(
-                          movement.created_at,
-                        )}
+                        {dateTime(movement.created_at)}
                       </p>
                     </div>
 
                     <span
                       className={cn(
                         "shrink-0 whitespace-nowrap text-sm font-bold sm:text-base",
-                        movement.type ===
-                          "deposit"
+                        movement.type === "deposit"
                           ? "text-[#30a46c]"
                           : "text-[#e5484d]",
                       )}
                     >
-                      {movement.type ===
-                      "deposit"
-                        ? "+"
-                        : "−"}{" "}
-                      {money(
-                        Number(
-                          movement.amount,
-                        ),
-                      )}
+                      {movement.type === "deposit" ? "+" : "−"}{" "}
+                      {money(Number(movement.amount))}
                     </span>
                   </div>
                 ))
@@ -1671,8 +1667,7 @@ export function CashDrawerPanel({
             </div>
           </div>
         </>
-      )}
-
+      ) : null}
       {/* ======================================================
        * CERRAR CAJA
        * ====================================================== */}
@@ -1693,49 +1688,86 @@ export function CashDrawerPanel({
               <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-[#4169e2]">
                 Información del corte
               </p>
+
               <div className="space-y-1.5">
                 <div className="flex justify-between gap-2">
                   <span className="text-[#757575]">Fondo inicial</span>
-                  <span className="font-semibold">{money(Number(session?.opening_amount ?? 0))}</span>
+                  <span className="font-semibold">
+                    {money(Number(activeSession?.opening_amount ?? 0))}
+                  </span>
                 </div>
+
                 <div className="flex justify-between gap-2">
                   <span className="text-[#757575]">Ventas en efectivo</span>
-                  <span className="font-semibold text-[#2e7d32]">+{money(summary?.cashSales ?? 0)}</span>
+                  <span className="font-semibold text-[#2e7d32]">
+                    +{money(summary?.cashSales ?? 0)}
+                  </span>
                 </div>
+
                 <div className="flex justify-between gap-2">
-                  <span className="text-[#757575]">Mixto (parte efectivo)</span>
-                  <span className="font-semibold text-[#2e7d32]">+{money(summary?.mixedCash ?? 0)}</span>
+                  <span className="text-[#757575]">
+                    Mixto (parte efectivo)
+                  </span>
+                  <span className="font-semibold text-[#2e7d32]">
+                    +{money(summary?.mixedCash ?? 0)}
+                  </span>
                 </div>
+
                 <div className="flex justify-between gap-2">
                   <span className="text-[#757575]">Entradas a caja</span>
-                  <span className="font-semibold text-[#2e7d32]">+{money(summary?.deposits ?? 0)}</span>
+                  <span className="font-semibold text-[#2e7d32]">
+                    +{money(summary?.deposits ?? 0)}
+                  </span>
                 </div>
+
                 <div className="flex justify-between gap-2">
                   <span className="text-[#757575]">Salidas de caja</span>
-                  <span className="font-semibold text-[#c62828]">−{money(summary?.withdrawals ?? 0)}</span>
+                  <span className="font-semibold text-[#c62828]">
+                    −{money(summary?.withdrawals ?? 0)}
+                  </span>
                 </div>
+
                 <div className="flex justify-between gap-2">
                   <span className="text-[#757575]">Gastos en efectivo</span>
-                  <span className="font-semibold text-[#c62828]">−{money(summary?.cashExpenses ?? 0)}</span>
+                  <span className="font-semibold text-[#c62828]">
+                    −{money(summary?.cashExpenses ?? 0)}
+                  </span>
                 </div>
+
                 <div className="mt-1 flex justify-between gap-2 border-t border-[#e8ecf4] pt-2">
-                  <span className="font-bold text-[#1a1d26]">Debe haber</span>
-                  <span className="text-base font-black text-[#4169e2]">{money(expected)}</span>
+                  <span className="font-bold text-[#1a1d26]">
+                    Debe haber
+                  </span>
+                  <span className="text-base font-black text-[#4169e2]">
+                    {money(expected)}
+                  </span>
                 </div>
               </div>
+
               {(summary?.movements?.length ?? 0) > 0 && (
                 <div className="mt-3 border-t border-[#e8ecf4] pt-2">
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
                     Movimientos ({summary?.movements?.length})
                   </p>
+
                   <ul className="max-h-28 space-y-1 overflow-y-auto text-[11px]">
                     {(summary?.movements ?? []).map((m) => (
-                      <li key={m.id} className="flex justify-between gap-2">
+                      <li
+                        key={m.id}
+                        className="flex justify-between gap-2"
+                      >
                         <span className="min-w-0 truncate text-[#616161]">
                           {m.type === "deposit" ? "Entrada" : "Salida"}
                           {m.reason ? ` · ${m.reason}` : ""}
                         </span>
-                        <span className={m.type === "deposit" ? "shrink-0 font-semibold text-[#2e7d32]" : "shrink-0 font-semibold text-[#c62828]"}>
+
+                        <span
+                          className={
+                            m.type === "deposit"
+                              ? "shrink-0 font-semibold text-[#2e7d32]"
+                              : "shrink-0 font-semibold text-[#c62828]"
+                          }
+                        >
                           {m.type === "deposit" ? "+" : "−"}
                           {money(Number(m.amount))}
                         </span>
@@ -1759,6 +1791,7 @@ export function CashDrawerPanel({
                   Number.isFinite(qty) && qty > 0
                     ? qty * d.value
                     : 0;
+
                 return (
                   <label
                     key={key}
@@ -1767,6 +1800,7 @@ export function CashDrawerPanel({
                     <span className="text-[11px] font-semibold text-[#4169e2]">
                       {d.label}
                     </span>
+
                     <Input
                       type="number"
                       min="0"
@@ -1778,14 +1812,14 @@ export function CashDrawerPanel({
                           ...denomCounts,
                           [key]: e.target.value,
                         };
+
                         setDenomCounts(next);
-                        setCounted(
-                          String(sumDenominations(next)),
-                        );
+                        setCounted(String(sumDenominations(next)));
                       }}
                       placeholder="0"
                       className="mt-1 h-9 rounded-lg text-sm"
                     />
+
                     <span className="mt-0.5 block text-[10px] text-[#9aa3b8]">
                       = {money(sub)}
                     </span>
@@ -1798,6 +1832,7 @@ export function CashDrawerPanel({
               <p className="text-[11px] font-bold uppercase tracking-wide text-[#4169e2]">
                 Total contado (cuadre)
               </p>
+
               <p className="text-2xl font-black text-[#4169e2]">
                 {money(countedNum)}
               </p>
@@ -1808,12 +1843,11 @@ export function CashDrawerPanel({
               min="0"
               step="0.01"
               value={counted}
-              onChange={(event) =>
-                setCounted(event.target.value)
-              }
+              onChange={(event) => setCounted(event.target.value)}
               placeholder="Ajuste manual del total (opcional)"
               className="h-11 rounded-xl text-sm"
             />
+
             <p className="text-[11px] text-[#9aa3b8]">
               Este monto es el efectivo real del corte y se guarda al cerrar.
             </p>
@@ -1844,9 +1878,9 @@ export function CashDrawerPanel({
                       ? `Sobran ${money(countedNum - expected)}`
                       : `Faltan ${money(expected - countedNum)}`}
                 </p>
+
                 <p className="mt-1 text-[11px] font-normal text-muted-foreground">
-                  Esperado {money(expected)} · Contado{" "}
-                  {money(countedNum)}
+                  Esperado {money(expected)} · Contado {money(countedNum)}
                 </p>
               </div>
             )}
@@ -1856,12 +1890,8 @@ export function CashDrawerPanel({
             <Button
               variant="outline"
               className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
-              onClick={() =>
-                setCloseOpen(false)
-              }
-              disabled={
-                closeBox.isPending
-              }
+              onClick={() => setCloseOpen(false)}
+              disabled={closeBox.isPending}
             >
               Cancelar
             </Button>
@@ -1869,23 +1899,17 @@ export function CashDrawerPanel({
             <Button
               variant="outline"
               className="min-h-11 w-full touch-manipulation rounded-xl sm:w-auto"
-              disabled={
-                closeBox.isPending || counted === ""
-              }
+              disabled={closeBox.isPending || counted === ""}
               onClick={() =>
                 closeBox.mutate({ printAfter: false })
               }
             >
-              {closeBox.isPending
-                ? "Cerrando…"
-                : "Cerrar corte"}
+              {closeBox.isPending ? "Cerrando…" : "Cerrar corte"}
             </Button>
 
             <Button
               className="min-h-11 w-full touch-manipulation rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
-              disabled={
-                closeBox.isPending || counted === ""
-              }
+              disabled={closeBox.isPending || counted === ""}
               onClick={() =>
                 closeBox.mutate({ printAfter: true })
               }
@@ -1898,7 +1922,6 @@ export function CashDrawerPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
 
       {/* ======================================================
        * VISTA PREVIA TICKET 58mm
@@ -1917,6 +1940,7 @@ export function CashDrawerPanel({
             <DialogTitle className="text-base">
               {ticketTitle}
             </DialogTitle>
+
             <p className="text-xs text-muted-foreground">
               Vista previa ticket 58 mm · revisa y luego imprime
             </p>
@@ -1947,25 +1971,34 @@ export function CashDrawerPanel({
             >
               Cerrar
             </Button>
+
             <Button
               type="button"
               className="min-h-11 w-full rounded-xl bg-[#4169e2] hover:bg-[#4169e2]/90 sm:w-auto"
               onClick={async () => {
                 if (!ticketHtml) return;
+
                 try {
                   if (ticketOpts) {
                     await printTextBluetooth(buildCorteText(ticketOpts));
-                    toast.success("Corte enviado a la impresora Bluetooth");
+                    toast.success(
+                      "Corte enviado a la impresora Bluetooth",
+                    );
                     return;
                   }
                 } catch (e) {
-                  console.warn("Bluetooth falló, usando impresión del sistema:", e);
+                  console.warn(
+                    "Bluetooth falló, usando impresión del sistema:",
+                    e,
+                  );
+
                   toast.message(
                     e instanceof Error
                       ? e.message
                       : "Bluetooth no disponible, abriendo impresión del sistema",
                   );
                 }
+
                 printTicket58Html(ticketHtml);
               }}
             >
@@ -1975,7 +2008,6 @@ export function CashDrawerPanel({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
       {/* ======================================================
        * ARQUEOS ANTERIORES
        * ====================================================== */}
@@ -1992,124 +2024,111 @@ export function CashDrawerPanel({
           <>
             {/* CELULAR / TABLET */}
             <div className="mt-3 grid gap-2.5 lg:hidden">
-              {closedSessions.map(
-                (closedSession) => {
-                  const diff = Number(
-                    closedSession.difference ??
-                      0,
-                  );
+              {closedSessions.map((closedSession) => {
+                const diff = Number(
+                  closedSession.difference ?? 0,
+                );
 
-                  return (
-                    <div
-                      key={
-                        closedSession.id
-                      }
-                      className="rounded-xl border border-[#eef1f8] bg-[#fafbfe] p-3.5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
-                            Cerrada
-                          </p>
+                return (
+                  <div
+                    key={closedSession.id}
+                    className="rounded-xl border border-[#eef1f8] bg-[#fafbfe] p-3.5"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                          Cerrada
+                        </p>
 
-                          <p className="mt-1 break-words text-sm font-semibold text-[#1a1d26]">
-                            {closedSession.closed_at
-                              ? dateTime(
-                                  closedSession.closed_at,
-                                )
-                              : "—"}
-                          </p>
-                        </div>
+                        <p className="mt-1 break-words text-sm font-semibold text-[#1a1d26]">
+                          {closedSession.closed_at
+                            ? dateTime(closedSession.closed_at)
+                            : "—"}
+                        </p>
+                      </div>
 
-                        <Badge
-                          variant="outline"
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "shrink-0 rounded-full text-xs",
+                          Math.abs(diff) < 0.01
+                            ? "border-[#30a46c]/40 bg-[#e8f7ee] text-[#30a46c]"
+                            : "border-[#e5484d]/40 bg-[#fff0f0] text-[#e5484d]",
+                        )}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {money(diff)}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#eef1f8] pt-3">
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                          Esperado
+                        </p>
+
+                        <p className="mt-1 break-words text-sm font-bold text-[#1a1d26]">
+                          {money(
+                            Number(
+                              closedSession.expected_amount ?? 0,
+                            ),
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                          Contado
+                        </p>
+
+                        <p className="mt-1 break-words text-sm font-bold text-[#1a1d26]">
+                          {money(
+                            Number(
+                              closedSession.closing_amount ?? 0,
+                            ),
+                          )}
+                        </p>
+                      </div>
+
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
+                          Diferencia
+                        </p>
+
+                        <p
                           className={cn(
-                            "shrink-0 rounded-full text-xs",
-                            Math.abs(
-                              diff,
-                            ) < 0.01
-                              ? "border-[#30a46c]/40 bg-[#e8f7ee] text-[#30a46c]"
-                              : "border-[#e5484d]/40 bg-[#fff0f0] text-[#e5484d]",
+                            "mt-1 break-words text-sm font-bold",
+                            Math.abs(diff) < 0.01
+                              ? "text-[#30a46c]"
+                              : "text-[#e5484d]",
                           )}
                         >
-                          {diff > 0
-                            ? "+"
-                            : ""}
+                          {diff > 0 ? "+" : ""}
                           {money(diff)}
-                        </Badge>
+                        </p>
                       </div>
-
-                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#eef1f8] pt-3">
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
-                            Esperado
-                          </p>
-                          <p className="mt-1 break-words text-sm font-bold text-[#1a1d26]">
-                            {money(
-                              Number(
-                                closedSession.expected_amount ??
-                                  0,
-                              ),
-                            )}
-                          </p>
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
-                            Contado
-                          </p>
-                          <p className="mt-1 break-words text-sm font-bold text-[#1a1d26]">
-                            {money(
-                              Number(
-                                closedSession.closing_amount ??
-                                  0,
-                              ),
-                            )}
-                          </p>
-                        </div>
-
-                        <div className="min-w-0">
-                          <p className="text-[10px] font-bold uppercase tracking-wide text-[#9aa3b8]">
-                            Diferencia
-                          </p>
-
-                          <p
-                            className={cn(
-                              "mt-1 break-words text-sm font-bold",
-                              Math.abs(
-                                diff,
-                              ) < 0.01
-                                ? "text-[#30a46c]"
-                                : "text-[#e5484d]",
-                            )}
-                          >
-                            {diff > 0
-                              ? "+"
-                              : ""}
-                            {money(diff)}
-                          </p>
-                        </div>
-                      </div>
-
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mt-3 min-h-10 w-full rounded-xl"
-                        disabled={printingClosedId === closedSession.id}
-                        onClick={() => {
-                          void printClosedSession(closedSession);
-                        }}
-                      >
-                        <Printer className="mr-2 h-4 w-4" />
-                        {printingClosedId === closedSession.id
-                          ? "Preparando…"
-                          : "Imprimir corte"}
-                      </Button>
                     </div>
-                  );
-                },
-              )}
+
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3 min-h-10 w-full rounded-xl"
+                      disabled={
+                        printingClosedId === closedSession.id
+                      }
+                      onClick={() => {
+                        void printClosedSession(closedSession);
+                      }}
+                    >
+                      <Printer className="mr-2 h-4 w-4" />
+                      {printingClosedId === closedSession.id
+                        ? "Preparando…"
+                        : "Imprimir corte"}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
 
             {/* DESKTOP / PANTALLAS GRANDES */}
@@ -2140,86 +2159,72 @@ export function CashDrawerPanel({
                 </thead>
 
                 <tbody className="divide-y divide-[#eef1f8]">
-                  {closedSessions.map(
-                    (closedSession) => {
-                      const diff = Number(
-                        closedSession.difference ??
-                          0,
-                      );
+                  {closedSessions.map((closedSession) => {
+                    const diff = Number(
+                      closedSession.difference ?? 0,
+                    );
 
-                      return (
-                        <tr
-                          key={
-                            closedSession.id
-                          }
-                        >
-                          <td className="py-2 pr-4 text-[#4b5563]">
-                            {closedSession.closed_at
-                              ? dateTime(
-                                  closedSession.closed_at,
-                                )
-                              : "—"}
-                          </td>
+                    return (
+                      <tr key={closedSession.id}>
+                        <td className="py-2 pr-4 text-[#4b5563]">
+                          {closedSession.closed_at
+                            ? dateTime(closedSession.closed_at)
+                            : "—"}
+                        </td>
 
-                          <td className="py-2 pr-4">
-                            {money(
-                              Number(
-                                closedSession.expected_amount ??
-                                  0,
-                              ),
+                        <td className="py-2 pr-4">
+                          {money(
+                            Number(
+                              closedSession.expected_amount ?? 0,
+                            ),
+                          )}
+                        </td>
+
+                        <td className="py-2 pr-4">
+                          {money(
+                            Number(
+                              closedSession.closing_amount ?? 0,
+                            ),
+                          )}
+                        </td>
+
+                        <td className="py-2 pr-4">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-xs",
+                              Math.abs(diff) < 0.01
+                                ? "border-[#30a46c]/40 text-[#30a46c]"
+                                : "border-[#e5484d]/40 text-[#e5484d]",
                             )}
-                          </td>
+                          >
+                            {diff > 0 ? "+" : ""}
+                            {money(diff)}
+                          </Badge>
+                        </td>
 
-                          <td className="py-2 pr-4">
-                            {money(
-                              Number(
-                                closedSession.closing_amount ??
-                                  0,
-                              ),
-                            )}
-                          </td>
-
-                          <td className="py-2 pr-4">
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "text-xs",
-                                Math.abs(
-                                  diff,
-                                ) < 0.01
-                                  ? "border-[#30a46c]/40 text-[#30a46c]"
-                                  : "border-[#e5484d]/40 text-[#e5484d]",
-                              )}
-                            >
-                              {diff > 0
-                                ? "+"
-                                : ""}
-                              {money(diff)}
-                            </Badge>
-                          </td>
-                          <td className="py-2">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-lg px-2 text-xs"
-                              disabled={
-                                printingClosedId === closedSession.id
-                              }
-                              onClick={() => {
-                                void printClosedSession(closedSession);
-                              }}
-                            >
-                              <Printer className="mr-1 h-3.5 w-3.5" />
-                              {printingClosedId === closedSession.id
-                                ? "…"
-                                : "Imprimir"}
-                            </Button>
-                          </td>
-                        </tr>
-                      );
-                    },
-                  )}
+                        <td className="py-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-lg px-2 text-xs"
+                            disabled={
+                              printingClosedId === closedSession.id
+                            }
+                            onClick={() => {
+                              void printClosedSession(closedSession);
+                            }}
+                          >
+                            <Printer className="mr-1 h-3.5 w-3.5" />
+                            {printingClosedId === closedSession.id
+                              ? "…"
+                              : "Imprimir"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -2257,7 +2262,13 @@ function Stat({
     </div>
   );
 }
+
 function getSupabaseErrorMessage(error: unknown): string {
-  const e = error as { message?: string; details?: string; hint?: string } | null;
+  const e = error as {
+    message?: string;
+    details?: string;
+    hint?: string;
+  } | null;
+
   return e?.details || e?.hint || "";
 }
