@@ -142,6 +142,45 @@ type CountItemRow = {
     | null;
 };
 
+type GroupedProduct = {
+  productId: string;
+  variants: InventoryRow[];
+};
+
+function groupInventoryByProduct(
+  rows: InventoryRow[],
+): GroupedProduct[] {
+  const groups = new Map<string, GroupedProduct>();
+
+  for (const row of rows) {
+    const existing = groups.get(row.product_id);
+
+    if (existing) {
+      existing.variants.push(row);
+    } else {
+      groups.set(row.product_id, {
+        productId: row.product_id,
+        variants: [row],
+      });
+    }
+  }
+
+  return Array.from(groups.values());
+}
+
+function getVariantLabel(row: InventoryRow): string {
+  if (row.sku) return row.sku;
+  if (row.barcode) return row.barcode;
+
+  const parts = row.product_name.split(" — ");
+
+  if (parts.length > 1) {
+    return parts[parts.length - 1].trim();
+  }
+
+  return "Base";
+}
+
 const MOVEMENT_LABELS: Record<string, string> = {
   sale: "Venta",
   return: "Devolución",
@@ -201,6 +240,9 @@ function InventarioPage() {
 
   const [physicalCount, setPhysicalCount] =
     useState<Record<string, string>>({});
+
+  const [selectedVariantByProduct, setSelectedVariantByProduct] =
+    useState<Record<string, string | null>>({});
 
   const invalidateInventory = () => {
     void queryClient.invalidateQueries({
@@ -387,6 +429,11 @@ function InventarioPage() {
       return true;
     });
   }, [inventory, stockStatusFilter]);
+
+  const groupedInventory = useMemo(
+    () => groupInventoryByProduct(filteredInventory),
+    [filteredInventory],
+  );
 
   const filteredCountItems = useMemo(() => {
     const query = countFilter.trim().toLowerCase();
@@ -958,185 +1005,212 @@ function InventarioPage() {
                 ))}
               </div>
 
-              {/* CELULAR / TABLET */}
-              <div className="grid gap-2 lg:hidden">
+              {/* CELULAR / TABLET — PRODUCTOS AGRUPADOS */}
+              <div className="grid gap-3 lg:hidden">
                 {inventoryLoading && (
-                  <div className="rounded-2xl border border-[#e0e0e0] bg-white p-10 text-center shadow-sm">
-                    <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-[#1a73e8] border-t-transparent" />
-                    <p className="text-sm font-medium text-[#757575]">
-                      Cargando inventario…
+                  <div className="rounded-xl border bg-white p-8 text-center">
+                    <div className="mx-auto mb-3 h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+                    <p className="text-sm text-gray-500">
+                      Cargando inventario...
                     </p>
                   </div>
                 )}
 
-                {!inventoryLoading &&
-                  inventory.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-12 text-center shadow-sm">
-                      <Package className="mx-auto mb-3 h-10 w-10 text-[#c5cad3]" />
-                      <p className="text-sm font-bold text-[#212121]">
-                        Sin existencias registradas
-                      </p>
-                      <p className="mt-1 text-xs text-[#9aa3b8]">
-                        Los productos aparecerán aquí al registrar stock
-                      </p>
-                    </div>
-                  )}
+                {!inventoryLoading && inventory.length === 0 && (
+                  <div className="rounded-xl border border-dashed bg-white p-8 text-center">
+                    <Package className="mx-auto mb-2 h-9 w-9 text-gray-400" />
+                    <p className="font-semibold">Sin productos registrados</p>
+                  </div>
+                )}
 
                 {!inventoryLoading &&
                   filteredInventory.length === 0 &&
                   inventory.length > 0 && (
-                    <div className="rounded-2xl border border-dashed border-[#e0e0e0] bg-white px-5 py-10 text-center shadow-sm">
-                      <p className="text-sm font-medium text-[#757575]">
-                        Ningún ítem en este filtro
-                      </p>
+                    <div className="rounded-xl border border-dashed bg-white p-8 text-center">
+                      No hay productos en este filtro.
                     </div>
                   )}
 
                 {!inventoryLoading &&
-                  filteredInventory.map(
-                    (row: InventoryRow) => {
-                      const available =
-                        Number(
-                          row.available_stock,
-                        );
+                  groupedInventory.map((group) => {
+                    const hasSelection = Object.prototype.hasOwnProperty.call(
+                      selectedVariantByProduct,
+                      group.productId,
+                    );
 
-                      const minimum =
-                        Number(
-                          row.min_stock,
-                        );
+                    const selectedId = hasSelection
+                      ? selectedVariantByProduct[group.productId]
+                      : group.variants[0]?.variant_id ?? null;
 
-                      const isOut =
-                        available <= 0;
+                    const selectedRow =
+                      group.variants.find(
+                        (variant) =>
+                          (variant.variant_id ?? null) === selectedId,
+                      ) ?? group.variants[0];
 
-                      const isLow =
-                        available <= minimum;
+                    if (!selectedRow) return null;
 
-                      return (
-                        <div
-                          key={`${row.product_id}-${row.variant_id ?? "base"}`}
-                          className={cn(
-                            "rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm",
-                            isOut && "border-[#f8bbd0]",
-                            isLow &&
-                              !isOut &&
-                              "border-[#ffe0b2] bg-[#fffaf5]",
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#f5f5f5] text-xl">
-                              {row.emoji ?? "📦"}
-                            </div>
+                    const available = Number(selectedRow.available_stock);
+                    const minimum = Number(selectedRow.min_stock);
+                    const stock = Number(selectedRow.stock);
+                    const reserved = Number(selectedRow.reserved_stock);
+                    const price = Number(selectedRow.price ?? 0);
+                    const cost = Number(selectedRow.cost ?? 0);
 
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0 flex-1">
-                                  <p className="break-words text-sm font-bold leading-5 text-[#212121]">
-                                    {row.product_name}
-                                  </p>
-                                  <button
-                                    type="button"
-                                    className="mt-0.5 text-[11px] font-semibold text-[#1a73e8]"
-                                    onClick={() =>
-                                      navigate({ to: "/productos" })
-                                    }
-                                  >
-                                    Ver en Artículos
-                                  </button>
-                                </div>
+                    const isOut = available <= 0;
+                    const isLow = available > 0 && available <= minimum;
 
-                                {isOut ? (
-                                  <span className="shrink-0 rounded-full bg-[#fce4ec] px-2 py-0.5 text-[10px] font-bold text-[#c2185b]">
-                                    Agotado
-                                  </span>
-                                ) : isLow ? (
-                                  <span className="shrink-0 rounded-full bg-[#fff3e0] px-2 py-0.5 text-[10px] font-bold text-[#e65100]">
-                                    Bajo
-                                  </span>
-                                ) : (
-                                  <span className="shrink-0 rounded-full bg-[#e8f5e9] px-2 py-0.5 text-[10px] font-bold text-[#2e7d32]">
-                                    OK
-                                  </span>
-                                )}
-                              </div>
+                    const margin =
+                      price > 0
+                        ? ((price - cost) / price) * 100
+                        : 0;
 
-                              <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                                {row.sku && (
-                                  <span className="text-[11px] font-medium text-[#9e9e9e]">
-                                    SKU {row.sku}
-                                  </span>
-                                )}
+                    return (
+                      <div
+                        key={group.productId}
+                        className={cn(
+                          "rounded-xl border bg-white p-3 shadow-sm",
+                          isOut && "border-pink-300",
+                          isLow && "border-orange-300 bg-orange-50/40",
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-2xl">
+                            {selectedRow.emoji ?? "📦"}
+                          </div>
 
-                                {row.variant_id && (
-                                  <Badge
-                                    variant="outline"
-                                    className="rounded-full border-[#e0e0e0] text-[10px]"
-                                  >
-                                    Variante
-                                  </Badge>
-                                )}
-                              </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="break-words text-sm font-bold text-gray-900">
+                              {selectedRow.product_name}
+                            </p>
 
-                              <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-[#757575]">
-                                {row.barcode ? (
-                                  <p className="col-span-2 font-mono text-[#616161]">
-                                    Cód. {row.barcode}
-                                  </p>
-                                ) : null}
-                                <p>
-                                  Precio{" "}
-                                  <span className="font-semibold text-[#1a73e8]">
-                                    ${Number(row.price ?? 0).toFixed(2)}
-                                  </span>
-                                </p>
-                                <p>
-                                  Costo{" "}
-                                  <span className="font-semibold text-[#212121]">
-                                    ${Number(row.cost ?? 0).toFixed(2)}
-                                  </span>
-                                </p>
-                              </div>
-
-                              <p className="mt-1 text-xs text-[#757575]">
-                                {available} en existencia
-                                {minimum > 0
-                                  ? ` · mín. ${minimum}`
-                                  : ""}
+                            {selectedRow.sku && (
+                              <p className="mt-1 text-xs text-gray-500">
+                                SKU: {selectedRow.sku}
                               </p>
+                            )}
+
+                            {selectedRow.barcode && (
+                              <p className="font-mono text-xs text-gray-500">
+                                Código: {selectedRow.barcode}
+                              </p>
+                            )}
+
+                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                              <span className="text-sm font-bold text-blue-700">
+                                ${price.toFixed(2)}
+                              </span>
+
+                              <span className="text-xs text-gray-500">
+                                Margen {margin.toFixed(1)}%
+                              </span>
                             </div>
                           </div>
 
-                          <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#f0f0f0] pt-3">
-                            <InventoryMetric
-                              label="Stock"
-                              value={String(
-                                Number(
-                                  row.stock,
-                                ),
-                              )}
-                            />
-
-                            <InventoryMetric
-                              label="Reservado"
-                              value={String(
-                                Number(
-                                  row.reserved_stock,
-                                ),
-                              )}
-                            />
-
-                            <InventoryMetric
-                              label="Disponible"
-                              value={String(
-                                available,
-                              )}
-                              emphasis
-                              danger={isLow}
-                            />
+                          <div className="shrink-0">
+                            {isOut ? (
+                              <span className="rounded-full bg-pink-100 px-2 py-1 text-[10px] font-bold text-pink-700">
+                                Agotado
+                              </span>
+                            ) : isLow ? (
+                              <span className="rounded-full bg-orange-100 px-2 py-1 text-[10px] font-bold text-orange-700">
+                                Bajo
+                              </span>
+                            ) : (
+                              <span className="rounded-full bg-green-100 px-2 py-1 text-[10px] font-bold text-green-700">
+                                OK
+                              </span>
+                            )}
                           </div>
                         </div>
-                      );
-                    },
-                  )}
+
+                        {group.variants.length > 1 && (
+                          <div className="mt-3 border-t border-gray-100 pt-3">
+                            <p className="mb-2 text-xs font-semibold text-gray-500">
+                              VARIANTES ({group.variants.length})
+                            </p>
+
+                            <div className="flex flex-wrap gap-2">
+                              {group.variants.map((variant) => {
+                                const isSelected =
+                                  (variant.variant_id ?? null) ===
+                                  (selectedRow.variant_id ?? null);
+
+                                return (
+                                  <button
+                                    key={`${variant.product_id}-${variant.variant_id ?? "base"}`}
+                                    type="button"
+                                    onClick={() =>
+                                      setSelectedVariantByProduct((previous) => ({
+                                        ...previous,
+                                        [group.productId]:
+                                          variant.variant_id ?? null,
+                                      }))
+                                    }
+                                    className={cn(
+                                      "max-w-full rounded-lg border px-3 py-2 text-xs font-semibold transition-colors",
+                                      isSelected
+                                        ? "border-blue-600 bg-blue-600 text-white"
+                                        : "border-gray-200 bg-gray-100 text-gray-700",
+                                    )}
+                                  >
+                                    {getVariantLabel(variant)}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="mt-3 grid grid-cols-3 gap-2 border-t border-gray-100 pt-3">
+                          <div className="rounded-lg bg-gray-50 p-2 text-center">
+                            <p className="text-[10px] text-gray-500">Stock</p>
+                            <p className="text-base font-bold text-gray-900">
+                              {stock}
+                            </p>
+                          </div>
+
+                          <div className="rounded-lg bg-gray-50 p-2 text-center">
+                            <p className="text-[10px] text-gray-500">Reservado</p>
+                            <p className="text-base font-bold text-gray-900">
+                              {reserved}
+                            </p>
+                          </div>
+
+                          <div
+                            className={cn(
+                              "rounded-lg p-2 text-center",
+                              isLow || isOut
+                                ? "bg-orange-50"
+                                : "bg-green-50",
+                            )}
+                          >
+                            <p className="text-[10px] text-gray-500">
+                              Disponible
+                            </p>
+                            <p
+                              className={cn(
+                                "text-base font-bold",
+                                isLow || isOut
+                                  ? "text-orange-700"
+                                  : "text-green-700",
+                              )}
+                            >
+                              {available}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => navigate({ to: "/productos" })}
+                          className="mt-3 w-full rounded-lg border border-gray-200 py-2 text-xs font-semibold text-blue-700"
+                        >
+                          Ver en Artículos
+                        </button>
+                      </div>
+                    );
+                  })}
               </div>
 
               {/* PANTALLA GRANDE */}
