@@ -717,6 +717,10 @@ export function ProductosPage({
   const [adjustQty, setAdjustQty] = useState("");
   const [adjustDir, setAdjustDir] = useState<"in" | "out">("in");
   const [adjustNotes, setAdjustNotes] = useState("");
+  /** Variante seleccionada por producto en la lista (null = base / primera). */
+  const [selectedVariantByProduct, setSelectedVariantByProduct] = useState<
+    Record<string, string | null>
+  >({});
   const [movementFilter, setMovementFilter] = useState<
     "all" | "sales" | "in" | "out" | "adjust"
   >("all");
@@ -1284,9 +1288,11 @@ export function ProductosPage({
         queryKey: ["product-variants", form.id ?? "none"],
       });
       void qc.invalidateQueries({ queryKey: ["operational-inventory"] });
+      void qc.invalidateQueries({ queryKey: ["shared-inventory"] });
       void qc.invalidateQueries({ queryKey: ["products"] });
       void qc.invalidateQueries({ queryKey: ["product-variants-purchases"] });
       void qc.invalidateQueries({ queryKey: ["pos-products"] });
+      void qc.invalidateQueries({ queryKey: ["pos-products-shared"] });
     },
 
     onError: (e: Error) => {
@@ -1658,33 +1664,76 @@ export function ProductosPage({
           {!loading && filtered.length > 0 && (
             <div className="grid grid-cols-1 gap-2 pb-20 sm:grid-cols-2 xl:grid-cols-3">
               {filtered.map((p) => {
-                const stock = stockMap.get(p.id);
-                const available = Number(stock?.availableStock ?? 0);
-                const reserved = Number(stock?.reservedStock ?? 0);
-                const hasVariants = stock?.hasVariants ?? false;
-                const agotado = available <= 0;
+                // Todas las filas de inventario de este producto (base + variantes)
+                const allRows = sharedInventory.filter(
+                  (row) => row.product_id === p.id,
+                );
+                const variantRows = allRows.filter((row) => row.variant_id);
+                const baseRow = allRows.find((row) => !row.variant_id) ?? null;
+                const hasVariants = variantRows.length > 0;
 
+                // Chips: variantes si existen; si no, SKU/barcode del producto
+                const chipRows =
+                  variantRows.length > 0
+                    ? variantRows
+                    : baseRow
+                      ? [baseRow]
+                      : [];
+
+                const hasSelection = Object.prototype.hasOwnProperty.call(
+                  selectedVariantByProduct,
+                  p.id,
+                );
+                const selectedId = hasSelection
+                  ? selectedVariantByProduct[p.id]
+                  : (chipRows[0]?.variant_id ?? null);
+
+                const selectedRow =
+                  chipRows.find(
+                    (row) => (row.variant_id ?? null) === selectedId,
+                  ) ??
+                  chipRows[0] ??
+                  null;
+
+                // Precio / costo / stock según variante seleccionada (o producto base)
+                const displayPrice = selectedRow
+                  ? Number(selectedRow.price ?? p.price ?? 0)
+                  : Number(p.price ?? 0);
+                const displayCost = selectedRow
+                  ? Number(selectedRow.cost ?? p.cost ?? 0)
+                  : Number(p.cost ?? 0);
+                const available = selectedRow
+                  ? Number(selectedRow.available_stock ?? 0)
+                  : Number(stockMap.get(p.id)?.availableStock ?? 0);
+                const reserved = selectedRow
+                  ? Number(selectedRow.reserved_stock ?? 0)
+                  : Number(stockMap.get(p.id)?.reservedStock ?? 0);
+                const minimum = selectedRow
+                  ? Number(selectedRow.min_stock ?? 0)
+                  : 0;
+
+                const agotado = available <= 0;
                 const lowStock =
-                  !agotado &&
-                  Boolean(stock) &&
-                  sharedInventory.some(
-                    (row) =>
-                      row.product_id === p.id &&
-                      row.stock_status === "low_stock",
-                  );
+                  !agotado && minimum > 0 && available <= minimum;
 
                 const marginPct =
-                  Number(p.cost) > 0 && Number(p.price) > 0
+                  displayPrice > 0
                     ? (
-                        ((Number(p.price) - Number(p.cost)) /
-                          Number(p.price)) *
+                        ((displayPrice - displayCost) / displayPrice) *
                         100
                       ).toFixed(3)
                     : null;
 
-                const variantRows = sharedInventory.filter(
-                  (row) => row.product_id === p.id && row.variant_id,
-                );
+                const getChipLabel = (row: (typeof chipRows)[number]) => {
+                  if (row.sku) return row.sku;
+                  if (row.barcode) return row.barcode;
+                  if (row.product_name?.includes("—")) {
+                    return (
+                      row.product_name.split("—").pop()?.trim() || "Var"
+                    );
+                  }
+                  return p.sku || p.barcode || "Base";
+                };
 
                 return (
                   <div
@@ -1713,7 +1762,11 @@ export function ProductosPage({
                     <div className="flex gap-3">
                       {/* Imagen */}
                       <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-[#f5f5f5] sm:h-[72px] sm:w-[72px]">
-                        <ProductImage src={p.image_url} emoji={p.emoji} name={p.name} />
+                        <ProductImage
+                          src={selectedRow?.image_url || p.image_url}
+                          emoji={p.emoji}
+                          name={p.name}
+                        />
                       </div>
 
                       {/* Contenido principal */}
@@ -1724,7 +1777,7 @@ export function ProductosPage({
                               {p.name}
                             </p>
                             <p className="mt-0.5 text-[15px] font-bold text-[#1a73e8]">
-                              {money(Number(p.price))}
+                              {money(displayPrice)}
                               {marginPct !== null && (
                                 <span className="ml-1 text-[12px] font-semibold text-[#34a853]">
                                   ({marginPct}%)
@@ -1755,52 +1808,58 @@ export function ProductosPage({
                           </div>
                         </div>
 
-                        {/* Chips estilo captura: separador + pastillas de variante/SKU */}
-                        <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-[#eeeeee] pt-2.5">
-                          {variantRows.length > 0
-                            ? variantRows.slice(0, 8).map((row, index) => {
-                                const fromName =
-                                  row.product_name &&
-                                  row.product_name.includes("—")
-                                    ? row.product_name
-                                        .split("—")
-                                        .pop()
-                                        ?.trim()
-                                    : null;
-                                const label =
-                                  fromName ||
-                                  row.sku ||
-                                  row.barcode ||
-                                  "Var";
-                                return (
-                                  <span
-                                    key={row.id}
-                                    className={
-                                      index === 0
-                                        ? "inline-flex max-w-[160px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white"
-                                        : "inline-flex max-w-[160px] truncate rounded-md bg-[#f1f3f4] px-2.5 py-1 text-[11px] font-semibold text-[#5f6368]"
-                                    }
-                                    title={
-                                      [row.sku, row.barcode, row.product_name]
-                                        .filter(Boolean)
-                                        .join(" · ")
-                                    }
-                                  >
-                                    {label}
+                        {/* Chips seleccionables de variante / SKU (estilo captura) */}
+                        {(chipRows.length > 0 || p.sku || p.barcode) && (
+                          <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-[#eeeeee] pt-2.5">
+                            {chipRows.length > 0
+                              ? chipRows.slice(0, 12).map((row) => {
+                                  const isSelected =
+                                    (row.variant_id ?? null) === selectedId;
+                                  const label = getChipLabel(row);
+                                  return (
+                                    <button
+                                      key={
+                                        row.id ??
+                                        `${row.product_id}-${row.variant_id ?? "base"}`
+                                      }
+                                      type="button"
+                                      title={
+                                        [row.sku, row.barcode, row.product_name]
+                                          .filter(Boolean)
+                                          .join(" · ") || label
+                                      }
+                                      className={cn(
+                                        "inline-flex max-w-[160px] truncate rounded-md px-2.5 py-1 text-[11px] font-semibold transition-colors",
+                                        isSelected
+                                          ? "bg-[#1a73e8] text-white"
+                                          : "bg-[#f1f3f4] text-[#5f6368] hover:bg-[#e8eaed]",
+                                      )}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedVariantByProduct(
+                                          (prev) => ({
+                                            ...prev,
+                                            [p.id]: row.variant_id ?? null,
+                                          }),
+                                        );
+                                      }}
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })
+                              : (p.sku || p.barcode) && (
+                                  <span className="inline-flex max-w-[160px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white">
+                                    {p.sku || p.barcode}
                                   </span>
-                                );
-                              })
-                            : (p.sku || p.barcode) && (
-                                <span className="inline-flex max-w-[160px] truncate rounded-md bg-[#1a73e8] px-2.5 py-1 text-[11px] font-semibold text-white">
-                                  {p.sku || p.barcode}
-                                </span>
-                              )}
-                          {hasVariants && variantRows.length > 8 && (
-                            <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
-                              +{variantRows.length - 8}
-                            </span>
-                          )}
-                        </div>
+                                )}
+                            {hasVariants && chipRows.length > 12 && (
+                              <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
+                                +{chipRows.length - 12}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
