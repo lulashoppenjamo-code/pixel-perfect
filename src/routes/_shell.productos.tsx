@@ -1747,24 +1747,54 @@ export function ProductosPage({
                   (row) => row.product_id === p.id,
                 );
                 const variantRows = allRows.filter((row) => row.variant_id);
-                const baseRow = allRows.find((row) => !row.variant_id) ?? null;
+                const baseFromInv =
+                  allRows.find((row) => !row.variant_id) ?? null;
                 const hasVariants = variantRows.length > 0;
 
-                // Chips: variantes si existen; si no, SKU/barcode del producto
-                const chipRows =
-                  variantRows.length > 0
-                    ? variantRows
-                    : baseRow
-                      ? [baseRow]
-                      : [];
+                // Siempre hay producto principal + variantes (sin límite).
+                const baseRow: (typeof allRows)[number] | {
+                  id: string;
+                  product_id: string;
+                  variant_id: null;
+                  product_name: string;
+                  sku: string | null;
+                  barcode: string | null;
+                  price: number;
+                  cost: number;
+                  image_url: string | null;
+                  available_stock: number;
+                  reserved_stock: number;
+                  min_stock: number;
+                  stock: number;
+                } =
+                  baseFromInv ?? {
+                    id: `base-${p.id}`,
+                    product_id: p.id,
+                    variant_id: null,
+                    product_name: p.name,
+                    sku: p.sku,
+                    barcode: p.barcode,
+                    price: Number(p.price ?? 0),
+                    cost: Number(p.cost ?? 0),
+                    image_url: p.image_url,
+                    // Sin fila base: no sumar stock de variantes
+                    available_stock: 0,
+                    reserved_stock: 0,
+                    min_stock: 0,
+                    stock: 0,
+                  };
+
+                // Principal primero, luego todas las variantes (1…100+)
+                const chipRows = [baseRow, ...variantRows];
 
                 const hasSelection = Object.prototype.hasOwnProperty.call(
                   selectedVariantByProduct,
                   p.id,
                 );
+                // Por defecto: producto principal (variant_id null)
                 const selectedId = hasSelection
                   ? selectedVariantByProduct[p.id]
-                  : (chipRows[0]?.variant_id ?? null);
+                  : null;
 
                 const selectedRow =
                   chipRows.find(
@@ -1803,14 +1833,18 @@ export function ProductosPage({
                     : null;
 
                 const getChipLabel = (row: (typeof chipRows)[number]) => {
-                  // Preferir nombre de variante: "Producto — NombreVariante"
+                  // Producto principal
+                  if (row.variant_id == null) {
+                    return "Principal";
+                  }
+                  // Nombre de variante: "Producto — NombreVariante"
                   if (row.product_name?.includes("—")) {
                     const name = row.product_name.split("—").pop()?.trim();
                     if (name) return name;
                   }
                   if (row.sku) return row.sku;
                   if (row.barcode) return row.barcode;
-                  return p.sku || p.barcode || "Base";
+                  return "Variante";
                 };
 
                 const selectedLabel = selectedRow
@@ -1900,7 +1934,7 @@ export function ProductosPage({
                         {(chipRows.length > 0 || p.sku || p.barcode) && (
                           <div className="mt-2.5 flex flex-wrap gap-1.5 border-t border-[#eeeeee] pt-2.5">
                             {chipRows.length > 0
-                              ? chipRows.slice(0, 12).map((row) => {
+                              ? chipRows.map((row) => {
                                   const isSelected =
                                     (row.variant_id ?? null) === selectedId;
                                   const label = getChipLabel(row);
@@ -1941,107 +1975,9 @@ export function ProductosPage({
                                     {p.sku || p.barcode}
                                   </span>
                                 )}
-                            {hasVariants && chipRows.length > 12 && (
-                              <span className="inline-flex items-center rounded-md bg-[#e8e8e8] px-2 py-1 text-[11px] font-medium text-[#616161]">
-                                +{chipRows.length - 12}
-                              </span>
-                            )}
                           </div>
                         )}
 
-                        {/* Ajuste rápido de existencias sobre la variante seleccionada */}
-                        {canAdjustStock && (
-                          <div
-                            className="mt-2.5 flex flex-wrap items-center gap-2 border-t border-[#eeeeee] pt-2.5"
-                            onClick={(e) => e.stopPropagation()}
-                            onKeyDown={(e) => e.stopPropagation()}
-                          >
-                            <span className="text-[11px] font-medium text-[#9e9e9e]">
-                              {selectedLabel
-                                ? `Stock · ${selectedLabel}`
-                                : "Stock"}
-                            </span>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 min-w-[2.25rem] items-center justify-center rounded-lg bg-[#e53935] px-2 text-sm font-bold text-white active:scale-95 disabled:opacity-50"
-                              disabled={adjustProductStock.isPending || available <= 0}
-                              title="Salida −1"
-                              onClick={() =>
-                                adjustProductStock.mutate({
-                                  productId: p.id,
-                                  variantId: selectedId,
-                                  quantity: 1,
-                                  direction: "out",
-                                  notes: selectedLabel
-                                    ? `Salida rápida · ${selectedLabel}`
-                                    : "Salida rápida",
-                                })
-                              }
-                            >
-                              −
-                            </button>
-                            <span className="min-w-[2rem] text-center text-sm font-bold text-[#212121]">
-                              {available}
-                            </span>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 min-w-[2.25rem] items-center justify-center rounded-lg bg-[#34a853] px-2 text-sm font-bold text-white active:scale-95 disabled:opacity-50"
-                              disabled={adjustProductStock.isPending}
-                              title="Entrada +1"
-                              onClick={() =>
-                                adjustProductStock.mutate({
-                                  productId: p.id,
-                                  variantId: selectedId,
-                                  quantity: 1,
-                                  direction: "in",
-                                  notes: selectedLabel
-                                    ? `Entrada rápida · ${selectedLabel}`
-                                    : "Entrada rápida",
-                                })
-                              }
-                            >
-                              +
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 items-center justify-center rounded-lg bg-[#e8f5e9] px-2.5 text-[11px] font-semibold text-[#2e7d32] active:scale-95 disabled:opacity-50"
-                              disabled={adjustProductStock.isPending}
-                              title="Entrada +5"
-                              onClick={() =>
-                                adjustProductStock.mutate({
-                                  productId: p.id,
-                                  variantId: selectedId,
-                                  quantity: 5,
-                                  direction: "in",
-                                  notes: selectedLabel
-                                    ? `Entrada +5 · ${selectedLabel}`
-                                    : "Entrada +5",
-                                })
-                              }
-                            >
-                              +5
-                            </button>
-                            <button
-                              type="button"
-                              className="inline-flex h-8 items-center justify-center rounded-lg bg-[#e8f5e9] px-2.5 text-[11px] font-semibold text-[#2e7d32] active:scale-95 disabled:opacity-50"
-                              disabled={adjustProductStock.isPending}
-                              title="Entrada +10"
-                              onClick={() =>
-                                adjustProductStock.mutate({
-                                  productId: p.id,
-                                  variantId: selectedId,
-                                  quantity: 10,
-                                  direction: "in",
-                                  notes: selectedLabel
-                                    ? `Entrada +10 · ${selectedLabel}`
-                                    : "Entrada +10",
-                                })
-                              }
-                            >
-                              +10
-                            </button>
-                          </div>
-                        )}
                       </div>
                     </div>
                   </div>
@@ -2605,7 +2541,10 @@ export function ProductosPage({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
-                      Variantes
+                      Variantes del producto
+                      {productVariants.length > 0
+                        ? ` (${productVariants.length})`
+                        : ""}
                     </p>
                     {(canEditProduct || isManager) && (
                       <Button
@@ -2619,6 +2558,9 @@ export function ProductosPage({
                             cost: form.cost,
                             image_url: form.image_url || "",
                           });
+                          setAdjustQty("");
+                          setAdjustNotes("");
+                          setAdjustDir("in");
                           setVariantModalOpen(true);
                         }}
                       >
@@ -2628,14 +2570,20 @@ export function ProductosPage({
                     )}
                   </div>
 
+                  <p className="text-[11px] leading-4 text-[#9e9e9e]">
+                    El artículo principal es este producto. Las variantes (1 a
+                    100+) se agregan aquí; cada una tiene su propio stock,
+                    precio y código.
+                  </p>
+
                   {!form.id ? null : variantsLoading ? (
                     <p className="text-sm text-muted-foreground">
                       Cargando variantes…
                     </p>
                   ) : productVariants.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-[#e0e0e0] px-3 py-6 text-center text-sm text-[#757575]">
-                      Sin variantes. Agrega todas las que necesites (sin
-                      límite).
+                      Sin variantes todavía. Agrega todas las que necesites
+                      (sin límite).
                     </div>
                   ) : (
                     <div className="space-y-2">
@@ -2681,6 +2629,10 @@ export function ProductosPage({
                                     : form.cost,
                                 image_url: v.image_url ?? form.image_url ?? "",
                               });
+                              setAdjustVariantId(v.id);
+                              setAdjustQty("");
+                              setAdjustNotes("");
+                              setAdjustDir("in");
                               setVariantModalOpen(true);
                             }}
                           >
@@ -3286,23 +3238,130 @@ export function ProductosPage({
               </div>
 
               {variantForm.id && (
-                <div className="rounded-xl border bg-[#fafafa] px-3 py-2">
-                  <p className="text-[10px] uppercase text-[#9e9e9e]">
-                    Existencias disponibles
+                <div className="rounded-xl border border-[#e0e0e0] bg-[#fafafa] p-3 sm:p-4">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                    Existencias de esta variante
                   </p>
-                  <p className="text-lg font-bold text-[#212121]">
-                    {Number(
+                  {(() => {
+                    const available = Number(
                       sharedInventory.find(
                         (row) =>
                           row.product_id === form.id &&
                           row.variant_id === variantForm.id,
                       )?.available_stock ?? 0,
-                    )}
-                  </p>
-                  <p className="text-[10px] text-[#9e9e9e]">
-                    Solo lectura — se ajusta en inventario / compras
-                  </p>
+                    );
+                    return (
+                      <>
+                        <div className="mb-3 flex items-end justify-between gap-2">
+                          <div>
+                            <p className="text-[10px] uppercase text-[#9e9e9e]">
+                              Disponible
+                            </p>
+                            <p className="text-2xl font-bold text-[#212121]">
+                              {available}
+                            </p>
+                          </div>
+                          {variantForm.name ? (
+                            <p className="max-w-[55%] truncate text-right text-xs text-[#757575]">
+                              {variantForm.name}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        {canAdjustStock ? (
+                          <div className="space-y-2 rounded-xl border border-[#e0e0e0] bg-white p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#9aa3b8]">
+                              Ajustar existencias
+                            </p>
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => setAdjustDir("in")}
+                                className={
+                                  adjustDir === "in"
+                                    ? "rounded-full bg-[#34a853] px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-full bg-[#eeeeee] px-3 py-1.5 text-xs font-medium text-[#616161]"
+                                }
+                              >
+                                Entrada +
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setAdjustDir("out")}
+                                className={
+                                  adjustDir === "out"
+                                    ? "rounded-full bg-[#e53935] px-3 py-1.5 text-xs font-semibold text-white"
+                                    : "rounded-full bg-[#eeeeee] px-3 py-1.5 text-xs font-medium text-[#616161]"
+                                }
+                              >
+                                Salida −
+                              </button>
+                            </div>
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                inputMode="numeric"
+                                placeholder="Cantidad a sumar o restar"
+                                value={adjustQty}
+                                onChange={(e) => setAdjustQty(e.target.value)}
+                                className="h-11 rounded-xl"
+                              />
+                              <Button
+                                type="button"
+                                className="h-11 rounded-xl bg-[#1a73e8] hover:bg-[#1557b0]"
+                                disabled={
+                                  adjustProductStock.isPending ||
+                                  !adjustQty ||
+                                  Number(adjustQty) <= 0
+                                }
+                                onClick={() =>
+                                  adjustProductStock.mutate({
+                                    productId: form.id,
+                                    variantId: variantForm.id,
+                                    quantity: Number(adjustQty),
+                                    direction: adjustDir,
+                                    notes:
+                                      adjustNotes.trim() ||
+                                      (adjustDir === "in"
+                                        ? `Entrada · ${variantForm.name || "variante"}`
+                                        : `Salida · ${variantForm.name || "variante"}`),
+                                  })
+                                }
+                              >
+                                {adjustProductStock.isPending
+                                  ? "Aplicando…"
+                                  : "Aplicar"}
+                              </Button>
+                            </div>
+                            <Input
+                              placeholder="Nota (opcional)"
+                              value={adjustNotes}
+                              onChange={(e) => setAdjustNotes(e.target.value)}
+                              className="h-10 rounded-xl"
+                            />
+                            <p className="text-[10px] text-[#9e9e9e]">
+                              Escribe la cantidad y elige Entrada o Salida. Se
+                              aplica solo a esta variante.
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-[11px] text-[#9e9e9e]">
+                            Solo un administrador puede ajustar existencias.
+                          </p>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
+              )}
+
+              {!variantForm.id && (
+                <p className="rounded-xl border border-dashed border-[#e0e0e0] bg-white px-3 py-2 text-xs text-[#757575]">
+                  Guarda la variante primero; después podrás cargar existencias
+                  desde aquí.
+                </p>
               )}
 
               <Button
