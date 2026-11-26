@@ -10,6 +10,8 @@
  *
  * BLOQUE 2 — Visual POS (tarjetas, Agotado, grilla, Ir al mostrador).
  * Solo clases/presentación. Sin tocar create_sale ni inventario.
+ *
+ * VARIANTES EN MOSAICO: cada variante aparece como artículo independiente.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -130,6 +132,8 @@ type ProductRow = {
   category_id: string | null;
   stock: number;
   has_variants: boolean;
+  variant_id?: string | null;
+  variant_name?: string;
 };
 
 type VariantRow = {
@@ -169,77 +173,56 @@ export function POSPanel({
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
 
-  const [method, setMethod] =
-    useState<PaymentMethod>("cash");
+  const [method, setMethod] = useState<PaymentMethod>("cash");
 
-  const [customerId, setCustomerId] =
-    useState<string>("none");
+  const [customerId, setCustomerId] = useState<string>("none");
 
-  const [cashReceived, setCashReceived] =
-    useState("");
+  const [cashReceived, setCashReceived] = useState("");
 
-  const [mixedCash, setMixedCash] =
-    useState("");
+  const [mixedCash, setMixedCash] = useState("");
 
-  const [mixedCard, setMixedCard] =
-    useState("");
+  const [mixedCard, setMixedCard] = useState("");
 
-  const [ticketDiscount, setTicketDiscount] =
-    useState("0");
+  const [ticketDiscount, setTicketDiscount] = useState("0");
 
-  const [saleNotes, setSaleNotes] =
-    useState("");
+  const [saleNotes, setSaleNotes] = useState("");
 
-  const [categoryFilter, setCategoryFilter] =
-    useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
-  const [historyOpen, setHistoryOpen] =
-    useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
-  const [parkedSalesOpen, setParkedSalesOpen] =
-    useState(false);
+  const [parkedSalesOpen, setParkedSalesOpen] = useState(false);
 
-  const [parkedSaleLabel, setParkedSaleLabel] =
-    useState("");
+  const [parkedSaleLabel, setParkedSaleLabel] = useState("");
 
-  const [scannerOpen, setScannerOpen] =
-    useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
-  const [scannerError, setScannerError] =
-    useState<string | null>(null);
+  const [scannerError, setScannerError] = useState<string | null>(null);
 
   const [variantPickerProduct, setVariantPickerProduct] =
     useState<ProductRow | null>(null);
 
-  const [editLineKey, setEditLineKey] =
-    useState<string | null>(null);
+  const [editLineKey, setEditLineKey] = useState<string | null>(null);
 
-  const [editPrice, setEditPrice] =
-    useState("");
+  const [editPrice, setEditPrice] = useState("");
 
-  const [editQty, setEditQty] =
-    useState("1");
+  const [editQty, setEditQty] = useState("1");
 
-  const [editDiscount, setEditDiscount] =
-    useState("");
+  const [editDiscount, setEditDiscount] = useState("");
 
-  const [editOfferOn, setEditOfferOn] =
-    useState(false);
+  const [editOfferOn, setEditOfferOn] = useState(false);
 
-  const [editOfferMode, setEditOfferMode] =
-    useState<"discount" | "free">("discount");
+  const [editOfferMode, setEditOfferMode] = useState<"discount" | "free">(
+    "discount",
+  );
 
-  const [editPct, setEditPct] =
-    useState("");
+  const [editPct, setEditPct] = useState("");
 
-  const [editAmount, setEditAmount] =
-    useState("");
+  const [editAmount, setEditAmount] = useState("");
 
-  const [ticket, setTicket] =
-    useState<TicketData | null>(null);
+  const [ticket, setTicket] = useState<TicketData | null>(null);
 
-  const [ticketOpen, setTicketOpen] =
-    useState(false);
+  const [ticketOpen, setTicketOpen] = useState(false);
 
   /* Flujo visual móvil estilo Zobaze:
      shop = productos | cart = carrito | pay = métodos | cash = efectivo | success = venta ok */
@@ -270,7 +253,7 @@ export function POSPanel({
   useEffect(() => {
     const update = () => {
       if (typeof window === "undefined") return;
-      const next = window.innerWidth < SIDE_BY_SIDE_MIN; 
+      const next = window.innerWidth < SIDE_BY_SIDE_MIN;
       const prev = sequentialRef.current;
       if (prev === next) return;
       sequentialRef.current = next;
@@ -313,40 +296,26 @@ export function POSPanel({
       const { data, error } = await supabase
         .from("settings")
         .select("key, value, branch_id")
-        .or(
-          `branch_id.eq.${branchId},branch_id.is.null`,
-        );
+        .or(`branch_id.eq.${branchId},branch_id.is.null`);
 
       if (error) throw error;
 
       const rows = data ?? [];
 
-      const parse = (
-        key: string,
-        fallback: unknown,
-      ) => {
+      const parse = (key: string, fallback: unknown) => {
         const branchRow = rows.find(
-          (row) =>
-            row.key === key &&
-            row.branch_id === branchId,
+          (row) => row.key === key && row.branch_id === branchId,
         );
         const globalRow = rows.find(
-          (row) =>
-            row.key === key &&
-            row.branch_id == null,
+          (row) => row.key === key && row.branch_id == null,
         );
-        const raw =
-          branchRow?.value ??
-          globalRow?.value;
+        const raw = branchRow?.value ?? globalRow?.value;
 
         if (raw === null || raw === undefined) {
           return fallback;
         }
 
-        if (
-          typeof raw === "boolean" ||
-          typeof raw === "number"
-        ) {
+        if (typeof raw === "boolean" || typeof raw === "number") {
           return raw;
         }
 
@@ -362,46 +331,21 @@ export function POSPanel({
       };
 
       return {
-        requireOpenCash: Boolean(
-          parse(
-            "require_open_cash_session",
-            true,
-          ),
-        ),
+        requireOpenCash: Boolean(parse("require_open_cash_session", true)),
 
-        blockWithoutStock: Boolean(
-          parse(
-            "block_sale_without_stock",
-            true,
-          ),
-        ),
+        blockWithoutStock: Boolean(parse("block_sale_without_stock", true)),
 
-        companyName: String(
-          parse(
-            "company_name",
-            "Lula Shop",
-          ),
-        ),
+        companyName: String(parse("company_name", "Lula Shop")),
 
-        companyAddress: String(
-          parse("company_address", ""),
-        ),
+        companyAddress: String(parse("company_address", "")),
 
-        companyPhone: String(
-          parse("company_phone", ""),
-        ),
+        companyPhone: String(parse("company_phone", "")),
 
         ticketFooter: String(
-          parse(
-            "ticket_footer",
-            "¡Gracias por su compra!",
-          ),
+          parse("ticket_footer", "¡Gracias por su compra!"),
         ),
 
-        ticketLayout: parse(
-          "ticket_layout",
-          null,
-        ),
+        ticketLayout: parse("ticket_layout", null),
       };
     },
   });
@@ -419,9 +363,7 @@ export function POSPanel({
     queryFn: async () => {
       const { data, error } = await supabase
         .from("cash_sessions")
-        .select(
-          "id, opened_at, opening_amount",
-        )
+        .select("id, opened_at, opening_amount")
         .eq("branch_id", branchId!)
         .eq("status", "open")
         .maybeSingle();
@@ -438,10 +380,7 @@ export function POSPanel({
    * =========================================================
    */
 
-  const {
-    data: products = [],
-    isLoading: loadingProducts,
-  } = useQuery({
+  const { data: products = [], isLoading: loadingProducts } = useQuery({
     queryKey: ["pos-products-shared"],
 
     enabled: !!branchId,
@@ -449,10 +388,7 @@ export function POSPanel({
     refetchOnWindowFocus: true,
 
     queryFn: async () => {
-      const [
-        productsResult,
-        sharedInventory,
-      ] = await Promise.all([
+      const [productsResult, sharedInventory] = await Promise.all([
         supabase
           .from("products")
           .select(
@@ -470,66 +406,37 @@ export function POSPanel({
 
       const rows = sharedInventory ?? [];
 
-      const simpleStock = new Map<
-        string,
-        number
-      >();
+      const simpleStock = new Map<string, number>();
 
-      const variantStockByProduct = new Map<
-        string,
-        number
-      >();
+      const variantStockByProduct = new Map<string, number>();
 
       for (const row of rows) {
-        const available = Number(
-          row.available_stock ?? 0,
-        );
+        const available = Number(row.available_stock ?? 0);
 
         if (!row.variant_id) {
-          simpleStock.set(
-            row.product_id,
-            available,
-          );
+          simpleStock.set(row.product_id, available);
           continue;
         }
 
         variantStockByProduct.set(
           row.product_id,
-          (variantStockByProduct.get(
-            row.product_id,
-          ) ?? 0) + available,
+          (variantStockByProduct.get(row.product_id) ?? 0) + available,
         );
       }
 
-      return (
-        productsResult.data ?? []
-      ).map((product) => {
-        const hasVariants = Boolean(
-          product.has_variants,
-        );
+      return (productsResult.data ?? []).map((product) => {
+        const hasVariants = Boolean(product.has_variants);
 
         return {
           ...product,
 
-          price: Number(
-            product.price ?? 0,
-          ),
+          price: Number(product.price ?? 0),
 
-          tax_rate: Number(
-            product.tax_rate ?? 0,
-          ),
+          tax_rate: Number(product.tax_rate ?? 0),
 
           stock: hasVariants
-            ? (
-                variantStockByProduct.get(
-                  product.id,
-                ) ?? 0
-              )
-            : (
-                simpleStock.get(
-                  product.id,
-                ) ?? 0
-              ),
+            ? (variantStockByProduct.get(product.id) ?? 0)
+            : (simpleStock.get(product.id) ?? 0),
 
           has_variants: hasVariants,
         };
@@ -543,36 +450,20 @@ export function POSPanel({
    * =========================================================
    */
 
-  const {
-    data: variantStockMap = new Map<
-      string,
-      number
-    >(),
-  } = useQuery({
-    queryKey: [
-      "pos-variant-inventory-shared",
-    ],
+  const { data: variantStockMap = new Map<string, number>() } = useQuery({
+    queryKey: ["pos-variant-inventory-shared"],
 
     enabled: !!branchId,
 
     queryFn: async () => {
-      const rows =
-        await getSharedInventory();
+      const rows = await getSharedInventory();
 
-      const map = new Map<
-        string,
-        number
-      >();
+      const map = new Map<string, number>();
 
       for (const row of rows) {
         if (!row.variant_id) continue;
 
-        map.set(
-          row.variant_id,
-          Number(
-            row.available_stock ?? 0,
-          ),
-        );
+        map.set(row.variant_id, Number(row.available_stock ?? 0));
       }
 
       return map;
@@ -585,40 +476,28 @@ export function POSPanel({
    * =========================================================
    */
 
-  const {
-    data: allVariants = [],
-  } = useQuery({
+  const { data: allVariants = [] } = useQuery({
     queryKey: ["pos-all-variants"],
     staleTime: 30_000,
 
     queryFn: async () => {
-      const { data, error } =
-        await supabase
-          .from("product_variants")
-          .select(
-            "id, product_id, name, sku, price_override",
-          )
-          .order("name");
+      const { data, error } = await supabase
+        .from("product_variants")
+        .select("id, product_id, name, sku, price_override")
+        .order("name");
 
       if (error) throw error;
 
-      return (
-        data ?? []
-      ) as VariantRow[];
+      return (data ?? []) as VariantRow[];
     },
   });
 
   const productVariants = useMemo(
     () =>
       allVariants.filter(
-        (variant) =>
-          variant.product_id ===
-          variantPickerProduct?.id,
+        (variant) => variant.product_id === variantPickerProduct?.id,
       ),
-    [
-      allVariants,
-      variantPickerProduct,
-    ],
+    [allVariants, variantPickerProduct],
   );
 
   /*
@@ -627,18 +506,15 @@ export function POSPanel({
    * =========================================================
    */
 
-  const {
-    data: categories = [],
-  } = useQuery({
+  const { data: categories = [] } = useQuery({
     queryKey: ["pos-categories"],
     staleTime: 60_000,
 
     queryFn: async () => {
-      const { data, error } =
-        await supabase
-          .from("categories")
-          .select("id, name")
-          .order("name");
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name")
+        .order("name");
 
       if (error) throw error;
 
@@ -661,9 +537,7 @@ export function POSPanel({
     barcode?: string | null;
   };
 
-  const {
-    data: customers = [],
-  } = useQuery({
+  const { data: customers = [] } = useQuery({
     queryKey: ["pos-customers"],
 
     queryFn: async () => {
@@ -683,10 +557,12 @@ export function POSPanel({
           .limit(5000);
         if (!extra.error && Array.isArray(extra.data)) {
           const map = new Map<string, string | null>(
-            extra.data.map((r: { id: string; barcode?: string | null }) => [
-              r.id,
-              typeof r.barcode === "string" ? r.barcode : null,
-            ]),
+            extra.data.map(
+              (r: { id: string; barcode?: string | null }) => [
+                r.id,
+                typeof r.barcode === "string" ? r.barcode : null,
+              ],
+            ),
           );
           for (const row of rows) {
             row.barcode = map.get(row.id) ?? null;
@@ -760,126 +636,93 @@ export function POSPanel({
     return true;
   };
 
-
   /*
    * =========================================================
    * HISTORIAL DE VENTAS
    * =========================================================
    */
 
-  const {
-    data: recentSales = [],
-    refetch: refetchHistory,
-  } = useQuery({
-    queryKey: [
-      "pos-recent-sales",
-      branchId,
-    ],
+  const { data: recentSales = [], refetch: refetchHistory } = useQuery({
+    queryKey: ["pos-recent-sales", branchId],
 
-    enabled:
-      !!branchId &&
-      historyOpen,
+    enabled: !!branchId && historyOpen,
 
     queryFn: async () => {
-      const { data, error } =
-        await supabase
-          .from("sales")
-          .select(
-            "id, folio, total, payment_method, status, created_at, customer_id",
-          )
-          .eq(
-            "branch_id",
-            branchId!,
-          )
-          .order(
-            "created_at",
-            {
-              ascending: false,
-            },
-          )
-          .limit(30);
+      const { data, error } = await supabase
+        .from("sales")
+        .select(
+          "id, folio, total, payment_method, status, created_at, customer_id",
+        )
+        .eq("branch_id", branchId!)
+        .order("created_at", { ascending: false })
+        .limit(30);
 
       if (error) throw error;
 
-      return (
-        data ?? []
-      ) as RecentSale[];
+      return (data ?? []) as RecentSale[];
     },
   });
 
   /*
    * =========================================================
-   * FILTRO DE PRODUCTOS
+   * FILTRO DE PRODUCTOS (variantes como artículos individuales)
    * =========================================================
    */
 
   const filtered = useMemo(() => {
-    let list = products;
+    const list: ProductRow[] = [];
 
-    if (
-      categoryFilter !== "all"
-    ) {
-      list = list.filter(
-        (product) =>
-          product.category_id ===
-          categoryFilter,
-      );
+    for (const product of products) {
+      if (
+        categoryFilter !== "all" &&
+        product.category_id !== categoryFilter
+      ) {
+        continue;
+      }
+
+      if (product.has_variants) {
+        const variants = allVariants.filter(
+          (variant) => variant.product_id === product.id,
+        );
+
+        if (variants.length === 0) {
+          list.push(product);
+          continue;
+        }
+
+        for (const variant of variants) {
+          const stock = variantStockMap.get(variant.id) ?? 0;
+
+          list.push({
+            ...product,
+            name: `${product.name} — ${variant.name}`,
+            sku: variant.sku ?? product.sku,
+            price:
+              variant.price_override != null
+                ? Number(variant.price_override)
+                : product.price,
+            stock,
+            has_variants: false,
+            variant_id: variant.id,
+            variant_name: variant.name,
+          });
+        }
+      } else {
+        list.push(product);
+      }
     }
 
-    const q =
-      search
-        .trim()
-        .toLowerCase();
+    const q = search.trim().toLowerCase();
 
-    if (!q) {
-      return list;
-    }
-
-    const matchingVariantProducts =
-      new Set(
-        allVariants
-          .filter(
-            (variant) =>
-              (
-                variant.sku ?? ""
-              )
-                .toLowerCase()
-                .includes(q) ||
-              variant.name
-                .toLowerCase()
-                .includes(q),
-          )
-          .map(
-            (variant) =>
-              variant.product_id,
-          ),
-      );
+    if (!q) return list;
 
     return list.filter(
       (product) =>
-        product.name
-          .toLowerCase()
-          .includes(q) ||
-        (
-          product.sku ?? ""
-        )
-          .toLowerCase()
-          .includes(q) ||
-        (
-          product.barcode ?? ""
-        )
-          .toLowerCase()
-          .includes(q) ||
-        matchingVariantProducts.has(
-          product.id,
-        ),
+        product.name.toLowerCase().includes(q) ||
+        (product.sku ?? "").toLowerCase().includes(q) ||
+        (product.barcode ?? "").toLowerCase().includes(q),
     );
-  }, [
-    products,
-    search,
-    categoryFilter,
-    allVariants,
-  ]);
+  }, [products, search, categoryFilter, allVariants, variantStockMap]);
 
   /*
    * =========================================================
@@ -887,53 +730,24 @@ export function POSPanel({
    * =========================================================
    */
 
-  const linesSubtotal =
-    cart.reduce(
-      (sum, line) =>
-        sum +
-        line.unit_price *
-          line.quantity -
-        line.discount,
-      0,
-    );
-
-  const linesTax =
-    cart.reduce(
-      (sum, line) => {
-        const base =
-          line.unit_price *
-            line.quantity -
-          line.discount;
-
-        return (
-          sum +
-          base *
-            (line.tax_rate || 0)
-        );
-      },
-      0,
-    );
-
-  const disc =
-    Number(ticketDiscount) || 0;
-
-  const total = Math.max(
+  const linesSubtotal = cart.reduce(
+    (sum, line) => sum + line.unit_price * line.quantity - line.discount,
     0,
-    linesSubtotal +
-      linesTax -
-      disc,
   );
 
-  const cashNum =
-    Number(cashReceived) || 0;
+  const linesTax = cart.reduce((sum, line) => {
+    const base = line.unit_price * line.quantity - line.discount;
 
-  const change =
-    method === "cash"
-      ? Math.max(
-          0,
-          cashNum - total,
-        )
-      : 0;
+    return sum + base * (line.tax_rate || 0);
+  }, 0);
+
+  const disc = Number(ticketDiscount) || 0;
+
+  const total = Math.max(0, linesSubtotal + linesTax - disc);
+
+  const cashNum = Number(cashReceived) || 0;
+
+  const change = method === "cash" ? Math.max(0, cashNum - total) : 0;
 
   /*
    * =========================================================
@@ -941,71 +755,78 @@ export function POSPanel({
    * =========================================================
    */
 
-  /** Quita 1 unidad del carrito para este producto (sin variante). */
+  /** Quita 1 unidad del carrito para este artículo (producto simple o variante). */
   const decreaseProduct = (product: ProductRow) => {
     setCart((previous) => {
       const index = previous.findIndex(
-        (line) => line.product_id === product.id && !line.variant_id,
+        (line) =>
+          line.product_id === product.id &&
+          (product.variant_id
+            ? line.variant_id === product.variant_id
+            : !line.variant_id),
       );
+
       if (index < 0) return previous;
+
       const next = [...previous];
       const line = { ...next[index]! };
+
       if (line.quantity <= 1) {
         next.splice(index, 1);
         return next;
       }
+
       line.quantity -= 1;
       next[index] = line;
+
       return next;
     });
   };
 
-  const addProduct = (
-    product: ProductRow,
-  ) => {
-    if (product.has_variants) {
-      setVariantPickerProduct(
-        product,
+  const addProduct = (product: ProductRow) => {
+    if (product.variant_id) {
+      const parent = products.find((item) => item.id === product.id);
+
+      const variant = allVariants.find(
+        (item) => item.id === product.variant_id,
       );
+
+      if (parent && variant) {
+        addVariant(parent, variant);
+
+        if (sequential) {
+          setMobileStep("shop");
+        }
+      }
+
       return;
     }
 
-    if (
-      settings?.blockWithoutStock &&
-      product.stock <= 0
-    ) {
-      toast.error(
-        "Agregue stock o permita ventas sin stock para vender",
-      );
+    if (product.has_variants) {
+      setVariantPickerProduct(product);
+      return;
+    }
+
+    if (settings?.blockWithoutStock && product.stock <= 0) {
+      toast.error("Agregue stock o permita ventas sin stock para vender");
       return;
     }
 
     setCart((previous) => {
-      const index =
-        previous.findIndex(
-          (line) =>
-            line.product_id ===
-              product.id &&
-            !line.variant_id,
-        );
+      const index = previous.findIndex(
+        (line) => line.product_id === product.id && !line.variant_id,
+      );
 
       if (index >= 0) {
-        const next = [
-          ...previous,
-        ];
+        const next = [...previous];
 
-        const line = {
-          ...next[index]!,
-        };
+        const line = { ...next[index]! };
 
         if (
           settings?.blockWithoutStock &&
-          line.quantity + 1 >
-            product.stock
+          line.quantity + 1 > product.stock
         ) {
-          toast.error(
-            "Agregue stock o permita ventas sin stock para vender",
-          );
+          toast.error("Agregue stock o permita ventas sin stock para vender");
 
           return previous;
         }
@@ -1021,38 +842,29 @@ export function POSPanel({
         {
           key: `${product.id}-${Date.now()}`,
 
-          product_id:
-            product.id,
+          product_id: product.id,
 
           variant_id: null,
 
-          name:
-            product.name,
+          name: product.name,
 
-          unit_price:
-            product.price,
+          unit_price: product.price,
 
-          original_price:
-            product.price,
+          original_price: product.price,
 
           quantity: 1,
 
           discount: 0,
 
-          tax_rate:
-            product.tax_rate,
+          tax_rate: product.tax_rate,
 
-          stock:
-            product.stock,
+          stock: product.stock,
 
-          sku:
-            product.sku,
+          sku: product.sku,
 
-          barcode:
-            product.barcode,
+          barcode: product.barcode,
 
-          emoji:
-            product.emoji,
+          emoji: product.emoji,
         },
       ];
     });
@@ -1071,68 +883,42 @@ export function POSPanel({
    * =========================================================
    */
 
-  const addVariant = (
-    product: ProductRow,
-    variant: VariantRow,
-  ) => {
-    const variantStock =
-      variantStockMap.get(
-        variant.id,
-      ) ?? 0;
+  const addVariant = (product: ProductRow, variant: VariantRow) => {
+    const variantStock = variantStockMap.get(variant.id) ?? 0;
 
-    if (
-      settings?.blockWithoutStock &&
-      variantStock <= 0
-    ) {
-      toast.error(
-        "Sin stock disponible para esta variante",
-      );
+    if (settings?.blockWithoutStock && variantStock <= 0) {
+      toast.error("Sin stock disponible para esta variante");
       return;
     }
 
     const unitPrice =
-      variant.price_override !=
-      null
-        ? Number(
-            variant.price_override,
-          )
+      variant.price_override != null
+        ? Number(variant.price_override)
         : product.price;
 
     setCart((previous) => {
-      const index =
-        previous.findIndex(
-          (line) =>
-            line.product_id ===
-              product.id &&
-            line.variant_id ===
-              variant.id,
-        );
+      const index = previous.findIndex(
+        (line) =>
+          line.product_id === product.id && line.variant_id === variant.id,
+      );
 
       if (index >= 0) {
-        const next = [
-          ...previous,
-        ];
+        const next = [...previous];
 
-        const line = {
-          ...next[index]!,
-        };
+        const line = { ...next[index]! };
 
         if (
           settings?.blockWithoutStock &&
-          line.quantity + 1 >
-            variantStock
+          line.quantity + 1 > variantStock
         ) {
-          toast.error(
-            "Agregue stock o permita ventas sin stock para vender",
-          );
+          toast.error("Agregue stock o permita ventas sin stock para vender");
 
           return previous;
         }
 
         line.quantity += 1;
 
-        next[index] =
-          line;
+        next[index] = line;
 
         return next;
       }
@@ -1142,46 +928,34 @@ export function POSPanel({
         {
           key: `${product.id}-${variant.id}-${Date.now()}`,
 
-          product_id:
-            product.id,
+          product_id: product.id,
 
-          variant_id:
-            variant.id,
+          variant_id: variant.id,
 
           name: `${product.name} — ${variant.name}`,
 
-          unit_price:
-            unitPrice,
+          unit_price: unitPrice,
 
-          original_price:
-            unitPrice,
+          original_price: unitPrice,
 
           quantity: 1,
 
           discount: 0,
 
-          tax_rate:
-            product.tax_rate,
+          tax_rate: product.tax_rate,
 
-          stock:
-            variantStock,
+          stock: variantStock,
 
-          sku:
-            variant.sku ??
-            product.sku,
+          sku: variant.sku ?? product.sku,
 
-          barcode:
-            product.barcode,
+          barcode: product.barcode,
 
-          emoji:
-            product.emoji,
+          emoji: product.emoji,
         },
       ];
     });
 
-    setVariantPickerProduct(
-      null,
-    );
+    setVariantPickerProduct(null);
 
     setSearch("");
   };
@@ -1192,56 +966,32 @@ export function POSPanel({
    * =========================================================
    */
 
-  const resolveAndAddByCode = (
-    rawCode: string,
-  ): boolean => {
-    const code =
-      rawCode.trim();
+  const resolveAndAddByCode = (rawCode: string): boolean => {
+    const code = rawCode.trim();
 
     if (!code) {
       return false;
     }
 
-    const variant =
-      allVariants.find(
-        (item) =>
-          item.sku === code,
-      );
+    const variant = allVariants.find((item) => item.sku === code);
 
     if (variant) {
-      const parent =
-        products.find(
-          (product) =>
-            product.id ===
-            variant.product_id,
-        );
+      const parent = products.find(
+        (product) => product.id === variant.product_id,
+      );
 
       if (parent) {
-        addVariant(
-          parent,
-          variant,
-        );
+        addVariant(parent, variant);
 
         return true;
       }
     }
 
-    const byBarcode =
-      products.find(
-        (product) =>
-          product.barcode ===
-          code,
-      );
+    const byBarcode = products.find((product) => product.barcode === code);
 
-    const bySku =
-      products.find(
-        (product) =>
-          product.sku === code,
-      );
+    const bySku = products.find((product) => product.sku === code);
 
-    const target =
-      byBarcode ??
-      bySku;
+    const target = byBarcode ?? bySku;
 
     if (target) {
       addProduct(target);
@@ -1310,32 +1060,23 @@ export function POSPanel({
   const handleSearchKey = (
     event: React.KeyboardEvent<HTMLInputElement>,
   ) => {
-    if (
-      event.key !==
-      "Enter"
-    ) {
+    if (event.key !== "Enter") {
       return;
     }
 
     event.preventDefault();
 
-    const query =
-      search.trim();
+    const query = search.trim();
 
     if (!query) {
       return;
     }
 
-    if (
-      resolveAndAddByCode(
-        query,
-      )
-    ) {
+    if (resolveAndAddByCode(query)) {
       return;
     }
 
-    const target =
-      filtered[0];
+    const target = filtered[0];
 
     if (target) {
       addProduct(target);
@@ -1355,24 +1096,15 @@ export function POSPanel({
 
     setScannerError(null);
 
-    const BarcodeDetectorCtor =
-      (
-        window as unknown as {
-          BarcodeDetector?: new (
-            options?: {
-              formats?: string[];
-            },
-          ) => {
-            detect: (
-              source: HTMLVideoElement,
-            ) => Promise<
-              Array<{
-                rawValue: string;
-              }>
-            >;
-          };
-        }
-      ).BarcodeDetector;
+    const BarcodeDetectorCtor = (
+      window as unknown as {
+        BarcodeDetector?: new (options?: { formats?: string[] }) => {
+          detect: (
+            source: HTMLVideoElement,
+          ) => Promise<Array<{ rawValue: string }>>;
+        };
+      }
+    ).BarcodeDetector;
 
     if (!BarcodeDetectorCtor) {
       setScannerError(
@@ -1384,103 +1116,68 @@ export function POSPanel({
 
     let cancelled = false;
 
-    const detector =
-      new BarcodeDetectorCtor({
-        formats: [
-          "ean_13",
-          "ean_8",
-          "upc_a",
-          "upc_e",
-          "code_128",
-          "code_39",
-          "qr_code",
-        ],
-      });
+    const detector = new BarcodeDetectorCtor({
+      formats: [
+        "ean_13",
+        "ean_8",
+        "upc_a",
+        "upc_e",
+        "code_128",
+        "code_39",
+        "qr_code",
+      ],
+    });
 
     navigator.mediaDevices
       .getUserMedia({
         video: {
-          facingMode:
-            "environment",
+          facingMode: "environment",
         },
       })
       .then((stream) => {
         if (cancelled) {
-          stream
-            .getTracks()
-            .forEach((track) =>
-              track.stop(),
-            );
+          stream.getTracks().forEach((track) => track.stop());
 
           return;
         }
 
-        streamRef.current =
-          stream;
+        streamRef.current = stream;
 
-        if (
-          videoRef.current
-        ) {
-          videoRef.current.srcObject =
-            stream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
 
           void videoRef.current.play();
         }
 
-        const tick =
-          async () => {
-            if (
-              cancelled ||
-              !videoRef.current
-            ) {
-              return;
-            }
+        const tick = async () => {
+          if (cancelled || !videoRef.current) {
+            return;
+          }
 
-            try {
-              const codes =
-                await detector.detect(
-                  videoRef.current,
-                );
+          try {
+            const codes = await detector.detect(videoRef.current);
 
-              if (
-                codes.length >
-                0
-              ) {
-                const code =
-                  codes[0]!
-                    .rawValue;
+            if (codes.length > 0) {
+              const code = codes[0]!.rawValue;
 
-                const found =
-                  resolveAndAddByCode(
-                    code,
-                  );
+              const found = resolveAndAddByCode(code);
 
-                if (found) {
-                  toast.success(
-                    `Escaneado: ${code}`,
-                  );
+              if (found) {
+                toast.success(`Escaneado: ${code}`);
 
-                  setScannerOpen(
-                    false,
-                  );
+                setScannerOpen(false);
 
-                  return;
-                }
+                return;
               }
-            } catch {
-              // Continúa escaneando.
             }
+          } catch {
+            // Continúa escaneando.
+          }
 
-            scanRafRef.current =
-              requestAnimationFrame(
-                tick,
-              );
-          };
+          scanRafRef.current = requestAnimationFrame(tick);
+        };
 
-        scanRafRef.current =
-          requestAnimationFrame(
-            tick,
-          );
+        scanRafRef.current = requestAnimationFrame(tick);
       })
       .catch(() => {
         if (!cancelled) {
@@ -1493,22 +1190,13 @@ export function POSPanel({
     return () => {
       cancelled = true;
 
-      if (
-        scanRafRef.current
-      ) {
-        cancelAnimationFrame(
-          scanRafRef.current,
-        );
+      if (scanRafRef.current) {
+        cancelAnimationFrame(scanRafRef.current);
       }
 
-      streamRef.current
-        ?.getTracks()
-        .forEach((track) =>
-          track.stop(),
-        );
+      streamRef.current?.getTracks().forEach((track) => track.stop());
 
-      streamRef.current =
-        null;
+      streamRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scannerOpen]);
@@ -1519,124 +1207,77 @@ export function POSPanel({
    * =========================================================
    */
 
-  const updateQty = (
-    key: string,
-    delta: number,
-  ) => {
-    setCart((previous) =>
-      previous
-        .map((line) => {
-          if (
-            line.key !== key
-          ) {
-            return line;
-          }
+  const updateQty = (key: string, delta: number) => {
+    setCart(
+      (previous) =>
+        previous
+          .map((line) => {
+            if (line.key !== key) {
+              return line;
+            }
 
-          const nextQty =
-            Math.round(
-              (
-                line.quantity +
-                delta
-              ) * 1000,
-            ) / 1000;
+            const nextQty =
+              Math.round((line.quantity + delta) * 1000) / 1000;
 
-          if (
-            nextQty <= 0
-          ) {
-            return null;
-          }
+            if (nextQty <= 0) {
+              return null;
+            }
 
-          if (
-            settings?.blockWithoutStock &&
-            nextQty >
-              line.stock
-          ) {
-            toast.error(
-              "Agregue stock o permita ventas sin stock para vender",
-            );
+            if (settings?.blockWithoutStock && nextQty > line.stock) {
+              toast.error(
+                "Agregue stock o permita ventas sin stock para vender",
+              );
 
-            return line;
-          }
+              return line;
+            }
 
-          return {
-            ...line,
-            quantity:
-              nextQty,
-          };
-        })
-        .filter(
-          Boolean,
-        ) as CartLine[],
+            return {
+              ...line,
+              quantity: nextQty,
+            };
+          })
+          .filter(Boolean) as CartLine[],
     );
   };
 
-  const setQtyDirect = (
-    key: string,
-    value: string,
-  ) => {
-    const quantity =
-      Number(value);
+  const setQtyDirect = (key: string, value: string) => {
+    const quantity = Number(value);
 
-    if (
-      Number.isNaN(
-        quantity,
-      ) ||
-      quantity < 0
-    ) {
+    if (Number.isNaN(quantity) || quantity < 0) {
       return;
     }
 
-    setCart((previous) =>
-      previous
-        .map((line) => {
-          if (
-            line.key !== key
-          ) {
-            return line;
-          }
+    setCart(
+      (previous) =>
+        previous
+          .map((line) => {
+            if (line.key !== key) {
+              return line;
+            }
 
-          if (
-            quantity === 0
-          ) {
-            return null;
-          }
+            if (quantity === 0) {
+              return null;
+            }
 
-          if (
-            settings?.blockWithoutStock &&
-            quantity >
-              line.stock
-          ) {
-            toast.error(
-              "Agregue stock o permita ventas sin stock para vender",
-            );
+            if (settings?.blockWithoutStock && quantity > line.stock) {
+              toast.error(
+                "Agregue stock o permita ventas sin stock para vender",
+              );
 
-            return line;
-          }
+              return line;
+            }
 
-          return {
-            ...line,
-            quantity:
-              Math.round(
-                quantity *
-                  1000,
-              ) / 1000,
-          };
-        })
-        .filter(
-          Boolean,
-        ) as CartLine[],
+            return {
+              ...line,
+              quantity: Math.round(quantity * 1000) / 1000,
+            };
+          })
+          .filter(Boolean) as CartLine[],
     );
   };
 
-  const removeLine = (
-    key: string,
-  ) => {
-    setCart((previous) =>
-      previous.filter(
-        (line) =>
-          line.key !== key,
-      ),
-    );
+  const removeLine = (key: string) => {
+    setCart((previous) => previous.filter((line) => line.key !== key));
   };
 
   /*
@@ -1645,9 +1286,7 @@ export function POSPanel({
    * =========================================================
    */
 
-  const openEditLine = (
-    line: CartLine,
-  ) => {
+  const openEditLine = (line: CartLine) => {
     setEditLineKey(line.key);
     setEditPrice(String(line.unit_price));
     setEditQty(String(line.quantity));
@@ -1672,8 +1311,9 @@ export function POSPanel({
         setEditPct("");
         setEditAmount(
           String(
-            Math.round((Number(line.discount) / Number(line.quantity)) * 100) /
-              100,
+            Math.round(
+              (Number(line.discount) / Number(line.quantity)) * 100,
+            ) / 100,
           ),
         );
       }
@@ -1709,13 +1349,8 @@ export function POSPanel({
           return line;
         }
 
-        if (
-          settings?.blockWithoutStock &&
-          quantity > line.stock
-        ) {
-          toast.error(
-            "Agregue stock o permita ventas sin stock para vender",
-          );
+        if (settings?.blockWithoutStock && quantity > line.stock) {
+          toast.error("Agregue stock o permita ventas sin stock para vender");
           return line;
         }
 
@@ -1737,10 +1372,7 @@ export function POSPanel({
           }
         }
 
-        discount = Math.min(
-          Math.max(0, discount),
-          nextPrice * quantity,
-        );
+        discount = Math.min(Math.max(0, discount), nextPrice * quantity);
 
         return {
           ...line,
@@ -1801,36 +1433,20 @@ export function POSPanel({
         branch_id: branchId,
         created_by: user.id,
         label,
-        customer_id:
-          customerId === "none"
-            ? null
-            : customerId,
+        customer_id: customerId === "none" ? null : customerId,
         payment_method: method,
-        ticket_discount:
-          Number(ticketDiscount) || 0,
-        cash_received:
-          cashReceived.trim()
-            ? Number(cashReceived)
-            : null,
-        mixed_cash:
-          mixedCash.trim()
-            ? Number(mixedCash)
-            : null,
-        mixed_card:
-          mixedCard.trim()
-            ? Number(mixedCard)
-            : null,
-        notes:
-          saleNotes.trim() || null,
+        ticket_discount: Number(ticketDiscount) || 0,
+        cash_received: cashReceived.trim() ? Number(cashReceived) : null,
+        mixed_cash: mixedCash.trim() ? Number(mixedCash) : null,
+        mixed_card: mixedCard.trim() ? Number(mixedCard) : null,
+        notes: saleNotes.trim() || null,
         cart: cart.map((line) => ({
           key: line.key,
           product_id: line.product_id,
           variant_id: line.variant_id,
           name: line.name,
           unit_price: Number(line.unit_price),
-          original_price: Number(
-            line.original_price,
-          ),
+          original_price: Number(line.original_price),
           quantity: Number(line.quantity),
           discount: Number(line.discount),
           tax_rate: Number(line.tax_rate),
@@ -1853,20 +1469,12 @@ export function POSPanel({
       setMobileStep("shop");
 
       await qc.invalidateQueries({
-        queryKey: [
-          "pos-parked-sales",
-          branchId,
-        ],
+        queryKey: ["pos-parked-sales", branchId],
       });
 
-      toast.success(
-        "Venta apartada correctamente",
-      );
+      toast.success("Venta apartada correctamente");
     } catch (error) {
-      console.error(
-        "Error al apartar venta:",
-        error,
-      );
+      console.error("Error al apartar venta:", error);
 
       toast.error(
         error instanceof Error
@@ -1876,9 +1484,7 @@ export function POSPanel({
     }
   };
 
-  const recoverParkedSale = (
-    parkedSale: ParkedSaleRow,
-  ) => {
+  const recoverParkedSale = (parkedSale: ParkedSaleRow) => {
     if (cart.length > 0) {
       const replace = window.confirm(
         "Ya tienes productos en el carrito. ¿Deseas reemplazarlos por la venta apartada?",
@@ -1896,9 +1502,7 @@ export function POSPanel({
         variant_id: line.variant_id,
         name: line.name,
         unit_price: Number(line.unit_price),
-        original_price: Number(
-          line.original_price,
-        ),
+        original_price: Number(line.original_price),
         quantity: Number(line.quantity),
         discount: Number(line.discount),
         tax_rate: Number(line.tax_rate),
@@ -1909,72 +1513,40 @@ export function POSPanel({
       })),
     );
 
-    setCustomerId(
-      parkedSale.customer_id ?? "none",
-    );
+    setCustomerId(parkedSale.customer_id ?? "none");
 
-    setMethod(
-      parkedSale.payment_method,
-    );
+    setMethod(parkedSale.payment_method);
 
-    setTicketDiscount(
-      String(
-        Number(
-          parkedSale.ticket_discount ?? 0,
-        ),
-      ),
-    );
+    setTicketDiscount(String(Number(parkedSale.ticket_discount ?? 0)));
 
     setCashReceived(
       parkedSale.cash_received == null
         ? ""
-        : String(
-            parkedSale.cash_received,
-          ),
+        : String(parkedSale.cash_received),
     );
 
     setMixedCash(
-      parkedSale.mixed_cash == null
-        ? ""
-        : String(
-            parkedSale.mixed_cash,
-          ),
+      parkedSale.mixed_cash == null ? "" : String(parkedSale.mixed_cash),
     );
 
     setMixedCard(
-      parkedSale.mixed_card == null
-        ? ""
-        : String(
-            parkedSale.mixed_card,
-          ),
+      parkedSale.mixed_card == null ? "" : String(parkedSale.mixed_card),
     );
 
-    setSaleNotes(
-      parkedSale.notes ?? "",
-    );
+    setSaleNotes(parkedSale.notes ?? "");
 
-    setParkedSaleLabel(
-      parkedSale.label ?? "",
-    );
+    setParkedSaleLabel(parkedSale.label ?? "");
 
     setParkedSalesOpen(false);
 
     setMobileStep("cart");
 
-    toast.success(
-      "Venta apartada recuperada",
-    );
+    toast.success("Venta apartada recuperada");
 
-    void deleteParkedSale(
-      supabase,
-      parkedSale.id,
-    )
+    void deleteParkedSale(supabase, parkedSale.id)
       .then(async () => {
         await qc.invalidateQueries({
-          queryKey: [
-            "pos-parked-sales",
-            branchId,
-          ],
+          queryKey: ["pos-parked-sales", branchId],
         });
       })
       .catch((error) => {
@@ -1996,381 +1568,226 @@ export function POSPanel({
    */
 
   const checkout = useMutation({
-    mutationFn:
-      async (
-        paymentMethodOverride?: PaymentMethod,
-      ) => {
-        const activeMethod =
-          paymentMethodOverride ?? method;
+    mutationFn: async (paymentMethodOverride?: PaymentMethod) => {
+      const activeMethod = paymentMethodOverride ?? method;
 
-        if (!branchId) {
-          throw new Error(
-            "Sin sucursal",
-          );
+      if (!branchId) {
+        throw new Error("Sin sucursal");
+      }
+
+      if (!cart.length) {
+        throw new Error("Carrito vacío");
+      }
+
+      if (settings?.requireOpenCash && !openSession) {
+        throw new Error("Debes abrir caja antes de vender");
+      }
+
+      if (activeMethod === "cash" && cashNum > 0 && cashNum < total) {
+        throw new Error("El efectivo recibido es menor al total");
+      }
+
+      if (activeMethod === "mixed") {
+        const mixedCashValue = Number(mixedCash) || 0;
+
+        const mixedCardValue = Number(mixedCard) || 0;
+
+        if (mixedCashValue + mixedCardValue < total - 0.01) {
+          throw new Error("La suma de pagos mixtos debe cubrir el total");
         }
+      }
 
-        if (!cart.length) {
-          throw new Error(
-            "Carrito vacío",
-          );
-        }
+      if (activeMethod === "credit" && customerId === "none") {
+        throw new Error("Selecciona un cliente para venta a crédito");
+      }
 
-        if (
-          settings?.requireOpenCash &&
-          !openSession
-        ) {
-          throw new Error(
-            "Debes abrir caja antes de vender",
-          );
-        }
+      const items = cart.map((line) => ({
+        product_id: line.product_id,
 
-        if (
-          activeMethod === "cash" &&
-          cashNum > 0 &&
-          cashNum < total
-        ) {
-          throw new Error(
-            "El efectivo recibido es menor al total",
-          );
-        }
+        variant_id: line.variant_id,
 
-        if (
-          activeMethod === "mixed"
-        ) {
-          const mixedCashValue =
-            Number(
-              mixedCash,
-            ) || 0;
+        name: line.name,
 
-          const mixedCardValue =
-            Number(
-              mixedCard,
-            ) || 0;
+        unit_price: line.unit_price,
 
-          if (
-            mixedCashValue +
-              mixedCardValue <
-            total - 0.01
-          ) {
-            throw new Error(
-              "La suma de pagos mixtos debe cubrir el total",
-            );
-          }
-        }
+        quantity: line.quantity,
 
-        if (
-          activeMethod === "credit" &&
-          customerId ===
-            "none"
-        ) {
-          throw new Error(
-            "Selecciona un cliente para venta a crédito",
-          );
-        }
+        discount: line.discount,
+      }));
 
-        const items =
-          cart.map(
-            (line) => ({
-              product_id:
-                line.product_id,
+      const { data, error } = await supabase.rpc("create_sale", {
+        _branch_id: branchId,
 
-              variant_id:
-                line.variant_id,
+        _items: items,
 
-              name:
-                line.name,
+        _payment_method: activeMethod,
 
-              unit_price:
-                line.unit_price,
+        _discount: disc,
 
-              quantity:
-                line.quantity,
+        ...(customerId !== "none"
+          ? {
+              _customer_id: customerId,
+            }
+          : {}),
 
-              discount:
-                line.discount,
-            }),
-          );
+        ...(openSession?.id
+          ? {
+              _cash_session_id: openSession.id,
+            }
+          : {}),
 
-        const {
-          data,
-          error,
-        } =
-          await supabase.rpc(
-            "create_sale",
-            {
-              _branch_id:
-                branchId,
+        ...(activeMethod === "cash"
+          ? {
+              _cash_received: cashNum || total,
+            }
+          : activeMethod === "mixed" && Number(mixedCash)
+            ? {
+                _cash_received: Number(mixedCash),
+              }
+            : {}),
+      });
 
-              _items:
-                items,
+      if (error) {
+        throw error;
+      }
 
-              _payment_method:
-                activeMethod,
+      return data as {
+        folio: number;
+        id?: string;
+      };
+    },
 
-              _discount:
-                disc,
+    onSuccess: (sale, paymentMethodOverride) => {
+      const activeMethod = paymentMethodOverride ?? method;
 
-              ...(customerId !==
-              "none"
-                ? {
-                    _customer_id:
-                      customerId,
-                  }
-                : {}),
+      const customerName =
+        customerId !== "none"
+          ? customers.find((customer) => customer.id === customerId)?.name
+          : undefined;
 
-              ...(openSession?.id
-                ? {
-                    _cash_session_id:
-                      openSession.id,
-                  }
-                : {}),
+      const paymentLabel =
+        activeMethod === "mixed"
+          ? `Mixto (Efectivo ${money(
+              Number(mixedCash) || 0,
+            )} + Tarjeta ${money(Number(mixedCard) || 0)})`
+          : activeMethod;
 
-              ...(activeMethod ===
-              "cash"
-                ? {
-                    _cash_received:
-                      cashNum ||
-                      total,
-                  }
-                : activeMethod ===
-                      "mixed" &&
-                    Number(
-                      mixedCash,
-                    )
-                  ? {
-                      _cash_received:
-                        Number(
-                          mixedCash,
-                        ),
-                    }
-                  : {}),
-            },
-          );
+      const completedTicket: TicketData = {
+        companyName: settings?.companyName,
 
-        if (error) {
-          throw error;
-        }
+        companyAddress: settings?.companyAddress || undefined,
 
-        return data as {
-          folio: number;
-          id?: string;
-        };
-      },
+        companyPhone: settings?.companyPhone || undefined,
 
-    onSuccess:
-      (
-        sale,
-        paymentMethodOverride,
-      ) => {
-        const activeMethod =
-          paymentMethodOverride ?? method;
+        branchName,
 
-        const customerName =
-          customerId !==
-          "none"
-            ? customers.find(
-                (customer) =>
-                  customer.id ===
-                  customerId,
-              )?.name
-            : undefined;
+        folio: sale.folio,
 
-        const paymentLabel =
-          activeMethod === "mixed"
-            ? `Mixto (Efectivo ${money(
-                Number(
-                  mixedCash,
-                ) || 0,
-              )} + Tarjeta ${money(
-                Number(
-                  mixedCard,
-                ) || 0,
-              )})`
-            : activeMethod;
+        date: new Date().toLocaleString("es-MX"),
 
-        const completedTicket: TicketData = {
-          companyName:
-            settings?.companyName,
+        cashierName: profile?.full_name ?? user?.email ?? "",
 
-          companyAddress:
-            settings?.companyAddress ||
-            undefined,
+        customerName,
 
-          companyPhone:
-            settings?.companyPhone ||
-            undefined,
+        paymentMethod: paymentLabel,
 
-          branchName,
+        lines: cart.map((line) => ({
+          name: line.name,
 
-          folio:
-            sale.folio,
+          quantity: line.quantity,
 
-          date:
-            new Date().toLocaleString(
-              "es-MX",
-            ),
+          unit_price: line.unit_price,
 
-          cashierName:
-            profile?.full_name ??
-            user?.email ??
-            "",
+          discount: line.discount,
 
-          customerName,
+          total: line.unit_price * line.quantity - line.discount,
 
-          paymentMethod:
-            paymentLabel,
+          sku: line.sku ?? null,
+        })),
 
-          lines:
-            cart.map(
-              (line) => ({
-                name:
-                  line.name,
+        subtotal: linesSubtotal,
 
-                quantity:
-                  line.quantity,
+        tax: linesTax,
 
-                unit_price:
-                  line.unit_price,
+        discount: disc,
 
-                discount:
-                  line.discount,
+        total,
 
-                total:
-                  line.unit_price *
-                    line.quantity -
-                  line.discount,
-
-                sku:
-                  line.sku ?? null,
-              }),
-            ),
-
-          subtotal:
-            linesSubtotal,
-
-          tax:
-            linesTax,
-
-          discount:
-            disc,
-
-          total,
-
-          cashReceived:
-            activeMethod === "cash"
-              ? cashNum ||
-                total
-              : activeMethod ===
-                  "mixed"
-                ? Number(
-                    mixedCash,
-                  ) || null
-                : null,
-
-          changeGiven:
-            activeMethod === "cash"
-              ? change
+        cashReceived:
+          activeMethod === "cash"
+            ? cashNum || total
+            : activeMethod === "mixed"
+              ? Number(mixedCash) || null
               : null,
 
-          footer:
-            saleNotes
-              ? `${settings?.ticketFooter ?? ""}\nNotas: ${saleNotes}`.trim()
-              : settings?.ticketFooter,
-        };
+        changeGiven: activeMethod === "cash" ? change : null,
 
-        setTicket(completedTicket);
+        footer: saleNotes
+          ? `${settings?.ticketFooter ?? ""}\nNotas: ${saleNotes}`.trim()
+          : settings?.ticketFooter,
+      };
 
-        if (getBluetoothAutoPrint()) {
-          const layout = normalizeTicketLayout(
-            settings?.ticketLayout,
-          );
-          void printTicketBluetooth(
-            completedTicket,
-            layout,
-          ).catch((error) => {
-            console.error(
-              "No se pudo imprimir automáticamente:",
-              error,
-            );
+      setTicket(completedTicket);
+
+      if (getBluetoothAutoPrint()) {
+        const layout = normalizeTicketLayout(settings?.ticketLayout);
+        void printTicketBluetooth(completedTicket, layout).catch(
+          (error) => {
+            console.error("No se pudo imprimir automáticamente:", error);
 
             toast.error(
               "Venta realizada, pero no se pudo imprimir el ticket.",
             );
-          });
-        }
-
-        setLastSaleTotal(total);
-        setLastSaleFolio(sale.folio ?? "");
-
-        if (sequentialRef.current) {
-          setMobileStep("success");
-          setTicketOpen(false);
-        } else {
-          setMobileStep("shop");
-          setTicketOpen(true);
-        }
-
-        setCart([]);
-        setCashReceived("");
-        setMixedCash("");
-        setMixedCard("");
-        setTicketDiscount("0");
-        setSaleNotes("");
-        setCustomerId("none");
-        setMethod("cash");
-
-        void qc.invalidateQueries(
-          {
-            queryKey: [
-              "pos-products-shared",
-            ],
           },
         );
+      }
 
-        void qc.invalidateQueries(
-          {
-            queryKey: [
-              "pos-variant-inventory-shared",
-            ],
-          },
-        );
+      setLastSaleTotal(total);
+      setLastSaleFolio(sale.folio ?? "");
 
-        void qc.invalidateQueries(
-          {
-            queryKey: [
-              "open-cash",
-            ],
-          },
-        );
+      if (sequentialRef.current) {
+        setMobileStep("success");
+        setTicketOpen(false);
+      } else {
+        setMobileStep("shop");
+        setTicketOpen(true);
+      }
 
-        void qc.invalidateQueries(
-          {
-            queryKey: [
-              "pos-recent-sales",
-            ],
-          },
-        );
+      setCart([]);
+      setCashReceived("");
+      setMixedCash("");
+      setMixedCard("");
+      setTicketDiscount("0");
+      setSaleNotes("");
+      setCustomerId("none");
+      setMethod("cash");
 
-        void qc.invalidateQueries(
-          {
-            queryKey: [
-              "shared-inventory",
-            ],
-          },
-        );
+      void qc.invalidateQueries({
+        queryKey: ["pos-products-shared"],
+      });
 
-        toast.success(
-          `Venta #${sale.folio} registrada`,
-        );
-      },
+      void qc.invalidateQueries({
+        queryKey: ["pos-variant-inventory-shared"],
+      });
 
-    onError:
-      (error: Error) => {
-        toast.error(
-          error.message ||
-            "Error al cobrar",
-        );
-      },
+      void qc.invalidateQueries({
+        queryKey: ["open-cash"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["pos-recent-sales"],
+      });
+
+      void qc.invalidateQueries({
+        queryKey: ["shared-inventory"],
+      });
+
+      toast.success(`Venta #${sale.folio} registrada`);
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message || "Error al cobrar");
+    },
 
     onMutate: () => {
       submittingRef.current = true;
@@ -2379,7 +1796,7 @@ export function POSPanel({
       submittingRef.current = false;
       checkoutPendingRef.current = false;
     },
-});
+  });
 
   checkoutPendingRef.current = checkout.isPending;
 
@@ -2389,203 +1806,102 @@ export function POSPanel({
    * =========================================================
    */
 
-  const reprintSale =
-    useMutation({
-      mutationFn:
-        async (
-          saleId: string,
-        ) => {
-          const {
-            data: sale,
-            error,
-          } =
-            await supabase
-              .from("sales")
-              .select(
-                "id, folio, total, subtotal, tax, discount, payment_method, cash_received, change_given, created_at, customer_id, cashier_id",
-              )
-              .eq(
-                "id",
-                saleId,
-              )
-              .single();
+  const reprintSale = useMutation({
+    mutationFn: async (saleId: string) => {
+      const { data: sale, error } = await supabase
+        .from("sales")
+        .select(
+          "id, folio, total, subtotal, tax, discount, payment_method, cash_received, change_given, created_at, customer_id, cashier_id",
+        )
+        .eq("id", saleId)
+        .single();
 
-          if (error) {
-            throw error;
-          }
+      if (error) {
+        throw error;
+      }
 
-          const {
-            data: items,
-            error: itemsError,
-          } =
-            await supabase
-              .from(
-                "sale_items",
-              )
-              .select(
-                "name_snapshot, quantity, unit_price, discount, total",
-              )
-              .eq(
-                "sale_id",
-                saleId,
-              );
+      const { data: items, error: itemsError } = await supabase
+        .from("sale_items")
+        .select("name_snapshot, quantity, unit_price, discount, total")
+        .eq("sale_id", saleId);
 
-          if (itemsError) {
-            throw itemsError;
-          }
+      if (itemsError) {
+        throw itemsError;
+      }
 
-          let customerName:
-            | string
-            | undefined;
+      let customerName: string | undefined;
 
-          if (
-            sale.customer_id
-          ) {
-            const {
-              data: customer,
-            } =
-              await supabase
-                .from(
-                  "customers",
-                )
-                .select(
-                  "name",
-                )
-                .eq(
-                  "id",
-                  sale.customer_id,
-                )
-                .maybeSingle();
+      if (sale.customer_id) {
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("name")
+          .eq("id", sale.customer_id)
+          .maybeSingle();
 
-            customerName =
-              customer?.name;
-          }
+        customerName = customer?.name;
+      }
 
-          return {
-            sale,
-            items:
-              items ?? [],
-            customerName,
-          };
-        },
+      return {
+        sale,
+        items: items ?? [],
+        customerName,
+      };
+    },
 
-      onSuccess:
-        ({
-          sale,
-          items,
-          customerName,
-        }) => {
-          setTicket({
-            companyName:
-              settings?.companyName,
+    onSuccess: ({ sale, items, customerName }) => {
+      setTicket({
+        companyName: settings?.companyName,
 
-            branchName,
+        branchName,
 
-            folio:
-              sale.folio,
+        folio: sale.folio,
 
-            date:
-              new Date(
-                sale.created_at,
-              ).toLocaleString(
-                "es-MX",
-              ),
+        date: new Date(sale.created_at).toLocaleString("es-MX"),
 
-            cashierName:
-              profile?.full_name ??
-              user?.email ??
-              "",
+        cashierName: profile?.full_name ?? user?.email ?? "",
 
-            customerName,
+        customerName,
 
-            paymentMethod:
-              sale.payment_method,
+        paymentMethod: sale.payment_method,
 
-            lines:
-              items.map(
-                (line) => ({
-                  name:
-                    line.name_snapshot,
+        lines: items.map((line) => ({
+          name: line.name_snapshot,
 
-                  quantity:
-                    Number(
-                      line.quantity,
-                    ),
+          quantity: Number(line.quantity),
 
-                  unit_price:
-                    Number(
-                      line.unit_price,
-                    ),
+          unit_price: Number(line.unit_price),
 
-                  discount:
-                    Number(
-                      line.discount,
-                    ),
+          discount: Number(line.discount),
 
-                  total:
-                    Number(
-                      line.total,
-                    ),
-                }),
-              ),
+          total: Number(line.total),
+        })),
 
-            subtotal:
-              Number(
-                sale.subtotal,
-              ),
+        subtotal: Number(sale.subtotal),
 
-            tax:
-              Number(
-                sale.tax,
-              ),
+        tax: Number(sale.tax),
 
-            discount:
-              Number(
-                sale.discount,
-              ),
+        discount: Number(sale.discount),
 
-            total:
-              Number(
-                sale.total,
-              ),
+        total: Number(sale.total),
 
-            cashReceived:
-              sale.cash_received !=
-              null
-                ? Number(
-                    sale.cash_received,
-                  )
-                : null,
+        cashReceived:
+          sale.cash_received != null ? Number(sale.cash_received) : null,
 
-            changeGiven:
-              sale.change_given !=
-              null
-                ? Number(
-                    sale.change_given,
-                  )
-                : null,
+        changeGiven:
+          sale.change_given != null ? Number(sale.change_given) : null,
 
-            footer:
-              settings?.ticketFooter,
-          });
+        footer: settings?.ticketFooter,
+      });
 
-          setHistoryOpen(
-            false,
-          );
+      setHistoryOpen(false);
 
-          setTicketOpen(
-            true,
-          );
-        },
+      setTicketOpen(true);
+    },
 
-      onError:
-        (error: Error) => {
-          toast.error(
-            error.message ||
-              "No se pudo reimprimir",
-          );
-        },
-    });
+    onError: (error: Error) => {
+      toast.error(error.message || "No se pudo reimprimir");
+    },
+  });
 
   /*
    * =========================================================
@@ -2601,13 +1917,10 @@ export function POSPanel({
       saleId: string;
       reason?: string | undefined;
     }) => {
-      const { data, error } = await supabase.rpc(
-        "cancel_sale",
-        {
-          _sale_id: saleId,
-          _reason: reason ?? "Cancelación desde POS",
-        },
-      );
+      const { data, error } = await supabase.rpc("cancel_sale", {
+        _sale_id: saleId,
+        _reason: reason ?? "Cancelación desde POS",
+      });
 
       if (error) throw error;
       return data;
@@ -2634,15 +1947,11 @@ export function POSPanel({
     },
 
     onError: (error: Error) => {
-      toast.error(
-        error.message || "No se pudo cancelar la venta",
-      );
+      toast.error(error.message || "No se pudo cancelar la venta");
     },
   });
 
-  const canSell =
-    !settings?.requireOpenCash ||
-    !!openSession;
+  const canSell = !settings?.requireOpenCash || !!openSession;
 
   return (
     <div
@@ -2834,7 +2143,13 @@ export function POSPanel({
               {filtered.map((product) => {
                 const outOfStock = product.stock <= 0;
                 const cartQty = cart
-                  .filter((line) => line.product_id === product.id)
+                  .filter(
+                    (line) =>
+                      line.product_id === product.id &&
+                      (product.variant_id
+                        ? line.variant_id === product.variant_id
+                        : !line.variant_id),
+                  )
                   .reduce((sum, line) => sum + line.quantity, 0);
                 const blocked =
                   !canSell ||
@@ -2849,7 +2164,7 @@ export function POSPanel({
 
                 return (
                   <button
-                    key={product.id}
+                    key={`${product.id}-${product.variant_id ?? "simple"}`}
                     type="button"
                     disabled={blocked && cartQty === 0}
                     onPointerDown={(e) => {
@@ -2956,8 +2271,14 @@ export function POSPanel({
               mobileStep === "mixed" ||
               mobileStep === "success") &&
             "hidden",
-          !sequential && mobileStep === "shop" && cart.length === 0 && "hidden md:flex",
-          !sequential && mobileStep === "shop" && cart.length > 0 && "hidden md:flex",
+          !sequential &&
+            mobileStep === "shop" &&
+            cart.length === 0 &&
+            "hidden md:flex",
+          !sequential &&
+            mobileStep === "shop" &&
+            cart.length > 0 &&
+            "hidden md:flex",
         )}
       >
         {sequential ? (
@@ -3004,7 +2325,6 @@ export function POSPanel({
             )}
           </div>
         )}
-
         <div className="min-h-0 flex-1 overflow-y-auto bg-[#f5f5f5] px-3 py-2">
           {cart.length === 0 ? (
             <div className="flex h-36 flex-col items-center justify-center gap-2 text-[#757575]">
@@ -3373,8 +2693,7 @@ export function POSPanel({
                         onClick={() => {
                           const current = Number(cashReceived) || 0;
                           const prefilled =
-                            total > 0 &&
-                            Math.abs(current - total) < 0.001;
+                            total > 0 && Math.abs(current - total) < 0.001;
                           if (current === 0 || prefilled) {
                             setCashReceived(String(amount));
                           } else {
@@ -3469,914 +2788,4 @@ export function POSPanel({
               type="button"
               disabled={!canSell || cart.length === 0 || checkout.isPending}
               onClick={() => {
-                if (sequential) {
-                  setMobileStep("pay");
-                } else {
-                  if (submittingRef.current || checkout.isPending) return;
-                  checkout.mutate(method);
-                }
-              }}
-              className="flex h-16 min-h-16 min-w-0 flex-1 touch-manipulation items-center justify-center gap-2 rounded-xl bg-[#34a853] text-[20px] font-bold text-white shadow-md transition active:scale-[0.98] disabled:opacity-50"
-            >
-              {checkout.isPending
-                ? "Procesando…"
-                : `Cobrar: ${money(total)}`}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <Dialog
-        open={scannerOpen}
-        onOpenChange={(open) => {
-          setScannerOpen(open);
-          if (!open) {
-            setScannerError(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              Escanear código de barras
-            </DialogTitle>
-          </DialogHeader>
-
-          {scannerError ? (
-            <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
-              <CameraOff className="h-8 w-8 opacity-50" />
-              <p>{scannerError}</p>
-            </div>
-          ) : (
-            <div className="overflow-hidden rounded-xl bg-black">
-              <video
-                ref={videoRef}
-                muted
-                playsInline
-                className="aspect-square w-full object-cover"
-              />
-            </div>
-          )}
-
-          <p className="text-center text-xs text-muted-foreground">
-            Apunta la cámara al código de barras del producto.
-          </p>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setScannerOpen(false)}
-            >
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!variantPickerProduct}
-        onOpenChange={(open) => {
-          if (!open) {
-            setVariantPickerProduct(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>
-              {variantPickerProduct?.name ?? "Variantes"}
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto py-1">
-            {productVariants.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                Este producto no tiene variantes configuradas.
-              </p>
-            ) : (
-              productVariants.map((variant) => {
-                const stock =
-                  variantStockMap.get(variant.id) ?? 0;
-                const outOfStock = stock <= 0;
-                const price =
-                  variant.price_override != null
-                    ? Number(variant.price_override)
-                    : variantPickerProduct?.price ?? 0;
-
-                return (
-                  <button
-                    key={variant.id}
-                    type="button"
-                    disabled={settings?.blockWithoutStock && outOfStock}
-                    onClick={() =>
-                      variantPickerProduct &&
-                      addVariant(variantPickerProduct, variant)
-                    }
-                    className="flex w-full items-center justify-between rounded-xl border border-[#e0e0e0] bg-[#fafbfe] p-3 text-left disabled:cursor-not-allowed disabled:opacity-45"
-                  >
-                    <div>
-                      <p className="text-sm font-semibold text-[#212121]">
-                        {variant.name}
-                      </p>
-                      <p
-                        className={cn(
-                          "text-xs",
-                          outOfStock
-                            ? "font-semibold text-[#e5484d]"
-                            : "text-[#757575]",
-                        )}
-                      >
-                        {outOfStock ? "Agotado" : `Disponible: ${stock}`}
-                      </p>
-                    </div>
-                    <span className="text-sm font-bold text-[#1a73e8]">
-                      {money(price)}
-                    </span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setVariantPickerProduct(null)}
-            >
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!editLineKey}
-        onOpenChange={(open) => {
-          if (!open) {
-            setEditLineKey(null);
-          }
-        }}
-      >
-        <DialogContent className="max-w-md gap-0 overflow-hidden rounded-t-2xl border-0 p-0 sm:rounded-2xl">
-          {(() => {
-            const line = cart.find((l) => l.key === editLineKey);
-            if (!line) return null;
-            return (
-              <>
-                <div className="flex items-start gap-2 border-b border-[#eeeeee] px-4 pb-3 pt-4">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-lg font-bold leading-tight text-[#212121]">
-                      Editar {line.name}
-                    </h2>
-                  </div>
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-[#e53935]"
-                    aria-label="Eliminar"
-                    onClick={() => {
-                      removeLine(line.key);
-                      setEditLineKey(null);
-                    }}
-                  >
-                    🗑
-                  </button>
-                  <button
-                    type="button"
-                    className="flex h-9 w-9 items-center justify-center rounded-full text-[#757575]"
-                    aria-label="Cerrar"
-                    onClick={() => setEditLineKey(null)}
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="space-y-4 px-4 py-4">
-                  <div>
-                    <label className="text-xs text-[#9e9e9e]">
-                      Precio de venta
-                    </label>
-                    <div className="mt-1 flex items-center rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] px-3">
-                      <span className="text-[#757575]">$</span>
-                      <Input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={editPrice}
-                        onChange={(e) => setEditPrice(e.target.value)}
-                        disabled={!isManager}
-                        className="border-0 bg-transparent text-base font-semibold shadow-none focus-visible:ring-0"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="text-xs text-[#9e9e9e]">Cantidad</label>
-                    <div className="mt-1 flex items-center gap-2">
-                      <button
-                        type="button"
-                        className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#e53935] text-2xl font-bold text-white"
-                        onClick={() => {
-                          const q = Math.max(1, (Number(editQty) || 1) - 1);
-                          setEditQty(String(q));
-                        }}
-                      >
-                        −
-                      </button>
-                      <Input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={editQty}
-                        onChange={(e) => setEditQty(e.target.value)}
-                        className="h-12 flex-1 rounded-xl border-[#e0e0e0] text-center text-lg font-semibold"
-                      />
-                      <button
-                        type="button"
-                        className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#34a853] text-2xl font-bold text-white"
-                        onClick={() => {
-                          const q = (Number(editQty) || 0) + 1;
-                          setEditQty(String(q));
-                        }}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-[#eeeeee] bg-white p-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-[#212121]">
-                        Aplicar oferta
-                      </span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={editOfferOn}
-                        onClick={() => setEditOfferOn((v) => !v)}
-                        className={
-                          "relative h-7 w-12 rounded-full transition " +
-                          (editOfferOn ? "bg-[#1a73e8]" : "bg-[#cfd8dc]")
-                        }
-                      >
-                        <span
-                          className={
-                            "absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition " +
-                            (editOfferOn ? "left-5" : "left-0.5")
-                          }
-                        />
-                      </button>
-                    </div>
-
-                    {editOfferOn && (
-                      <div className="mt-3 space-y-3">
-                        <div className="flex gap-4">
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="radio"
-                              checked={editOfferMode === "discount"}
-                              onChange={() => setEditOfferMode("discount")}
-                            />
-                            Dar descuento
-                          </label>
-                          <label className="flex items-center gap-2 text-sm">
-                            <input
-                              type="radio"
-                              checked={editOfferMode === "free"}
-                              onChange={() => setEditOfferMode("free")}
-                            />
-                            Dar como gratis
-                          </label>
-                        </div>
-
-                        {editOfferMode === "discount" && (
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <div className="flex items-center rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] px-2">
-                                <span className="text-sm text-[#757575]">%</span>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  value={editPct}
-                                  onChange={(e) => {
-                                    setEditPct(e.target.value);
-                                    setEditAmount("");
-                                  }}
-                                  className="border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                />
-                              </div>
-                              <p className="mt-1 text-[11px] text-[#9e9e9e]">
-                                Por porcentaje
-                              </p>
-                            </div>
-                            <div>
-                              <div className="flex items-center rounded-xl border border-[#e0e0e0] bg-[#f5f5f5] px-2">
-                                <span className="text-sm text-[#757575]">$</span>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={editAmount}
-                                  onChange={(e) => {
-                                    setEditAmount(e.target.value);
-                                    setEditPct("");
-                                  }}
-                                  className="border-0 bg-transparent shadow-none focus-visible:ring-0"
-                                />
-                              </div>
-                              <p className="mt-1 text-[11px] text-[#9e9e9e]">
-                                Por precio (por artículo)
-                              </p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border-t border-[#eeeeee] p-4">
-                  <button
-                    type="button"
-                    onClick={applyEditLine}
-                    className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-[15px] font-bold text-white shadow-md active:scale-[0.98]"
-                  >
-                    Actualizar artículo
-                  </button>
-                </div>
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Ventas recientes</DialogTitle>
-          </DialogHeader>
-
-          <ScrollArea className="max-h-[50vh]">
-            <div className="space-y-2 pr-2">
-              {recentSales.length === 0 ? (
-                <p className="py-8 text-center text-sm text-muted-foreground">
-                  Sin ventas recientes
-                </p>
-              ) : (
-                recentSales.map((sale) => (
-                  <div
-                    key={sale.id}
-                    className="flex items-center justify-between rounded-lg border p-3"
-                  >
-                    <div>
-                      <p className="font-medium">
-                        Folio #{sale.folio}{" "}
-                        <Badge variant="outline" className="ml-1 text-xs">
-                          {sale.status}
-                        </Badge>
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(sale.created_at).toLocaleString("es-MX")} ·{" "}
-                        {sale.payment_method} · {money(Number(sale.total))}
-                      </p>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5 sm:flex-row">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={reprintSale.isPending}
-                        onClick={() => reprintSale.mutate(sale.id)}
-                      >
-                        <Printer className="mr-1 h-3.5 w-3.5" />
-                        Ticket
-                      </Button>
-
-                      {sale.status === "completed" && (
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          disabled={cancelSale.isPending}
-                          onClick={() => {
-                            const reason = window.prompt(
-                              `Motivo de cancelación del folio #${sale.folio} (opcional):`,
-                              "Error de cobro",
-                            );
-                            if (reason === null) return;
-                            if (
-                              !window.confirm(
-                                `¿Cancelar la venta #${sale.folio}? Se restaurará el stock.`,
-                              )
-                            ) {
-                              return;
-                            }
-                            cancelSale.mutate({
-                              saleId: sale.id,
-                              reason: reason.trim() || undefined,
-                            });
-                          }}
-                        >
-                          Cancelar
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
-
-      {mobileStep === "pay" && (
-        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
-          <div className="bg-[#1a73e8] px-3 pb-3 pt-3 text-white">
-            <button
-              type="button"
-              onClick={() => setMobileStep("cart")}
-              className="mb-2 flex items-center gap-1 text-sm font-medium text-white/90"
-            >
-              ← Volver
-            </button>
-            <p className="text-center text-sm font-bold uppercase tracking-wide">
-              DETALLES DEL CLIENTE (OPCIONAL)
-            </p>
-          </div>
-
-          <div className="space-y-3 overflow-y-auto p-3 pb-8">
-            <div className="rounded-xl border border-[#e0e0e0] bg-white p-3 shadow-sm">
-              <p className="mb-2 text-xs font-medium text-[#757575]">
-                Buscar cliente por nombre, teléfono o código
-              </p>
-              <div className="flex gap-2">
-                <div className="relative min-w-0 flex-1">
-                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#9e9e9e]" />
-                  <Input
-                    value={customerSearch}
-                    onChange={(e) => setCustomerSearch(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
-                      e.preventDefault();
-                      if (selectCustomerByCode(customerSearch)) return;
-                      if (filteredCustomers.length === 1) {
-                        const only = filteredCustomers[0]!;
-                        setCustomerId(only.id);
-                        setCustomerSearch(only.name);
-                        toast.success(`Cliente: ${only.name}`);
-                      }
-                    }}
-                    placeholder="Nombre, teléfono o escanear tarjeta…"
-                    className="h-11 rounded-xl border-[#e0e0e0] pl-9"
-                    autoComplete="off"
-                    enterKeyHint="search"
-                  />
-                </div>
-                <button
-                  type="button"
-                  title="Escanear tarjeta del cliente"
-                  onClick={() => setScannerOpen(true)}
-                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[#e0e0e0] bg-white text-[#1a73e8]"
-                >
-                  <ScanBarcode className="h-5 w-5" strokeWidth={1.75} />
-                </button>
-              </div>
-
-              {customerId !== "none" && (
-                <div className="mt-2 flex items-center justify-between rounded-lg bg-[#e8f0fe] px-3 py-2">
-                  <span className="text-sm font-semibold text-[#1a73e8]">
-                    {customers.find((c) => c.id === customerId)?.name ??
-                      "Cliente seleccionado"}
-                  </span>
-                  <button
-                    type="button"
-                    className="text-xs font-semibold text-[#e53935]"
-                    onClick={() => {
-                      setCustomerId("none");
-                      setCustomerSearch("");
-                    }}
-                  >
-                    Quitar
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-[#eeeeee]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomerId("none");
-                    setCustomerSearch("");
-                  }}
-                  className={
-                    "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm " +
-                    (customerId === "none"
-                      ? "bg-[#e8f0fe] font-semibold text-[#1a73e8]"
-                      : "text-[#212121] active:bg-[#f5f5f5]")
-                  }
-                >
-                  Público general
-                  {customerId === "none" ? <span>✓</span> : null}
-                </button>
-                {filteredCustomers.map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setCustomerId(c.id);
-                      setCustomerSearch(c.name);
-                    }}
-                    className={
-                      "flex w-full flex-col border-t border-[#f0f0f0] px-3 py-2.5 text-left active:bg-[#f5f5f5] " +
-                      (customerId === c.id ? "bg-[#e8f0fe]" : "")
-                    }
-                  >
-                    <span
-                      className={
-                        "text-sm " +
-                        (customerId === c.id
-                          ? "font-semibold text-[#1a73e8]"
-                          : "font-medium text-[#212121]")
-                      }
-                    >
-                      {c.name}
-                    </span>
-                    {(c.phone || c.barcode) && (
-                      <span className="text-[11px] text-[#9e9e9e]">
-                        {[c.phone, c.barcode].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                  </button>
-                ))}
-                {customerSearch.trim() && filteredCustomers.length === 0 && (
-                  <p className="border-t border-[#f0f0f0] px-3 py-3 text-center text-xs text-[#9e9e9e]">
-                    Sin coincidencias. Prueba nombre, teléfono o código de la
-                    tarjeta.
-                  </p>
-                )}
-              </div>
-            </div>
-
-            <p className="px-1 text-center text-sm font-semibold text-[#1a73e8]">
-              Seleccione el método de pago
-            </p>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              {(
-                [
-                  { id: "cash" as const, label: "Efectivo", emoji: "💵" },
-                  { id: "card" as const, label: "Tarjeta de débito", emoji: "💳" },
-                  { id: "card" as const, label: "Tarjeta de crédito", emoji: "💳", key: "card2" },
-                  { id: "credit" as const, label: "Crédito", emoji: "📅" },
-                  { id: "transfer" as const, label: "Transferencia", emoji: "T" },
-                  { id: "mixed" as const, label: "Mixto", emoji: "🔀" },
-                ] as const
-              ).map((item, i) => (
-                <button
-                  key={`${item.id}-${i}`}
-                  type="button"
-                  onClick={() => {
-                    setMethod(item.id);
-                    if (item.id === "cash") {
-                      setCashReceived(total > 0 ? String(total.toFixed(2)) : "");
-                      setMobileStep("cash");
-                    } else if (item.id === "mixed") {
-                      setMixedCash("");
-                      setMixedCard("");
-                      setMobileStep("mixed");
-                    } else {
-                      if (submittingRef.current || checkout.isPending) return;
-                      checkout.mutate(item.id);
-                    }
-                  }}
-                  className="flex flex-col items-center justify-center gap-2 rounded-xl border border-[#e0e0e0] bg-[#eeeeee] px-3 py-7 text-center shadow-sm active:scale-[0.97]"
-                >
-                  {item.id === "transfer" || item.id === "mixed" ? (
-                    <span className="flex h-10 w-10 items-center justify-center rounded-md bg-[#1a73e8] text-lg font-bold text-white">
-                      {item.emoji}
-                    </span>
-                  ) : (
-                    <span className="text-3xl">{item.emoji}</span>
-                  )}
-                  <span className="text-sm font-semibold text-[#212121]">
-                    {item.label}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {mobileStep === "cash" && (
-        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
-          <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
-            <button
-              type="button"
-              onClick={() => setMobileStep("pay")}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
-            >
-              ←
-            </button>
-            <h1 className="flex-1 text-lg font-bold">Efectivo</h1>
-          </div>
-
-          <div className="flex-1 space-y-0 overflow-y-auto p-3">
-            <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
-                <span className="text-sm text-[#757575]">Gran total</span>
-                <span className="text-sm font-semibold text-[#212121]">
-                  {money(total)}
-                </span>
-              </div>
-
-              <div className="px-4 py-5 text-center">
-                <p className="text-sm text-[#9e9e9e]">
-                  Efectivo recibido (opcional)
-                </p>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={cashReceived}
-                  onChange={(e) => setCashReceived(e.target.value)}
-                  className="mx-auto mt-2 h-14 max-w-[200px] border-0 bg-transparent text-center text-4xl font-bold text-[#212121] shadow-none focus-visible:ring-0"
-                  placeholder={String(total.toFixed(0))}
-                />
-              </div>
-
-              <div
-                className={cn(
-                  "px-4 py-4 text-center",
-                  cashNum > 0 && cashNum >= total
-                    ? "bg-[#e8f5e9]"
-                    : "bg-[#e3f2fd]",
-                )}
-              >
-                <p
-                  className={cn(
-                    "text-sm",
-                    cashNum > 0 && cashNum >= total
-                      ? "text-[#2e7d32]"
-                      : "text-[#64b5f6]",
-                  )}
-                >
-                  {cashNum > 0 && cashNum >= total ? "Cambio a Dar" : "Cambio"}
-                </p>
-                <p
-                  className={cn(
-                    "mt-1 text-3xl font-bold",
-                    cashNum > 0 && cashNum >= total
-                      ? "text-[#2e7d32]"
-                      : "text-[#90caf9]",
-                  )}
-                >
-                  {money(cashNum > 0 && cashNum >= total ? cashNum - total : 0)}
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-6 grid grid-cols-3 gap-3 px-2">
-              {[20, 50, 100, 200, 500, 1000].map((amount) => (
-                <button
-                  key={amount}
-                  type="button"
-                  onClick={() => {
-                    const current = Number(cashReceived) || 0;
-                    const prefilled =
-                      total > 0 && Math.abs(current - total) < 0.001;
-                    if (current === 0 || prefilled) {
-                      setCashReceived(String(amount));
-                    } else {
-                      setCashReceived(String(current + amount));
-                    }
-                  }}
-                  className="rounded-full border border-[#bdbdbd] bg-white py-2.5 text-sm font-medium text-[#424242] shadow-sm active:bg-[#f5f5f5]"
-                >
-                  +${amount}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <button
-              type="button"
-              disabled={!canSell || checkout.isPending}
-              onClick={() => {
-                if (submittingRef.current || checkout.isPending) return;
-                checkout.mutate("cash");
-              }}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
-            >
-              {checkout.isPending ? "Procesando…" : "Recibido por Efectivo"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mobileStep === "mixed" && (
-        <div className={cn("fixed inset-0 z-50 flex flex-col bg-[#f5f5f5]", !sequential && "hidden")}>
-          <div className="flex items-center gap-2 bg-[#1a73e8] px-3 py-3 text-white">
-            <button
-              type="button"
-              onClick={() => setMobileStep("pay")}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-xl"
-            >
-              ←
-            </button>
-            <h1 className="flex-1 text-lg font-bold">Pago mixto</h1>
-          </div>
-
-          <div className="flex-1 space-y-3 overflow-y-auto p-3">
-            <div className="overflow-hidden rounded-xl border border-[#e0e0e0] bg-white shadow-sm">
-              <div className="flex items-center justify-between border-b border-[#f0f0f0] px-4 py-3">
-                <span className="text-sm text-[#757575]">Gran total</span>
-                <span className="text-sm font-semibold text-[#212121]">
-                  {money(total)}
-                </span>
-              </div>
-
-              <div className="space-y-4 px-4 py-4">
-                <div>
-                  <label className="text-sm text-[#757575]">Efectivo</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={mixedCash}
-                    onChange={(e) => setMixedCash(e.target.value)}
-                    className="mt-1 h-12 rounded-xl border-[#e0e0e0] text-lg font-semibold"
-                    placeholder="0.00"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-sm text-[#757575]">Tarjeta</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    inputMode="decimal"
-                    value={mixedCard}
-                    onChange={(e) => setMixedCard(e.target.value)}
-                    className="mt-1 h-12 rounded-xl border-[#e0e0e0] text-lg font-semibold"
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-
-              <div className="border-t border-[#f0f0f0] px-4 py-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-[#757575]">Total aplicado</span>
-                  <span className="font-semibold text-[#212121]">
-                    {money(
-                      (Number(mixedCash) || 0) + (Number(mixedCard) || 0),
-                    )}
-                  </span>
-                </div>
-                <div className="mt-2 flex items-center justify-between text-sm">
-                  <span className="text-[#757575]">
-                    {(Number(mixedCash) || 0) + (Number(mixedCard) || 0) >=
-                    total - 0.01
-                      ? "Cubierto"
-                      : "Falta"}
-                  </span>
-                  <span
-                    className={
-                      (Number(mixedCash) || 0) + (Number(mixedCard) || 0) >=
-                      total - 0.01
-                        ? "font-semibold text-[#2e7d32]"
-                        : "font-semibold text-[#c62828]"
-                    }
-                  >
-                    {money(
-                      Math.max(
-                        0,
-                        total -
-                          ((Number(mixedCash) || 0) +
-                            (Number(mixedCard) || 0)),
-                      ),
-                    )}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <p className="px-1 text-center text-xs text-[#9e9e9e]">
-              La suma de efectivo y tarjeta debe cubrir el total de la venta.
-            </p>
-          </div>
-
-          <div className="border-t border-[#e0e0e0] bg-white p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-            <button
-              type="button"
-              disabled={
-                !canSell ||
-                checkout.isPending ||
-                (Number(mixedCash) || 0) + (Number(mixedCard) || 0) <
-                  total - 0.01
-              }
-              onClick={() => {
-                if (submittingRef.current || checkout.isPending) return;
-                checkout.mutate("mixed");
-              }}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#4caf50] text-base font-bold text-white shadow-sm active:scale-[0.98] disabled:opacity-50"
-            >
-              {checkout.isPending ? "Procesando…" : "Confirmar cobro mixto"}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {mobileStep === "success" && (
-        <div className={cn("fixed inset-0 z-50 flex flex-col bg-white", !sequential && "hidden")}>
-          <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6">
-            <div
-              className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-[#66bb6a] text-[#66bb6a]"
-              style={{
-                animation: "lulaCheckPop 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both",
-              }}
-            >
-              <svg
-                viewBox="0 0 24 24"
-                className="h-10 w-10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="3"
-                style={{
-                  strokeDasharray: 30,
-                  strokeDashoffset: 30,
-                  animation: "lulaCheckDraw 0.35s ease-out 0.15s forwards",
-                }}
-              >
-                <path
-                  d="M5 13l4 4L19 7"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-            <p
-              className="text-4xl font-bold text-[#1a73e8]"
-              style={{
-                animation: "lulaFadeUp 0.4s ease-out 0.2s both",
-              }}
-            >
-              {money(lastSaleTotal)}
-            </p>
-            <style>{`
-              @keyframes lulaCheckPop {
-                0% { transform: scale(0.3); opacity: 0; }
-                100% { transform: scale(1); opacity: 1; }
-              }
-              @keyframes lulaCheckDraw {
-                to { stroke-dashoffset: 0; }
-              }
-              @keyframes lulaFadeUp {
-                0% { opacity: 0; transform: translateY(8px); }
-                100% { opacity: 1; transform: translateY(0); }
-              }
-            `}</style>
-          </div>
-
-          <div className="space-y-2 border-t border-[#eee] px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-            <p className="mb-2 text-center text-xs text-[#9e9e9e]">
-              ID DE RECIBO: LULA-{lastSaleFolio} · ARTÍCULOS cobrados
-            </p>
-            <button
-              type="button"
-              onClick={() => setTicketOpen(true)}
-              className="flex h-12 w-full items-center justify-center rounded-md bg-[#66bb6a] text-base font-bold uppercase tracking-wide text-white"
-            >
-              OBTENER RECIBO
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setMobileStep("shop");
-                setTicketOpen(false);
-              }}
-              className="flex h-12 w-full items-center justify-center rounded-xl bg-[#34a853] text-base font-bold uppercase tracking-wide text-white shadow-sm active:scale-[0.98]"
-            >
-              NUEVA VENTA
-            </button>
-          </div>
-        </div>
-      )}
-
-      <ParkedSalesDialog
-        open={parkedSalesOpen}
-        onOpenChange={setParkedSalesOpen}
-        branchId={branchId}
-        onRecover={recoverParkedSale}
-      />
-
-      <TicketModal
-        open={ticketOpen}
-        onOpenChange={setTicketOpen}
-        ticket={ticket}
-      />
-    </div>
-  );
-}
+                if (s
