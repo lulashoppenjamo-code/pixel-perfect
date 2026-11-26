@@ -105,6 +105,35 @@ const RANGES = [
   { value: "all", label: "General / Todo" },
 ];
 
+/**
+ * Recupera todos los registros por páginas de 1000.
+ */
+async function fetchAllRows<T>(
+  buildQuery: (from: number, to: number) => any,
+): Promise<T[]> {
+  const pageSize = 1000;
+  const rows: T[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await buildQuery(
+      offset,
+      offset + pageSize - 1,
+    );
+
+    if (error) throw error;
+
+    const page = (data ?? []) as T[];
+    rows.push(...page);
+
+    if (page.length < pageSize) break;
+
+    offset += pageSize;
+  }
+
+  return rows;
+}
+
 type SaleRow = {
   id: string;
   total: number;
@@ -304,43 +333,41 @@ function ReportesPage() {
     refetchInterval: 15000,
     refetchOnWindowFocus: true,
 
-    queryFn: async () => {
-      let query = supabase
-        .from("sales")
-        .select(
-          `
-          id,
-          total,
-          subtotal,
-          tax,
-          discount,
-          created_at,
-          status,
-          payment_method,
-          cashier_id,
-          customer_id,
-          branch_id
-        `,
-        )
-        .eq("status", "completed")
-        .gte("created_at", since)
-        .lt("created_at", until)
-        .order("created_at", { ascending: true });
+    queryFn: async () =>
+      fetchAllRows<SaleRow>((from, to) => {
+        let query = supabase
+          .from("sales")
+          .select(
+            `
+            id,
+            total,
+            subtotal,
+            tax,
+            discount,
+            created_at,
+            status,
+            payment_method,
+            cashier_id,
+            customer_id,
+            branch_id
+          `,
+          )
+          .eq("status", "completed")
+          .gte("created_at", since)
+          .lt("created_at", until)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true });
 
-      if (selectedBranchId !== "all") {
-        query = query.eq("branch_id", selectedBranchId);
-      }
+        if (selectedBranchId !== "all") {
+          query = query.eq("branch_id", selectedBranchId);
+        }
 
-      if (employeeId !== "all") {
-        query = query.eq("cashier_id", employeeId);
-      }
+        if (employeeId !== "all") {
+          query = query.eq("cashier_id", employeeId);
+        }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      return (data ?? []) as SaleRow[];
-    },
+        return query.range(from, to);
+      }),
   });
 
   /*
@@ -363,28 +390,31 @@ function ReportesPage() {
 
     enabled: canLoadReports && rangeDays !== "all",
 
-    queryFn: async () => {
-      let query = supabase
-        .from("sales")
-        .select("id, total, created_at")
-        .eq("status", "completed")
-        .gte("created_at", prevSince)
-        .lt("created_at", prevUntil);
+    queryFn: async () =>
+      fetchAllRows<{
+        id: string;
+        total: number;
+        created_at: string;
+      }>((from, to) => {
+        let query = supabase
+          .from("sales")
+          .select("id, total, created_at")
+          .eq("status", "completed")
+          .gte("created_at", prevSince)
+          .lt("created_at", prevUntil)
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true });
 
-      if (selectedBranchId !== "all") {
-        query = query.eq("branch_id", selectedBranchId);
-      }
+        if (selectedBranchId !== "all") {
+          query = query.eq("branch_id", selectedBranchId);
+        }
 
-      if (employeeId !== "all") {
-        query = query.eq("cashier_id", employeeId);
-      }
+        if (employeeId !== "all") {
+          query = query.eq("cashier_id", employeeId);
+        }
 
-      const { data, error } = await query;
-
-      if (error) throw error;
-
-      return data ?? [];
-    },
+        return query.range(from, to);
+      }),
   });
 
   /*
@@ -480,29 +510,44 @@ function ReportesPage() {
       enabled: saleIds.length > 0,
 
       queryFn: async () => {
-        const { data, error } = await supabase
-          .from("sale_items")
-          .select(
-            `
-          sale_id,
-          name_snapshot,
-          quantity,
-          unit_price,
-          discount,
-          total,
-          product_id,
-          variant_id,
-          unit_cost,
-          cost_total
-        `,
-          )
-          .in("sale_id", saleIds);
+        const idChunkSize = 200;
+        const allItems: SaleItemRow[] = [];
 
-        if (error) {
-          throw error;
+        for (
+          let index = 0;
+          index < saleIds.length;
+          index += idChunkSize
+        ) {
+          const ids = saleIds.slice(index, index + idChunkSize);
+
+          const chunkItems = await fetchAllRows<SaleItemRow>(
+            (from, to) =>
+              supabase
+                .from("sale_items")
+                .select(
+                  `
+              sale_id,
+              name_snapshot,
+              quantity,
+              unit_price,
+              discount,
+              total,
+              product_id,
+              variant_id,
+              unit_cost,
+              cost_total
+            `,
+                )
+                .in("sale_id", ids)
+                .order("sale_id", { ascending: true })
+                .order("id", { ascending: true })
+                .range(from, to),
+          );
+
+          allItems.push(...chunkItems);
         }
 
-        return (data ?? []) as SaleItemRow[];
+        return allItems;
       },
     });
 
