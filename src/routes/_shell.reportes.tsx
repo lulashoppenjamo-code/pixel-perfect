@@ -451,23 +451,34 @@ function ReportesPage() {
     enabled: canLoadReports,
 
     queryFn: async () => {
-      let query = supabase
-        .from("expenses")
-        .select("amount, created_by")
-        .gte("expense_date", period.startDate)
-        .lte("expense_date", period.endDate);
+      try {
+        const expenses = await fetchAllRows<{
+          amount: number;
+          created_by: string | null;
+        }>((from, to) => {
+          let query = supabase
+            .from("expenses")
+            .select("amount, created_by")
+            .gte("expense_date", period.startDate)
+            .lte("expense_date", period.endDate)
+            .order("expense_date", { ascending: true });
 
-      if (selectedBranchId !== "all") {
-        query = query.eq("branch_id", selectedBranchId);
-      }
+          if (selectedBranchId !== "all") {
+            query = query.eq("branch_id", selectedBranchId);
+          }
 
-      if (employeeId !== "all") {
-        query = query.eq("created_by", employeeId);
-      }
+          if (employeeId !== "all") {
+            query = query.eq("created_by", employeeId);
+          }
 
-      const { data, error } = await query;
+          return query.range(from, to);
+        });
 
-      if (error) {
+        return expenses.reduce(
+          (total, expense) => total + Number(expense.amount ?? 0),
+          0,
+        );
+      } catch (error: any) {
         if (
           error.message?.includes("does not exist") ||
           error.code === "42P01"
@@ -477,11 +488,6 @@ function ReportesPage() {
 
         throw error;
       }
-
-      return (data ?? []).reduce(
-        (total, expense) => total + Number(expense.amount ?? 0),
-        0,
-      );
     },
   });
 
