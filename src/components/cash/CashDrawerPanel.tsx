@@ -128,6 +128,7 @@ type ArqueoPrintOpts = {
   expected: number;
   counted?: number | null;
   difference?: number | null;
+  denominationCounts?: Record<string, string>;
   movements: {
     id: string;
     type: string;
@@ -178,9 +179,23 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
           })
           .join("");
 
+  const denominationBlock =
+    opts.denominationCounts
+      ? DENOMINATIONS
+          .filter((d) => Number(opts.denominationCounts?.[String(d.value)] || 0) > 0)
+          .map((d) => {
+            const qty = Number(opts.denominationCounts?.[String(d.value)] || 0);
+            return `<div class="row"><span>${d.label} × ${qty}</span><span>${money(qty * d.value)}</span></div>`;
+          })
+          .join("")
+      : "";
+
   const countedBlock =
     opts.counted != null
       ? `<div class="dash"></div>
+<div class="sec">Desglose de billetes y monedas</div>
+${denominationBlock || `<div class="muted">Sin desglose registrado</div>`}
+<div class="dash"></div>
 <div class="row"><span>Contado</span><span>${money(opts.counted)}</span></div>
 <div class="row bold"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
       : "";
@@ -305,6 +320,15 @@ function buildCorteText(opts: ArqueoPrintOpts): string {
   lines.push("--------------------------------");
   lines.push(`DEBE HABER       ${moneyFmt(opts.expected)}`);
   if (opts.counted != null) {
+    lines.push("--------------------------------");
+    lines.push("BILLETES Y MONEDAS");
+    for (const d of DENOMINATIONS) {
+      const qty = Number(opts.denominationCounts?.[String(d.value)] || 0);
+      if (qty > 0) {
+        lines.push(`${d.label} x ${qty} = ${moneyFmt(qty * d.value)}`);
+      }
+    }
+    lines.push("--------------------------------");
     lines.push(`Contado          ${moneyFmt(opts.counted)}`);
     lines.push(`Diferencia       ${moneyFmt(Number(opts.difference ?? 0))}`);
   }
@@ -979,26 +1003,49 @@ export function CashDrawerPanel({
       return row;
     },
 
-    onSuccess: (row) => {
-      const diff = Number(
-        row?.difference ?? 0,
-      );
-
+    onSuccess: async (row) => {
+      const diff = Number(row?.difference ?? 0);
       const msg =
         Math.abs(diff) < 0.01
           ? "Caja cuadrada, sin diferencia."
           : diff > 0
             ? `Sobran ${money(diff)} en el cajón.`
-            : `Faltan ${money(
-                Math.abs(diff),
-              )} en el cajón.`;
+            : `Faltan ${money(Math.abs(diff))} en el cajón.`;
 
-      toast.success(
-        `Caja cerrada · ${msg}`,
+      toast.success(`Caja cerrada · ${msg}`);
+
+      const openedByName = await resolveProfileName(session?.opened_by);
+
+      openTicketPreview(
+        {
+          branchLabel,
+          openedAt: session!.opened_at,
+          closedAt: new Date().toISOString(),
+          openedByName,
+          opening: Number(session!.opening_amount ?? 0),
+          cashSales: summary?.cashSales ?? 0,
+          mixedCash: summary?.mixedCash ?? 0,
+          deposits: summary?.deposits ?? 0,
+          withdrawals: summary?.withdrawals ?? 0,
+          cashExpenses: summary?.cashExpenses ?? 0,
+          expected: Number(row?.expected_amount ?? expected),
+          counted: countedNum,
+          difference: diff,
+          denominationCounts: { ...denomCounts },
+          movements: (summary?.movements ?? []).map((m) => ({
+            id: m.id,
+            type: m.type,
+            amount: Number(m.amount ?? 0),
+            reason: m.reason ?? null,
+            created_at: m.created_at,
+          })),
+        },
+        "Corte cerrado",
       );
 
       setCloseOpen(false);
       setCounted("");
+      setDenomCounts(emptyDenomCounts());
 
       invalidate();
     },
