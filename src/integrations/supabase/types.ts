@@ -1502,7 +1502,11 @@ export type Database = {
       }
       clear_product_catalog: { Args: { _confirmation: string }; Returns: Json }
       close_cash_session: {
-        Args: { _closing_amount: number; _session_id: string }
+        Args: {
+          _closing_amount: number
+          _closing_denominations: Json
+          _session_id: string
+        }
         Returns: {
           branch_id: string
           closed_at: string | null
