@@ -1,5 +1,8 @@
 # Lula Shop OS — roadmap
 
+- [x] Preparar cierre atómico con denominaciones y recuperación histórica; seis pruebas y compilación automática aprobadas, sin cierres reales ni publicación.
+- [ ] Aplicar supabase/pending-close-cash-denominations.sql mediante migración coordinada con la versión del cliente: la versión publicada aún llama a la firma antigua, incompatible con la nueva.
+
 - [x] Corregir exports Bluetooth, tipos de clientes/POS y parámetros opcionales de pedidos; compilación automática correcta, prueba Bluetooth aprobada, sin publicar.
 
 - [x] Lecturas de inventario/productos desde shared_inventory (inventoryData) y validación de variantes.

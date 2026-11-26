@@ -337,3 +337,15 @@ CIERRE
 
 V1.0 queda documentada como TERMINADA a nivel de código y validación de build.
 La siguiente etapa, si se autoriza, es v1.1 o una validación operativa específica de producción; no una nueva reconstrucción del sistema.
+
+---
+
+2026-11-26 — Lovable — persistencia de denominaciones de Caja
+
+- CashDrawerPanel envía el desglose numérico al cierre y recupera los datos guardados para reimpresión; distingue captura vacía y conteo explícito en cero.
+- Se agregó closingDenominations.ts con cinco pruebas de contrato, además de ejecutar la regresión Bluetooth: 6 aprobadas, 0 fallidas.
+- supabase/pending-close-cash-denominations.sql conserva las validaciones y fórmula originales, añade persistencia atómica, elimina de forma restrictiva la firma antigua y conserva permisos; pendiente de aplicar mediante migración coordinada con el cliente publicado.
+- La función viva y columna se verificaron por SELECT; no se ejecutó DDL, ningún cierre ni escrituras de filas. No se publicó ni desplegó.
+- Compilación automática aprobada; lint funcional aprobado y formato heredado del componente no reformateado globalmente.
+- Archivos: CashDrawerPanel.tsx, closingDenominations.ts, closingDenominations.test.ts, pending-close-cash-denominations.sql, AGENTS.md, roadmap.md y los dos documentos de seguimiento.
+- Riesgo pendiente: no aplicar la nueva firma sin coordinar la entrega del cliente, ni usar el nuevo cliente para cerrar antes de aplicar el SQL.

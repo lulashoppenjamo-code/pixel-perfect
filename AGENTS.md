@@ -14,3 +14,4 @@
 - The proposed SQL contract is outside migrations and must remain unapplied until approved and operational `shared_inventory` is verified; never substitute legacy inventory.
 - Product image presentation uses `ProductImage` for contain sizing and load-error fallback; device uploads require verified Storage infrastructure, not a presumed bucket.
 - Inventory/product screens use inventoryData's paginated canonical-table adapter and a distinct cache key. Stock writes (adjust, physical count, limits) are authorized and target shared_inventory; branch identity only scopes movements because shared stock has no branch column.
+- Cash denomination serialization lives beside CashDrawerPanel; persist it only through the three-argument close RPC, and read saved JSON for tickets, so closure and breakdown cannot diverge. Apply the pending SQL with the matching client release because the published two-argument client is incompatible.

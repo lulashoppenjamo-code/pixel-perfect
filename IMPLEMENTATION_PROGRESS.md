@@ -413,6 +413,54 @@ Pasar a mejoras de módulos restantes según PROJECT_CONTEXT:
 2. CEO (dashboard de inteligencia)
 3. Inventario físico (ya existe, verificar flujo completo)
 4. Crédito / abonos si falta alguna pantalla
+
+---
+
+Fecha
+2026-11-26
+
+Sesión / IA
+Lovable — persistencia de denominaciones de Caja
+
+Fase / Estado
+Caja — CÓDIGO VALIDADO; SQL PENDIENTE DE APLICACIÓN COORDINADA
+
+Trabajo realizado
+- Se verificó por SELECT la función viva de dos argumentos, sus permisos y la columna JSONB existente.
+- SQL preparado con única firma de tres argumentos sin default, mismo propietario, SECURITY DEFINER, search_path y permisos; conserva literalmente el cuerpo anterior salvo validación JSON objeto y persistencia en el mismo UPDATE de cierre.
+- Guardas impiden aplicar si falta la columna, cambia la definición verificada o ya existe la firma nueva; DROP sin CASCADE.
+- La llamada envía cantidades enteras numéricas, conserva {} para captura vacía y ceros explícitos para conteo registrado en cero.
+- La vista previa usa el registro retornado por el cierre; reimpresión lee el JSON guardado y no inventa conteos históricos.
+
+Archivos creados
+- src/components/cash/closingDenominations.ts
+- src/components/cash/closingDenominations.test.ts
+- supabase/pending-close-cash-denominations.sql
+
+Archivos modificados
+- src/components/cash/CashDrawerPanel.tsx
+- AGENTS.md
+- roadmap.md
+- IMPLEMENTATION_PROGRESS.md
+- CHANGELOG_AI.md
+
+Archivos eliminados
+NINGUNO
+
+Base de datos
+- Sin DDL aplicado ni escrituras de filas. Sin migraciones Drizzle nuevas ejecutadas ni cambios a la migración 0001.
+- SQL pendiente: aplicar con lov_database--migration en una entrega coordinada con el cliente; luego regenerar tipos desde la función nueva.
+- Producción conserva close_cash_session(uuid,numeric). Aplicar la firma nueva por separado rompería los cierres de la aplicación publicada; no usar el nuevo cliente para cerrar hasta aplicar el SQL.
+
+Validación
+- bun test: 6 aprobadas, 0 fallidas (denominaciones y regresión Bluetooth).
+- ESLint funcional, sin regla de formato: aprobado; lint completo conserva avisos de formato heredados en el panel (276 antes de los ajustes puntuales de formato).
+- Compilación/TypeScript automáticos del entorno: build OK. No se ejecutaron npm run build ni un typecheck independiente manual, porque el entorno los ejecuta automáticamente.
+- Diff revisado; sin cambios a fórmulas, ventas, gastos, movimientos, aperturas, relevos ni controles históricos.
+- NO se ejecutó ningún RPC de cierre ni se validó un cierre real, por prohibición expresa.
+
+Bloqueo / SIGUIENTE TAREA EXACTA
+Coordinar la aplicación de este SQL y la entrega del cliente; la aplicación permanece sin publicar y la persistencia atómica todavía no está activada en producción.
 ---
 
 Fecha

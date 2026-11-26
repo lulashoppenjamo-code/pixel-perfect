@@ -24,7 +24,8 @@
  * IMPORTANTE:
  * El inventario sigue siendo compartido entre sucursales.
  * Caja sí permanece separada por sucursal.
- * No se modifican RPCs ni tablas: se reutiliza open + close_cash_session.
+ * El cierre guarda el desglose atómicamente mediante close_cash_session.
+ * La firma de tres argumentos requiere aplicar el SQL pendiente con el cliente.
  */
 
 import { useState } from "react";
@@ -44,6 +45,10 @@ import { useBranch } from "@/lib/branch";
 import { money } from "@/lib/format";
 import { printTextBluetooth } from "@/lib/bluetoothPrinter";
 import { cn } from "@/lib/utils";
+import {
+  deserializeClosingDenominations,
+  serializeClosingDenominations,
+} from "./closingDenominations";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -190,11 +195,15 @@ function buildTicket58Html(opts: ArqueoPrintOpts): string {
           .join("")
       : "";
 
+  const hasRecordedDenominations = Object.values(opts.denominationCounts ?? {}).some(
+    (value) => value.trim() !== "",
+  );
+
   const countedBlock =
     opts.counted != null
       ? `<div class="dash"></div>
 <div class="sec">Desglose de billetes y monedas</div>
-${denominationBlock || `<div class="muted">Sin desglose registrado</div>`}
+${denominationBlock || `<div class="muted">${hasRecordedDenominations ? "Conteo registrado en cero" : "Sin desglose registrado"}</div>`}
 <div class="dash"></div>
 <div class="row"><span>Contado</span><span>${money(opts.counted)}</span></div>
 <div class="row bold"><span>Diferencia</span><span>${money(Number(opts.difference ?? 0))}</span></div>`
@@ -328,6 +337,13 @@ function buildCorteText(opts: ArqueoPrintOpts): string {
         lines.push(`${d.label} x ${qty} = ${moneyFmt(qty * d.value)}`);
       }
     }
+    if (!DENOMINATIONS.some((d) => Number(opts.denominationCounts?.[String(d.value)] || 0) > 0)) {
+      lines.push(
+        Object.values(opts.denominationCounts ?? {}).some((value) => value.trim() !== "")
+          ? "Conteo registrado en cero"
+          : "Sin desglose registrado",
+      );
+    }
     lines.push("--------------------------------");
     lines.push(`Contado          ${moneyFmt(opts.counted)}`);
     lines.push(`Diferencia       ${moneyFmt(Number(opts.difference ?? 0))}`);
@@ -422,7 +438,7 @@ async function resolveProfileName(userId: string | null | undefined): Promise<st
 
 async function loadSessionPrintData(sessionId: string) {
 
-  const [mvRes, cashRes, mixedRes, expRes] = await Promise.all([
+  const [mvRes, cashRes, mixedRes, expRes, sessionRes] = await Promise.all([
     supabase
       .from("cash_movements")
       .select("id, type, amount, reason, created_at")
@@ -444,7 +460,14 @@ async function loadSessionPrintData(sessionId: string) {
       .from("expenses")
       .select("amount")
       .eq("cash_session_id", sessionId),
+    supabase
+      .from("cash_sessions")
+      .select("closing_denominations")
+      .eq("id", sessionId)
+      .single(),
   ]);
+
+  if (sessionRes.error) throw sessionRes.error;
 
   const movements = mvRes.data ?? [];
   const deposits = movements
@@ -479,6 +502,7 @@ async function loadSessionPrintData(sessionId: string) {
     cashSales,
     mixedCash,
     cashExpenses,
+    denominationCounts: deserializeClosingDenominations(sessionRes.data.closing_denominations),
   };
 }
 
@@ -578,6 +602,7 @@ export function CashDrawerPanel({
             closedSession.difference != null
               ? Number(closedSession.difference)
               : null,
+          denominationCounts: detail.denominationCounts,
           movements: detail.movements,
         },
         "Corte cerrado",
@@ -972,33 +997,23 @@ export function CashDrawerPanel({
         );
       }
 
-      const { error } =
-        await supabase.rpc(
-          "close_cash_session",
-          {
-            _session_id: session.id,
-            _closing_amount: amount,
-          },
-        );
+      // Required third argument; apply the pending SQL before using this client.
+      // Keep the payload named while generated types still describe the live two-argument RPC.
+      const closeArgs = {
+        _session_id: session.id,
+        _closing_amount: amount,
+        _closing_denominations: serializeClosingDenominations(denomCounts),
+      };
+      const { data: row, error } = await supabase.rpc("close_cash_session", closeArgs);
 
       if (error) {
         throw error;
       }
 
-      const {
-        data: row,
-        error: rowErr,
-      } = await supabase
-        .from("cash_sessions")
-        .select(
-          "expected_amount, difference",
-        )
-        .eq("id", session.id)
-        .maybeSingle();
-
-      if (rowErr) {
-        throw rowErr;
-      }
+      if (!row)
+        throw new Error(
+          "El cierre no devolvió los datos del corte. Revisa el historial antes de intentar de nuevo.",
+        );
 
       return row;
     },
@@ -1014,24 +1029,24 @@ export function CashDrawerPanel({
 
       toast.success(`Caja cerrada · ${msg}`);
 
-      const openedByName = await resolveProfileName(session?.opened_by);
+      const openedByName = await resolveProfileName(row.opened_by);
 
       openTicketPreview(
         {
           branchLabel,
-          openedAt: session!.opened_at,
-          closedAt: new Date().toISOString(),
+          openedAt: row.opened_at,
+          closedAt: row.closed_at,
           openedByName,
-          opening: Number(session!.opening_amount ?? 0),
+          opening: Number(row.opening_amount ?? 0),
           cashSales: summary?.cashSales ?? 0,
           mixedCash: summary?.mixedCash ?? 0,
           deposits: summary?.deposits ?? 0,
           withdrawals: summary?.withdrawals ?? 0,
           cashExpenses: summary?.cashExpenses ?? 0,
           expected: Number(row?.expected_amount ?? expected),
-          counted: countedNum,
+          counted: row.closing_amount,
           difference: diff,
-          denominationCounts: { ...denomCounts },
+          denominationCounts: deserializeClosingDenominations(row.closing_denominations),
           movements: (summary?.movements ?? []).map((m) => ({
             id: m.id,
             type: m.type,
